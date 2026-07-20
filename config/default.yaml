@@ -1,0 +1,91 @@
+adb:
+  # Waydroid ADB address — run `adb devices` to find yours.
+  # Common values: 127.0.0.1:5555 or a LAN IP like 192.168.240.112:5555
+  device: "192.168.240.112:5555"
+  coc_package: "com.supercell.clashofclans"
+  reconnect_max_attempts: 5
+  reconnect_backoff_seconds: 2
+
+vision:
+  template_threshold: 0.82
+  donate_button_threshold: 0.78
+  scale_range: [0.95, 1.0, 1.05]
+  ocr_confidence_threshold: 0.5
+
+timing:
+  tap_jitter_px: 6
+  action_delay_ms: [120, 350]
+  scan_interval_ms: [800, 1500]
+
+runtime:
+  session_limit_seconds: 14400  # 4 hours
+  break_min_seconds: 600        # 10 minutes
+  break_max_seconds: 900        # 15 minutes
+  game_load_timeout_seconds: 90
+  state_watchdog_seconds: 45
+
+donation:
+  order: ["troop", "spell", "siege"]
+  handled_request_ttl_seconds: 120
+  chat_max_scroll_attempts: 20
+
+units:
+  # Elixir troops
+  barbarian: { category: troop, tier: normal }
+  archer: { category: troop, tier: normal }
+  giant: { category: troop, tier: normal }
+  goblin: { category: troop, tier: normal }
+  wall_breaker: { category: troop, tier: normal }
+  balloon: { category: troop, tier: normal }
+  wizard: { category: troop, tier: normal }
+  healer: { category: troop, tier: normal }
+  dragon: { category: troop, tier: normal }
+  pekka: { category: troop, tier: normal }
+  baby_dragon: { category: troop, tier: normal }
+  miner: { category: troop, tier: normal }
+  electro_dragon: { category: troop, tier: normal }
+  yeti: { category: troop, tier: normal }
+  dragon_rider: { category: troop, tier: normal }
+  electro_titan: { category: troop, tier: normal }
+  root_rider: { category: troop, tier: normal }
+  thrower: { category: troop, tier: normal }
+  # Dark elixir troops
+  minion: { category: troop, tier: dark }
+  hog_rider: { category: troop, tier: dark }
+  valkyrie: { category: troop, tier: dark }
+  golem: { category: troop, tier: dark }
+  witch: { category: troop, tier: dark }
+  lava_hound: { category: troop, tier: dark }
+  bowler: { category: troop, tier: dark }
+  ice_golem: { category: troop, tier: dark }
+  headhunter: { category: troop, tier: dark }
+  apprentice_warden: { category: troop, tier: dark }
+  druid: { category: troop, tier: dark }
+  furnace: { category: troop, tier: dark }
+  # Elixir spells
+  lightning_spell: { category: spell, tier: normal }
+  healing_spell: { category: spell, tier: normal }
+  rage_spell: { category: spell, tier: normal }
+  jump_spell: { category: spell, tier: normal }
+  freeze_spell: { category: spell, tier: normal }
+  clone_spell: { category: spell, tier: normal }
+  invisibility_spell: { category: spell, tier: normal }
+  recall_spell: { category: spell, tier: normal }
+  reviving_spell: { category: spell, tier: normal }
+  ice_block_spell: { category: spell, tier: normal }
+  # Dark spells
+  poison_spell: { category: spell, tier: dark }
+  earthquake_spell: { category: spell, tier: dark }
+  haste_spell: { category: spell, tier: dark }
+  skeleton_spell: { category: spell, tier: dark }
+  bat_spell: { category: spell, tier: dark }
+  overgrowth_spell: { category: spell, tier: dark }
+  # Siege machines
+  wall_wrecker: { category: siege, tier: normal }
+  battle_blimp: { category: siege, tier: normal }
+  stone_slammer: { category: siege, tier: normal }
+  siege_barracks: { category: siege, tier: normal }
+  log_launcher: { category: siege, tier: normal }
+  flame_flinger: { category: siege, tier: normal }
+  battle_drill: { category: siege, tier: normal }
+  troop_launcher: { category: siege, tier: normal }

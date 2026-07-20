@@ -1,0 +1,114 @@
+from __future__ import annotations
+
+import time
+
+import cv2
+from loguru import logger
+
+from coc_bot.adb.capture import ScreenCapture
+from coc_bot.adb.input import InputController
+from coc_bot.config import BotConfig
+from coc_bot.donation.inventory import InventoryParser, InventorySlot
+from coc_bot.donation.request_parser import RequestParser, RequestedUnit
+from coc_bot.vision.matcher import TemplateMatcher
+from coc_bot.vision.screens import ScreenClassifier, ScreenType
+
+
+class DonationExecutor:
+    """Execute partial donation fulfillment for troops, spells, and siege."""
+
+    def __init__(
+        self,
+        config: BotConfig,
+        capture: ScreenCapture,
+        input_ctrl: InputController,
+        matcher: TemplateMatcher | None = None,
+    ) -> None:
+        self.config = config
+        self.capture = capture
+        self.input = input_ctrl
+        self.matcher = matcher or TemplateMatcher(threshold=config.template_threshold)
+        self.request_parser = RequestParser(config, self.matcher)
+        self.inventory_parser = InventoryParser(config, self.matcher)
+        self.classifier = ScreenClassifier(config, self.matcher)
+
+    def donate_for_request(self, max_rounds: int = 20) -> bool:
+        """Donate as much as possible for the current open donation panel. Returns True if any donation made."""
+        donated_any = False
+        for round_num in range(max_rounds):
+            frame = self.capture.screenshot()
+            if self.classifier.classify(frame) != ScreenType.DONATION_PANEL:
+                logger.warning("Not on donation panel (round {})", round_num)
+                break
+
+            requested = self.request_parser.parse(frame)
+            if not requested:
+                logger.debug("No requested units detected")
+                break
+
+            slots = self.inventory_parser.parse_slots(frame)
+            if not slots:
+                logger.debug("No donatable inventory slots found")
+                break
+
+            made_donation = self._donate_round(requested, slots)
+            if not made_donation:
+                break
+            donated_any = True
+            time.sleep(0.4)
+
+        self._close_panel()
+        return donated_any
+
+    def _donate_round(self, requested: list[RequestedUnit], slots: list[InventorySlot]) -> bool:
+        inventory = {s.unit_id: s for s in slots}
+        remaining = {r.unit_id: r.quantity for r in requested}
+        made = False
+
+        category_order = {cat: i for i, cat in enumerate(self.config.donation_order)}
+
+        def _category_index(unit_id: str) -> int:
+            info = self.config.units.get(unit_id)
+            cat = info.category if info else "troop"
+            return category_order.get(cat, 99)
+
+        sorted_requests = sorted(requested, key=lambda r: _category_index(r.unit_id))
+
+        for req in sorted_requests:
+            need = remaining.get(req.unit_id, 0)
+            if need <= 0:
+                continue
+            slot = self.inventory_parser.find_slot_for_unit(slots, req.unit_id)
+            if slot is None or slot.quantity <= 0:
+                continue
+
+            donate_qty = min(need, slot.quantity)
+            logger.info("Donating {} x {} (requested {})", donate_qty, req.unit_id, need)
+            for _ in range(donate_qty):
+                self.input.tap(*slot.center)
+            remaining[req.unit_id] = need - donate_qty
+            made = True
+
+        return made
+
+    def _close_panel(self) -> None:
+        frame = self.capture.screenshot()
+        for key in ("quick_donate", "panel_close"):
+            rel = self.config.templates.get(key)
+            if not rel:
+                continue
+            path = self.config.templates_dir / rel
+            if not path.exists():
+                continue
+            template = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            if template is None:
+                continue
+            match = self.matcher.find(frame, template)
+            if match:
+                self.input.tap(*match.center)
+                return
+        point = self.config.tap_points.get("close_donation")
+        if point:
+            self.input.tap(point[0], point[1])
+        else:
+            self.input.back()

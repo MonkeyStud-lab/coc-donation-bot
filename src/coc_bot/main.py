@@ -1,0 +1,205 @@
+from __future__ import annotations
+
+import argparse
+import random
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+import cv2
+from loguru import logger
+
+from coc_bot.adb.app import AppController
+from coc_bot.adb.capture import ScreenCapture
+from coc_bot.adb.client import AdbClient, AdbError
+from coc_bot.adb.input import InputController
+from coc_bot.config import load_config
+from coc_bot.donation.chat_monitor import ChatMonitor
+from coc_bot.donation.executor import DonationExecutor
+from coc_bot.donation.navigator import Navigator
+from coc_bot.logging_utils import setup_logging
+from coc_bot.runtime.breaks import BreakManager
+from coc_bot.runtime.tracker import RuntimeTracker
+from coc_bot.vision.matcher import TemplateMatcher
+from coc_bot.vision.screens import ScreenType
+
+
+class DonationBot:
+    """Main donation loop orchestrator."""
+
+    WATCHDOG_STATES = {
+        "ensure_chat",
+        "scan_chat",
+        "open_donation",
+        "donate",
+        "close_panel",
+    }
+
+    def __init__(self, dry_run: bool = False, debug_save_frames: bool = False) -> None:
+        self.config = load_config()
+        self.config.dry_run = dry_run
+        self.config.debug_save_frames = debug_save_frames
+
+        if not self.config.calibrated:
+            logger.error("Calibration not found. Run: python scripts/calibrate.py")
+            sys.exit(1)
+
+        self.client = AdbClient(device=self.config.adb_device)
+        self.capture = ScreenCapture(self.client)
+        self.input = InputController(
+            self.client,
+            jitter_px=self.config.tap_jitter_px,
+            delay_ms=self.config.action_delay_ms,
+            dry_run=dry_run,
+        )
+        self.app = AppController(self.client, self.config, self.capture)
+        self.matcher = TemplateMatcher(
+            threshold=self.config.template_threshold,
+            scale_range=self.config.scale_range,
+        )
+        self.navigator = Navigator(self.config, self.capture, self.input, self.matcher)
+        self.chat_monitor = ChatMonitor(self.config, self.capture, self.input, self.matcher)
+        self.executor = DonationExecutor(self.config, self.capture, self.input, self.matcher)
+        self.tracker = RuntimeTracker(self.config)
+        self.break_manager = BreakManager(self.config, self.tracker, self.app, self.navigator)
+        self._state = "boot"
+        self._state_entered = time.monotonic()
+        self._frame_count = 0
+
+    def run(self) -> None:
+        logger.info("CoC Donation Bot starting (dry_run={})", self.config.dry_run)
+        try:
+            self.client.health_check()
+        except AdbError as exc:
+            logger.error("ADB health check failed: {}", exc)
+            sys.exit(1)
+
+        self.break_manager.resume_pending_break()
+        self.tracker.start_loop_timing()
+
+        if not self.navigator.ensure_clan_chat():
+            logger.error("Could not reach clan chat on startup")
+            sys.exit(1)
+
+        self._set_state("scan_chat")
+
+        while True:
+            try:
+                self._loop_tick()
+            except KeyboardInterrupt:
+                logger.info("Shutting down...")
+                self.tracker.tick()
+                break
+            except AdbError as exc:
+                logger.error("ADB error: {} — reconnecting...", exc)
+                time.sleep(3)
+                self.client.ensure_connected()
+            except Exception as exc:
+                logger.exception("Unexpected error: {}", exc)
+                self._recover()
+                time.sleep(2)
+
+    def _loop_tick(self) -> None:
+        self._check_watchdog()
+
+        if self.break_manager.check_and_break_if_needed():
+            self._set_state("scan_chat")
+            return
+
+        if self._state == "scan_chat":
+            self._do_scan_chat()
+        elif self._state == "scroll_chat":
+            self._do_scroll_chat()
+        elif self._state == "open_donation":
+            self._do_open_donation()
+        elif self._state == "donate":
+            self._do_donate()
+        else:
+            self._set_state("scan_chat")
+
+        self.tracker.tick()
+        lo, hi = self.config.scan_interval_ms
+        time.sleep(random.uniform(lo, hi) / 1000.0)
+
+    def _do_scan_chat(self) -> None:
+        frame = self.capture.screenshot()
+        self._maybe_save_debug(frame, "scan")
+
+        request = self.chat_monitor.find_donate_request(frame)
+        if request is None:
+            self._set_state("scroll_chat")
+            return
+
+        self._pending_request = request
+        self._set_state("open_donation")
+
+    def _do_scroll_chat(self) -> None:
+        frame = self.capture.screenshot()
+        self.navigator.scroll_chat_to_bottom(frame)
+        self._set_state("scan_chat")
+
+    def _do_open_donation(self) -> None:
+        if not hasattr(self, "_pending_request"):
+            self._set_state("scan_chat")
+            return
+        self.chat_monitor.open_donation(self._pending_request)
+        time.sleep(0.8)
+        self._set_state("donate")
+
+    def _do_donate(self) -> None:
+        if self.config.dry_run:
+            frame = self.capture.screenshot()
+            self._maybe_save_debug(frame, "donate_dry_run")
+            logger.info("[DRY-RUN] Would execute donation")
+            self._set_state("scan_chat")
+            return
+
+        donated = self.executor.donate_for_request()
+        logger.info("Donation round complete (donated={})", donated)
+        self._set_state("scan_chat")
+
+    def _recover(self) -> None:
+        logger.info("Running recovery sequence")
+        self.input.back()
+        time.sleep(0.5)
+        self.navigator.ensure_clan_chat()
+        self._set_state("scan_chat")
+
+    def _check_watchdog(self) -> None:
+        elapsed = time.monotonic() - self._state_entered
+        if elapsed > self.config.state_watchdog_seconds:
+            logger.warning("Watchdog timeout in state '{}' ({:.0f}s)", self._state, elapsed)
+            self._recover()
+
+    def _set_state(self, state: str) -> None:
+        if state != self._state:
+            logger.debug("State: {} -> {}", self._state, state)
+        self._state = state
+        self._state_entered = time.monotonic()
+
+    def _maybe_save_debug(self, frame, label: str) -> None:
+        if not self.config.debug_save_frames:
+            return
+        self._frame_count += 1
+        debug_dir = self.config.data_dir / "debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path = debug_dir / f"{ts}_{label}_{self._frame_count:04d}.png"
+        cv2.imwrite(str(path), frame)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="CoC Donation Bot (educational)")
+    parser.add_argument("--dry-run", action="store_true", help="Detect only, no taps")
+    parser.add_argument("--debug-save-frames", action="store_true", help="Save debug screenshots")
+    parser.add_argument("--debug", action="store_true", help="Verbose logging")
+    args = parser.parse_args()
+
+    setup_logging(debug=args.debug, log_file=Path("data") / "bot.log")
+    bot = DonationBot(dry_run=args.dry_run, debug_save_frames=args.debug_save_frames)
+    bot.run()
+
+
+if __name__ == "__main__":
+    main()

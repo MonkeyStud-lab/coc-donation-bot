@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coc-donation-bot"
+version = "0.1.0"
+description = "Educational ADB-driven Clash of Clans donation bot for Waydroid"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "opencv-python-headless>=4.8",
+    "numpy>=1.24",
+    "pillow>=10.0",
+    "easyocr>=1.7",
+    "pyyaml>=6.0",
+    "loguru>=0.7",
+]
+
+[project.scripts]
+coc-bot = "coc_bot.main:main"
+coc-bot-calibrate = "coc_bot.calibration.wizard:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

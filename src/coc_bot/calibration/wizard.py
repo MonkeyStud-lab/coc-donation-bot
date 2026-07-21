@@ -77,7 +77,7 @@ STEPS: dict[str, CalibrationStep] = {
     "grid": CalibrationStep(
         "grid",
         "Grid layout",
-        "Column counts for troop/spell/siege/request bars",
+        "Draw visible troop/spell slot grid (pick_grid.py) or enter rows/cols",
         ("grid",),
     ),
     "units": CalibrationStep(
@@ -485,6 +485,21 @@ class CalibrationWizard:
     def step_grid(self) -> None:
         if self.config.grid and not prompt_yes_no("Update grid layout?"):
             _keeping("grid")
+            return
+
+        print(
+            "\nRecommended: draw the grid on screen (covers all visible slot cells exactly).\n"
+            "  python scripts/pick_grid.py\n"
+        )
+        if prompt_yes_no("Launch grid picker now (needs display / RustDesk)?"):
+            import subprocess
+            import sys
+
+            subprocess.run([sys.executable, str(Path(__file__).resolve().parents[3] / "scripts" / "pick_grid.py")])
+            return
+
+        if not prompt_yes_no("Enter column/row counts manually instead?"):
+            print("Run later: python scripts/pick_grid.py")
             return
 
         current = self.config.grid or {}

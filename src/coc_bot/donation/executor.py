@@ -55,37 +55,36 @@ class DonationExecutor:
             if self.config.donate_open_requests:
                 logger.info("Open request — donating all colored slots (bars may scroll)")
                 donated_any = self._donate_open_request()
-            else:
-                logger.info("No specific units — tapping colored slots until first grey row")
-                slots = self.inventory_parser.parse_slots(
-                    frame, require_unit_id=False, stop_at_grey=True
-                )
-                donated_any = self._tap_colored_slots(slots)
-        else:
-            logger.info(
-                "Specific request — donating from chat ({} unit types)",
-                len(requested),
+                self._close_panel()
+                return donated_any
+            logger.info("Open/generic request — skipping donation (specific requests only)")
+            self._close_panel()
+            return False
+
+        logger.info(
+            "Specific request — donating {} unit type(s) from chat",
+            len(requested),
+        )
+        donated_any = False
+        for round_num in range(max_rounds):
+            frame = self.capture.screenshot()
+            if not self.classifier.is_donation_panel(frame):
+                break
+            slots = self.inventory_parser.parse_slots(
+                frame,
+                require_unit_id=False,
+                stop_at_grey=True,
             )
-            donated_any = False
-            for round_num in range(max_rounds):
-                frame = self.capture.screenshot()
-                if not self.classifier.is_donation_panel(frame):
-                    break
-                slots = self.inventory_parser.parse_slots(
-                    frame,
-                    require_unit_id=False,
-                    stop_at_grey=True,
-                )
-                if not slots:
-                    logger.warning("No colored slots at start of troop/spell bars")
-                    break
-                made_donation = self._donate_round(requested, slots)
-                if not made_donation:
-                    made_donation = self._tap_colored_slots(slots)
-                if not made_donation:
-                    break
-                donated_any = True
-                time.sleep(0.4)
+            if not slots:
+                logger.warning("No colored slots at start of troop/spell bars")
+                break
+            made_donation = self._donate_round(requested, slots)
+            if not made_donation:
+                made_donation = self._tap_colored_slots(slots)
+            if not made_donation:
+                break
+            donated_any = True
+            time.sleep(0.4)
 
         self._close_panel()
         return donated_any

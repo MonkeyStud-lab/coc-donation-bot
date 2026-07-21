@@ -86,7 +86,7 @@ class InventoryParser:
                 )
             )
 
-        if not slots:
+        if not slots and not stop_at_grey:
             self._log_empty_inventory_hint(require_unit_id=require_unit_id)
         return slots
 
@@ -113,6 +113,7 @@ class InventoryParser:
         grid_key = "troop_bar" if bar_roi_key == "donation_troop_bar" else "spell_bar"
         bar = crop_roi(frame, self.config.rois[bar_roi_key])
         grid = self.config.grid.get(grid_key, {})
+        bar, x_off, y_off = self._crop_bar_to_grid(bar, grid)
         return self._walk_bar(
             bar,
             is_donatable,
@@ -122,7 +123,25 @@ class InventoryParser:
             default_category,
             require_unit_id=require_unit_id,
             stop_at_grey=stop_at_grey,
+            bar_x_offset=x_off,
+            bar_y_offset=y_off,
         )
+
+    @staticmethod
+    def _crop_bar_to_grid(bar: np.ndarray, grid: dict) -> tuple[np.ndarray, int, int]:
+        """Use drawn grid region (x,y,w,h relative to bar ROI) when present."""
+        if not all(k in grid for k in ("x", "y", "w", "h")):
+            return bar, 0, 0
+        bh, bw = bar.shape[:2]
+        x0 = int(grid["x"] * bw)
+        y0 = int(grid["y"] * bh)
+        x1 = int((grid["x"] + grid["w"]) * bw)
+        y1 = int((grid["y"] + grid["h"]) * bh)
+        x0 = max(0, min(x0, bw - 1))
+        y0 = max(0, min(y0, bh - 1))
+        x1 = max(x0 + 1, min(x1, bw))
+        y1 = max(y0 + 1, min(y1, bh))
+        return bar[y0:y1, x0:x1].copy(), x0, y0
 
     def bar_swipe_line(self, frame: np.ndarray, bar_roi_key: str) -> tuple[int, int, int, int]:
         """Return (x1, y, x2, y) to scroll the bar toward the right (reveal more units)."""
@@ -170,6 +189,8 @@ class InventoryParser:
         *,
         require_unit_id: bool = True,
         stop_at_grey: bool = False,
+        bar_x_offset: int = 0,
+        bar_y_offset: int = 0,
     ) -> list[InventorySlot]:
         slots: list[InventorySlot] = []
         cols = int(grid.get("cols", 6 if default_category == "troop" else 4))
@@ -179,8 +200,11 @@ class InventoryParser:
 
         fh, fw = frame.shape[:2]
         bar_x, bar_y, _, _ = denormalize_roi(ROI(*self.config.rois[roi_key]), fw, fh)
+        bar_x += bar_x_offset
+        bar_y += bar_y_offset
 
         for row in range(rows):
+            row_had_colored = False
             for col in range(cols):
                 x0 = col * slot_w
                 y0 = row * slot_h
@@ -190,9 +214,10 @@ class InventoryParser:
                 if not SlotColorDetector.has_icon(cell):
                     continue
                 if not is_donatable(cell):
-                    if stop_at_grey:
-                        return slots
+                    if stop_at_grey and row_had_colored:
+                        break
                     continue
+                row_had_colored = True
                 unit_id = self._identify_unit(cell)
                 if unit_id is None:
                     if require_unit_id:

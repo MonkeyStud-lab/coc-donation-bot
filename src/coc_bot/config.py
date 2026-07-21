@@ -47,7 +47,7 @@ class BotConfig:
     handled_request_ttl_seconds: int = 120
     chat_max_scroll_attempts: int = 20
     bar_max_scroll_attempts: int = 8
-    donate_open_requests: bool = True
+    donate_open_requests: bool = False
     donation_panel_wait_seconds: float = 3.0
     ocr_confidence_threshold: float = 0.5
     debug_save_frames: bool = False
@@ -123,7 +123,7 @@ def load_config(
         handled_request_ttl_seconds=donation.get("handled_request_ttl_seconds", 120),
         chat_max_scroll_attempts=donation.get("chat_max_scroll_attempts", 20),
         bar_max_scroll_attempts=donation.get("bar_max_scroll_attempts", 8),
-        donate_open_requests=donation.get("donate_open_requests", True),
+        donate_open_requests=donation.get("donate_open_requests", False),
         donation_panel_wait_seconds=float(donation.get("donation_panel_wait_seconds", 3.0)),
         ocr_confidence_threshold=vision.get("ocr_confidence_threshold", 0.5),
         data_dir=root / "data",

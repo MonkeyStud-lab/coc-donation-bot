@@ -115,8 +115,11 @@ class ChatMonitor:
 
         return None
 
+    def mark_handled(self, request: DonateRequest) -> None:
+        self._handled[request.signature] = time.time()
+
     def open_donation(self, request: DonateRequest) -> None:
         cx, cy = request.button_match.center
         logger.info("Opening donation panel at ({}, {}), conf={:.2f}", cx, cy, request.button_match.confidence)
         self.input.tap(cx, cy)
-        self._handled[request.signature] = time.time()
+        self.mark_handled(request)

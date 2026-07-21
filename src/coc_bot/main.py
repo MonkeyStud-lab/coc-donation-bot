@@ -141,6 +141,11 @@ class DonationBot:
             self._set_state("scroll_chat")
             return
 
+        if not request.requested and not self.config.donate_open_requests:
+            logger.info("Skipping open/generic request — only specific requests are enabled")
+            self.chat_monitor.mark_handled(request)
+            return
+
         self._pending_request = request
         self._set_state("open_donation")
 

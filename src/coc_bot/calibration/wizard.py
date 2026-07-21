@@ -65,7 +65,7 @@ STEPS: dict[str, CalibrationStep] = {
     "donation_panel": CalibrationStep(
         "donation_panel",
         "Donation panel",
-        "Troop/spell/siege bars, tap-outside-to-close point",
+        "Troop+siege bar, spell bar, tap-outside-to-close point",
         ("donation_troop_bar", "donation_spell_bar", "tap_outside_donation"),
     ),
     "slot_colors": CalibrationStep(
@@ -327,21 +327,37 @@ class CalibrationWizard:
         _press_enter("With donation panel open, press Enter...")
         frame = self.capture.screenshot()
 
-        troop_roi = prompt_roi("Troop donation bar region")
-        self.config.rois["donation_troop_bar"] = _roi_list(troop_roi, w, h)
+        print(
+            "\nThe troop bar holds regular troops AND siege machines in the same area."
+        )
+        if prompt_yes_no("Update troop donation bar ROI (troops + siege)?"):
+            troop_roi = prompt_roi("Troop/siege donation bar region")
+            self.config.rois["donation_troop_bar"] = _roi_list(troop_roi, w, h)
+        else:
+            print("Keeping existing donation_troop_bar ROI.")
 
-        spell_roi = prompt_roi("Spell donation bar region")
-        self.config.rois["donation_spell_bar"] = _roi_list(spell_roi, w, h)
+        if prompt_yes_no("Update spell donation bar ROI?"):
+            spell_roi = prompt_roi("Spell donation bar region")
+            self.config.rois["donation_spell_bar"] = _roi_list(spell_roi, w, h)
+        else:
+            print("Keeping existing donation_spell_bar ROI.")
 
-        siege_roi = prompt_roi("Siege donation bar region")
-        self.config.rois["donation_siege_bar"] = _roi_list(siege_roi, w, h)
+        # Legacy — siege shared troop bar in current CoC UI
+        self.config.rois.pop("donation_siege_bar", None)
 
         print(
             "\n--- Close donation panel ---\n"
-            "CoC has no X button. Tap OUTSIDE the panel (visible chat/background area) to close it."
+            "CoC has no X button. Tap OUTSIDE the panel (dimmed chat/background) to close it."
         )
-        pt = prompt_point("Tap point OUTSIDE the donation panel (on dimmed chat/village area)")
-        self.config.tap_points["tap_outside_donation"] = list(pt)
+        has_close = bool(
+            self.config.tap_points.get("tap_outside_donation")
+            or self.config.tap_points.get("close_donation")
+        )
+        if not has_close or prompt_yes_no("Update tap-outside-to-close point?"):
+            pt = prompt_point("Tap point OUTSIDE the donation panel (dimmed area)")
+            self.config.tap_points["tap_outside_donation"] = list(pt)
+        else:
+            print("Keeping existing tap_outside_donation point.")
 
     def step_slot_colors(self) -> None:
         print("Open the donation panel with troops/spells visible in your castle bar.")
@@ -358,23 +374,20 @@ class CalibrationWizard:
         current = self.config.grid or {}
         troop_default = current.get("troop_bar", {}).get("cols", 8)
         spell_default = current.get("spell_bar", {}).get("cols", 5)
-        siege_default = current.get("siege_bar", {}).get("cols", 3)
         req_default = current.get("request", {}).get("cols", 6)
 
         print("Enter column counts (Enter keeps current/default).")
-        raw = input(f"Troop bar cols [{troop_default}]: ").strip()
+        print("Troop bar includes regular troops and siege machines in the same row.")
+        raw = input(f"Troop+siege bar cols [{troop_default}]: ").strip()
         troop_cols = int(raw) if raw else troop_default
         raw = input(f"Spell bar cols [{spell_default}]: ").strip()
         spell_cols = int(raw) if raw else spell_default
-        raw = input(f"Siege bar cols [{siege_default}]: ").strip()
-        siege_cols = int(raw) if raw else siege_default
         raw = input(f"Request header cols [{req_default}]: ").strip()
         req_cols = int(raw) if raw else req_default
 
         self.config.grid = {
             "troop_bar": {"cols": troop_cols, "rows": 1},
             "spell_bar": {"cols": spell_cols, "rows": 1},
-            "siege_bar": {"cols": siege_cols, "rows": 1},
             "request": {"cols": req_cols, "rows": 1},
         }
 

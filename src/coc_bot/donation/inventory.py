@@ -56,33 +56,36 @@ class InventoryParser:
 
     def parse_slots(self, frame: np.ndarray) -> list[InventorySlot]:
         slots: list[InventorySlot] = []
+        # Troops and siege machines share the same bar in CoC's donation panel.
         bar_configs = [
-            ("donation_troop_bar", "troop", self.color_detector.is_donatable_troop),
-            ("donation_spell_bar", "spell", self.color_detector.is_donatable_spell),
-            ("donation_siege_bar", "siege", self.color_detector.is_donatable_siege),
+            ("donation_troop_bar", self.color_detector.is_donatable_troop),
+            ("donation_spell_bar", self.color_detector.is_donatable_spell),
         ]
-        for roi_key, category, is_donatable in bar_configs:
+        for roi_key, is_donatable in bar_configs:
             if roi_key not in self.config.rois:
                 continue
             bar = crop_roi(frame, self.config.rois[roi_key])
-            grid_key = f"{category}_bar"
+            grid_key = "troop_bar" if roi_key == "donation_troop_bar" else "spell_bar"
             grid = self.config.grid.get(grid_key, {})
-            slots.extend(self._walk_bar(bar, category, is_donatable, grid, frame, roi_key))
+            default_category = "troop" if roi_key == "donation_troop_bar" else "spell"
+            slots.extend(
+                self._walk_bar(bar, is_donatable, grid, frame, roi_key, default_category)
+            )
         return slots
 
     def _walk_bar(
         self,
         bar: np.ndarray,
-        category: str,
         is_donatable,
         grid: dict,
         frame: np.ndarray,
         roi_key: str,
+        default_category: str,
     ) -> list[InventorySlot]:
         from coc_bot.vision.rois import ROI, denormalize_roi
 
         slots: list[InventorySlot] = []
-        cols = int(grid.get("cols", 8 if category != "siege" else 3))
+        cols = int(grid.get("cols", 8 if default_category == "troop" else 5))
         rows = int(grid.get("rows", 1))
         slot_w = int(grid.get("slot_width", bar.shape[1] // max(cols, 1)))
         slot_h = int(grid.get("slot_height", bar.shape[0] // max(rows, 1)))
@@ -102,6 +105,8 @@ class InventoryParser:
                 unit_id = self._identify_unit(cell)
                 if unit_id is None:
                     continue
+                info = self.config.units.get(unit_id)
+                category = info.category if info else default_category
                 qty = self._read_quantity(cell)
                 cx = bar_x + x0 + slot_w // 2
                 cy = bar_y + y0 + slot_h // 2

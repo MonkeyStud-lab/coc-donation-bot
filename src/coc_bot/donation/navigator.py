@@ -31,6 +31,7 @@ class Navigator:
         self.matcher = matcher or TemplateMatcher(threshold=config.template_threshold)
         self.classifier = ScreenClassifier(config, self.matcher)
         self._template_cache: dict[str, np.ndarray] = {}
+        self._last_jump_at = 0.0
 
     def load_template(self, key: str) -> np.ndarray | None:
         if key in self._template_cache:
@@ -213,13 +214,19 @@ class Navigator:
         Exclamation jump icon — same control at top or bottom of the chat log.
 
         Top: request is above the current view. Bottom: request is below.
+        When both are visible, pick the highest-confidence match only.
         """
+        candidates: list[MatchResult] = []
         for region in ("top", "bottom"):
             match = self._find_in_chat_region(frame, "chat_request_jump", region)
             if match is not None:
-                return match
-        # Legacy: bottom icon may have been saved as chat_scroll_down during calibration.
-        return self._find_in_chat_region(frame, "chat_scroll_down", "bottom")
+                candidates.append(match)
+        legacy = self._find_in_chat_region(frame, "chat_scroll_down", "bottom")
+        if legacy is not None:
+            candidates.append(legacy)
+        if not candidates:
+            return None
+        return max(candidates, key=lambda m: m.confidence)
 
     def _jump_icon_location(self, match: MatchResult, frame: np.ndarray) -> str:
         if "chat_panel" not in self.config.rois:
@@ -243,6 +250,10 @@ class Navigator:
             logger.debug("Donate button visible on screen — skipping exclamation tap")
             return False
 
+        if time.time() - self._last_jump_at < 2.0:
+            logger.debug("Exclamation jump cooldown — waiting for chat to settle")
+            return False
+
         jump = self._find_request_jump_icon(frame)
         if jump is None:
             return False
@@ -257,6 +268,7 @@ class Navigator:
             jump.confidence,
         )
         self.input.tap(cx, cy)
+        self._last_jump_at = time.time()
         time.sleep(0.5)
         return True
 

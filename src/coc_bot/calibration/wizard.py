@@ -30,7 +30,6 @@ STEP_IDS = (
     "donation_panel",
     "slot_colors",
     "grid",
-    "units",
     "optional",
 )
 
@@ -79,12 +78,6 @@ STEPS: dict[str, CalibrationStep] = {
         "Grid layout",
         "Draw visible troop/spell slot grid (pick_grid.py) or enter rows/cols",
         ("grid",),
-    ),
-    "units": CalibrationStep(
-        "units",
-        "Unit icons",
-        "Template image per troop/spell/siege type",
-        ("unit_templates",),
     ),
     "optional": CalibrationStep(
         "optional",
@@ -274,8 +267,6 @@ class CalibrationWizard:
             )
         if step.step_id == "grid":
             return bool(self.config.grid)
-        if step.step_id == "units":
-            return len(self.config.unit_templates) > 0
         if step.step_id == "optional":
             return "loading" in self.config.templates or "popup_dismiss" in self.config.templates
         return False
@@ -327,7 +318,6 @@ class CalibrationWizard:
             "donation_panel": self.step_donation_panel,
             "slot_colors": self.step_slot_colors,
             "grid": self.step_grid,
-            "units": self.step_units,
             "optional": self.step_optional,
         }
 
@@ -528,11 +518,6 @@ class CalibrationWizard:
             "spell_bar": {"cols": spell_cols, "rows": spell_rows},
         }
 
-    def step_units(self) -> None:
-        print("Open donation panel. You'll be asked about each unit type.")
-        _press_enter()
-        self._capture_unit_templates()
-
     def step_optional(self) -> None:
         self._maybe_update_template_after_setup(
             "loading",
@@ -549,32 +534,6 @@ class CalibrationWizard:
             "Show a dismissible popup/event.",
             optional=True,
         )
-
-    def _capture_unit_templates(self) -> None:
-        units_by_category: dict[str, list[str]] = {"troop": [], "spell": [], "siege": []}
-        for unit_id, info in self.config.units.items():
-            units_by_category.setdefault(info.category, []).append(unit_id)
-
-        for category in ("troop", "spell", "siege"):
-            print(f"\n--- {category.upper()} templates ---")
-            for unit_id in units_by_category.get(category, []):
-                already = unit_id in self.config.unit_templates
-                prompt = f"Update template for '{unit_id}'?" if already else f"Capture template for '{unit_id}'?"
-                if already and not prompt_yes_no(prompt):
-                    _keeping(f"unit template {unit_id}")
-                    continue
-                if not already and not prompt_yes_no(prompt):
-                    print(f"Skipping {unit_id}.")
-                    continue
-                print(f"Show '{unit_id}' in the donation panel.")
-                _press_enter()
-                frame = self.capture.screenshot()
-                coords = prompt_roi(f"{unit_id} icon region")
-                crop = frame[coords[1] : coords[1] + coords[3], coords[0] : coords[0] + coords[2]]
-                rel = f"units/{unit_id}.png"
-                save_template(crop, self.templates_dir / rel)
-                self.config.unit_templates[unit_id] = rel
-                logger.info("Saved unit template {}", unit_id)
 
 
 def main() -> None:

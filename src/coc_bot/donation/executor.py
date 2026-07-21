@@ -8,9 +8,8 @@ from coc_bot.adb.capture import ScreenCapture
 from coc_bot.adb.input import InputController
 from coc_bot.config import BotConfig
 from coc_bot.donation.inventory import InventoryParser, InventorySlot
-from coc_bot.donation.request_parser import RequestParser, RequestedUnit
 from coc_bot.vision.matcher import TemplateMatcher
-from coc_bot.vision.screens import ScreenClassifier, ScreenType
+from coc_bot.vision.screens import ScreenClassifier
 
 
 class DonationExecutor:
@@ -29,16 +28,16 @@ class DonationExecutor:
         self.capture = capture
         self.input = input_ctrl
         self.matcher = matcher or TemplateMatcher(threshold=config.template_threshold)
-        self.request_parser = RequestParser(config, self.matcher)
-        self.inventory_parser = InventoryParser(config, self.matcher)
+        self.inventory_parser = InventoryParser(config)
         self.classifier = ScreenClassifier(config, self.matcher)
 
     def donate_for_request(
         self,
-        requested: list[RequestedUnit] | None = None,
+        *,
+        is_specific: bool = True,
         max_rounds: int = 20,
     ) -> bool:
-        """Donate for the current donation panel. `requested` comes from clan chat (empty = open request)."""
+        """Donate for the current donation panel using colored slot detection."""
         frame = self.capture.screenshot()
         if not self.classifier.is_donation_panel(frame):
             logger.warning(
@@ -48,45 +47,37 @@ class DonationExecutor:
             self._close_panel()
             return False
 
-        if requested is None:
-            requested = []
-
-        if not requested:
-            if self.config.donate_open_requests:
-                logger.info("Open request — donating all colored slots (bars may scroll)")
-                donated_any = self._donate_open_request()
-                self._close_panel()
-                return donated_any
-            logger.info("Open/generic request — skipping donation (specific requests only)")
+        if is_specific:
+            logger.info("Specific request — donating colored slots until first grey per row")
+            donated_any = self._donate_specific_by_colored_slots(max_rounds=max_rounds)
             self._close_panel()
-            return False
+            return donated_any
 
-        logger.info(
-            "Specific request — donating {} unit type(s) from chat",
-            len(requested),
-        )
+        if self.config.donate_open_requests:
+            logger.info("Open request — donating all colored slots (bars may scroll)")
+            donated_any = self._donate_open_request()
+            self._close_panel()
+            return donated_any
+
+        logger.info("Open/generic request — skipping donation (specific requests only)")
+        self._close_panel()
+        return False
+
+    def _donate_specific_by_colored_slots(self, max_rounds: int = 20) -> bool:
+        """Donate every colored slot up to the first grey per row."""
         donated_any = False
-        for round_num in range(max_rounds):
+        for _round in range(max_rounds):
             frame = self.capture.screenshot()
             if not self.classifier.is_donation_panel(frame):
                 break
-            slots = self.inventory_parser.parse_slots(
-                frame,
-                require_unit_id=False,
-                stop_at_grey=True,
-            )
+            slots = self.inventory_parser.parse_slots(frame, stop_at_grey=True)
             if not slots:
                 logger.warning("No colored slots at start of troop/spell bars")
                 break
-            made_donation = self._donate_round(requested, slots)
-            if not made_donation:
-                made_donation = self._tap_colored_slots(slots)
-            if not made_donation:
+            if not self._tap_colored_slots(slots):
                 break
             donated_any = True
             time.sleep(0.4)
-
-        self._close_panel()
         return donated_any
 
     def _tap_colored_slots(self, slots: list[InventorySlot]) -> bool:
@@ -97,52 +88,6 @@ class DonationExecutor:
             for _ in range(slot.quantity):
                 self.input.tap(*slot.center)
         return True
-
-    def _donate_round(self, requested: list[RequestedUnit], slots: list[InventorySlot]) -> bool:
-        remaining = {r.unit_id: r.quantity for r in requested}
-        made = False
-
-        category_order = {cat: i for i, cat in enumerate(self.config.donation_order)}
-
-        def _category_index(unit_id: str) -> int:
-            info = self.config.units.get(unit_id)
-            cat = info.category if info else "troop"
-            return category_order.get(cat, 99)
-
-        sorted_requests = sorted(requested, key=lambda r: _category_index(r.unit_id))
-
-        for req in sorted_requests:
-            need = remaining.get(req.unit_id, 0)
-            if need <= 0:
-                continue
-            slot = self.inventory_parser.find_slot_for_unit(slots, req.unit_id)
-            if slot is None or slot.quantity <= 0:
-                continue
-
-            donate_qty = need
-            logger.info("Donating {} x {} (requested {})", donate_qty, req.unit_id, need)
-            for _ in range(donate_qty):
-                self.input.tap(*slot.center)
-            remaining[req.unit_id] = need - donate_qty
-            made = True
-
-        if made:
-            return True
-
-        # CoC sorts requested units into the first colored slots — match by position when templates miss.
-        colored = [s for s in slots if s.quantity > 0]
-        if len(colored) >= len(sorted_requests):
-            logger.info("Using slot order for specific request (unit templates did not match)")
-            for req, slot in zip(sorted_requests, colored):
-                donate_qty = req.quantity
-                if donate_qty <= 0:
-                    continue
-                logger.info("Donating {} x {} via ordered slot @ {}", donate_qty, req.unit_id, slot.center)
-                for _ in range(donate_qty):
-                    self.input.tap(*slot.center)
-                made = True
-
-        return made
 
     def _donate_open_request(self) -> bool:
         """Donate every colored slot, scrolling troop/spell bars horizontally as needed."""
@@ -161,11 +106,7 @@ class DonationExecutor:
 
         for attempt in range(max_scrolls + 1):
             frame = self.capture.screenshot()
-            slots = self.inventory_parser.parse_bar_slots(
-                frame,
-                bar_roi_key,
-                require_unit_id=False,
-            )
+            slots = self.inventory_parser.parse_bar_slots(frame, bar_roi_key)
             fresh = [slot for slot in slots if slot.center not in tapped]
             if not fresh:
                 if attempt == 0:

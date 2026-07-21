@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from coc_bot.config import load_config
 from coc_bot.donation.inventory import InventoryParser
 from coc_bot.donation.request_parser import RequestParser
-from coc_bot.vision.matcher import TemplateMatcher
+from coc_bot.vision.matcher import MatchResult, TemplateMatcher
 from coc_bot.vision.screens import ScreenClassifier
 
 
@@ -34,15 +34,10 @@ def main() -> None:
     screen = classifier.classify(frame)
     print(f"Screen: {screen.value}")
 
-    req_parser = RequestParser(config, matcher)
-    requested = req_parser.parse(frame)
-    print(f"Requested units ({len(requested)}):")
-    for r in requested:
-        print(f"  - {r.unit_id} x{r.quantity}")
-
-    inv_parser = InventoryParser(config, matcher)
+    req_parser = RequestParser(config)
+    inv_parser = InventoryParser(config)
     inventory = inv_parser.parse(frame)
-    print(f"Inventory ({len(inventory)} types):")
+    print(f"Colored inventory slots ({len(inventory)} positions):")
     for unit_id, qty in inventory.items():
         print(f"  - {unit_id}: {qty}")
 
@@ -54,6 +49,15 @@ def main() -> None:
             match = matcher.find(frame, template, threshold=config.donate_button_threshold)
             if match:
                 print(f"Donate button: ({match.center[0]}, {match.center[1]}) conf={match.confidence:.2f}")
+                adjusted = MatchResult(
+                    x=match.x,
+                    y=match.y,
+                    confidence=match.confidence,
+                    width=match.width,
+                    height=match.height,
+                )
+                is_specific = req_parser.has_requested_icons_in_chat(frame, adjusted)
+                print(f"Specific request icons in chat: {is_specific}")
                 if args.annotate:
                     cv2.rectangle(
                         frame,

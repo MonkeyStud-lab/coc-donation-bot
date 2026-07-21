@@ -129,8 +129,12 @@ class DonationBot:
         lo, hi = self.config.scan_interval_ms
         time.sleep(random.uniform(lo, hi) / 1000.0)
 
+    def _should_handle_request(self, request) -> bool:
+        return request.is_specific or self.config.donate_open_requests
+
     def _has_donate_request(self, frame) -> bool:
-        return self.chat_monitor.find_donate_request(frame) is not None
+        request = self.chat_monitor.find_donate_request(frame)
+        return request is not None and self._should_handle_request(request)
 
     def _do_scan_chat(self) -> None:
         frame = self.capture.screenshot()
@@ -141,7 +145,7 @@ class DonationBot:
             self._set_state("scroll_chat")
             return
 
-        if not request.requested and not self.config.donate_open_requests:
+        if not self._should_handle_request(request):
             logger.info("Skipping open/generic request — only specific requests are enabled")
             self.chat_monitor.mark_handled(request)
             return
@@ -153,8 +157,12 @@ class DonationBot:
         frame = self.capture.screenshot()
         request = self.chat_monitor.find_donate_request(frame)
         if request is not None:
-            self._pending_request = request
-            self._set_state("open_donation")
+            if not self._should_handle_request(request):
+                logger.info("Skipping open/generic request — only specific requests are enabled")
+                self.chat_monitor.mark_handled(request)
+            else:
+                self._pending_request = request
+                self._set_state("open_donation")
             return
         self.navigator.seek_donation_requests_step(frame, self._has_donate_request)
         self._set_state("scan_chat")
@@ -189,7 +197,9 @@ class DonationBot:
             self._set_state("scan_chat")
             return
 
-        donated = self.executor.donate_for_request(requested=self._pending_request.requested)
+        donated = self.executor.donate_for_request(
+            is_specific=self._pending_request.is_specific,
+        )
         logger.info("Donation round complete (donated={})", donated)
         self._set_state("scan_chat")
 

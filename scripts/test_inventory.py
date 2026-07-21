@@ -26,7 +26,7 @@ def main() -> None:
     capture = ScreenCapture(client)
     matcher = TemplateMatcher(threshold=config.template_threshold)
     classifier = ScreenClassifier(config, matcher)
-    inventory = InventoryParser(config, matcher)
+    inventory = InventoryParser(config)
 
     print("Open a donation request panel (tap Donate), then continue.")
     print("(Requested troops are read from clan chat, not this panel — this tests slot detection only.)")
@@ -38,8 +38,8 @@ def main() -> None:
     if screen.value != "donation_panel":
         print("WARNING: donation panel not detected — results may be wrong.")
 
-    slots_open = inventory.parse_slots(frame, require_unit_id=False)
-    slots_specific = inventory.parse_slots(frame, require_unit_id=False, stop_at_grey=True)
+    slots_open = inventory.parse_slots(frame)
+    slots_specific = inventory.parse_slots(frame, stop_at_grey=True)
 
     print(f"\nColored slots (open request — full visible grid): {len(slots_open)}")
     for slot in slots_open:
@@ -56,7 +56,6 @@ def main() -> None:
     print(f"  grey troop sample: {'yes' if config.colors.get('disabled_troop') else 'NO'}")
     print(f"  colored spell sample: {'yes' if config.colors.get('donatable_spell') else 'NO'}")
     print(f"  grey spell sample: {'yes' if config.colors.get('disabled_spell') else 'NO'}")
-    print(f"  unit templates: {len(config.unit_templates)}")
     grid = config.grid or {}
     troop = grid.get("troop_bar", {})
     spell = grid.get("spell_bar", {})

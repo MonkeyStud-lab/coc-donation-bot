@@ -19,7 +19,7 @@ from coc_bot.vision.matcher import MatchResult, TemplateMatcher
 class DonateRequest:
     button_match: MatchResult
     signature: str
-    requested: list  # list[RequestedUnit] — empty means open/generic request
+    is_specific: bool = False  # True = requested icons in chat (not open/generic)
 
 
 class ChatMonitor:
@@ -36,7 +36,7 @@ class ChatMonitor:
         self.capture = capture
         self.input = input_ctrl
         self.matcher = matcher or TemplateMatcher(threshold=config.donate_button_threshold)
-        self.request_parser = RequestParser(config, self.matcher)
+        self.request_parser = RequestParser(config)
         self._handled: dict[str, float] = {}
         self._donate_template: np.ndarray | None = None
 
@@ -105,13 +105,16 @@ class ChatMonitor:
                 width=match.width,
                 height=match.height,
             )
-            requested = self.request_parser.parse_from_chat(frame, adjusted)
-            if requested:
-                units = ", ".join(f"{u.quantity}x {u.unit_id}" for u in requested)
-                logger.info("Specific request in chat: {}", units)
+            is_specific = self.request_parser.has_requested_icons_in_chat(frame, adjusted)
+            if is_specific:
+                logger.info("Specific request detected (requested icons in chat)")
             else:
-                logger.debug("Open/generic request (no troop icons matched in chat message)")
-            return DonateRequest(button_match=adjusted, signature=sig, requested=requested)
+                logger.debug("Open/generic request (no requested icons in chat message)")
+            return DonateRequest(
+                button_match=adjusted,
+                signature=sig,
+                is_specific=is_specific,
+            )
 
         return None
 

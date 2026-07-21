@@ -13,13 +13,6 @@ def _project_root() -> Path:
 
 
 @dataclass
-class UnitInfo:
-    unit_id: str
-    category: str  # troop, spell, siege
-    tier: str = "normal"  # normal, dark
-
-
-@dataclass
 class BotConfig:
     adb_device: str
     coc_package: str
@@ -34,13 +27,11 @@ class BotConfig:
     break_max_seconds: int
     game_load_timeout_seconds: int
     state_watchdog_seconds: int
-    units: dict[str, UnitInfo]
     frame_width: int = 0
     frame_height: int = 0
     rois: dict[str, list[float]] = field(default_factory=dict)
     tap_points: dict[str, list[int]] = field(default_factory=dict)
     templates: dict[str, str] = field(default_factory=dict)
-    unit_templates: dict[str, str] = field(default_factory=dict)
     colors: dict[str, list[int]] = field(default_factory=dict)
     grid: dict[str, Any] = field(default_factory=dict)
     donation_order: list[str] = field(default_factory=lambda: ["troop", "spell", "siege"])
@@ -58,17 +49,6 @@ class BotConfig:
     @property
     def calibrated(self) -> bool:
         return self.frame_width > 0 and self.frame_height > 0 and bool(self.rois)
-
-
-def _parse_units(raw: dict[str, Any]) -> dict[str, UnitInfo]:
-    units: dict[str, UnitInfo] = {}
-    for unit_id, info in raw.items():
-        units[unit_id] = UnitInfo(
-            unit_id=unit_id,
-            category=info["category"],
-            tier=info.get("tier", "normal"),
-        )
-    return units
 
 
 def load_config(
@@ -110,13 +90,11 @@ def load_config(
         break_max_seconds=runtime.get("break_max_seconds", 900),
         game_load_timeout_seconds=runtime.get("game_load_timeout_seconds", 90),
         state_watchdog_seconds=runtime.get("state_watchdog_seconds", 45),
-        units=_parse_units(merged.get("units", {})),
         frame_width=calibrated.get("frame_width", 0),
         frame_height=calibrated.get("frame_height", 0),
         rois=calibrated.get("rois", {}),
         tap_points=calibrated.get("tap_points", {}),
         templates=calibrated.get("templates", {}),
-        unit_templates=calibrated.get("unit_templates", {}),
         colors=calibrated.get("colors", {}),
         grid=calibrated.get("grid", {}),
         donation_order=donation.get("order", ["troop", "spell", "siege"]),
@@ -141,7 +119,6 @@ def save_calibrated(config: BotConfig, path: Path | None = None) -> None:
         "rois": config.rois,
         "tap_points": config.tap_points,
         "templates": config.templates,
-        "unit_templates": config.unit_templates,
         "colors": config.colors,
         "grid": config.grid,
     }

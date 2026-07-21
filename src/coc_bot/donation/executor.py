@@ -37,12 +37,26 @@ class DonationExecutor:
         donated_any = False
         for round_num in range(max_rounds):
             frame = self.capture.screenshot()
-            if self.classifier.classify(frame) != ScreenType.DONATION_PANEL:
-                logger.warning("Not on donation panel (round {})", round_num)
+            screen = self.classifier.classify(frame)
+            if not self.classifier.is_donation_panel(frame):
+                logger.warning(
+                    "Not on donation panel (round {}), detected screen: {}",
+                    round_num,
+                    screen.value,
+                )
                 break
 
             requested = self.request_parser.parse(frame)
             if not requested:
+                if self.config.donate_open_requests:
+                    logger.info("Open request (no specific units) — donating from castle inventory")
+                    made_donation = self._donate_open_request(slots := self.inventory_parser.parse_slots(frame))
+                    if not made_donation:
+                        logger.debug("No donatable inventory for open request")
+                        break
+                    donated_any = True
+                    time.sleep(0.4)
+                    continue
                 logger.debug("No requested units detected")
                 break
 
@@ -89,6 +103,20 @@ class DonationExecutor:
             remaining[req.unit_id] = need - donate_qty
             made = True
 
+        return made
+
+    def _donate_open_request(self, slots: list[InventorySlot]) -> bool:
+        """Donate available castle units when the request does not specify troop types."""
+        if not slots:
+            return False
+        made = False
+        for slot in slots:
+            if slot.quantity <= 0:
+                continue
+            logger.info("Open request: tapping {} x{} at {}", slot.unit_id, slot.quantity, slot.center)
+            for _ in range(slot.quantity):
+                self.input.tap(*slot.center)
+            made = True
         return made
 
     def _close_panel(self) -> None:

@@ -22,7 +22,7 @@ from coc_bot.logging_utils import setup_logging
 from coc_bot.runtime.breaks import BreakManager
 from coc_bot.runtime.tracker import RuntimeTracker
 from coc_bot.vision.matcher import TemplateMatcher
-from coc_bot.vision.screens import ScreenType
+from coc_bot.vision.screens import ScreenClassifier, ScreenType
 
 
 class DonationBot:
@@ -160,7 +160,12 @@ class DonationBot:
             )
         else:
             self.chat_monitor.open_donation(self._pending_request)
-        time.sleep(0.8)
+        classifier = ScreenClassifier(self.config, self.matcher)
+        if not classifier.wait_for_donation_panel(
+            self.capture, timeout_seconds=self.config.donation_panel_wait_seconds
+        ):
+            logger.warning("Donation panel did not appear after tapping Donate")
+        time.sleep(0.3)
         self._set_state("donate")
 
     def _do_donate(self) -> None:

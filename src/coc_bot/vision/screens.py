@@ -43,10 +43,18 @@ class ScreenClassifier:
         return img
 
     def classify(self, frame: np.ndarray) -> ScreenType:
-        # Donation panel: check panel UI elements captured during calibration
+        # Donation panel templates (close / quick donate buttons)
         for panel_key in ("donation_panel", "panel_close", "quick_donate"):
             template = self._load(panel_key)
             if template is not None and self.matcher.find(frame, template) is not None:
+                return ScreenType.DONATION_PANEL
+
+        # Troop bar heuristic BEFORE clan_chat — panel overlays chat and both can match
+        if "donation_troop_bar" in self.config.rois:
+            from coc_bot.vision.rois import crop_roi
+
+            bar = crop_roi(frame, self.config.rois["donation_troop_bar"])
+            if float(np.std(bar)) > 20:
                 return ScreenType.DONATION_PANEL
 
         checks = [
@@ -61,14 +69,6 @@ class ScreenClassifier:
             if template is not None and self.matcher.find(frame, template) is not None:
                 return screen_type
 
-        # Heuristic fallbacks using ROIs
-        if "donation_troop_bar" in self.config.rois:
-            from coc_bot.vision.rois import crop_roi
-
-            bar = crop_roi(frame, self.config.rois["donation_troop_bar"])
-            if float(np.std(bar)) > 20:
-                return ScreenType.DONATION_PANEL
-
         if "chat_panel" in self.config.rois:
             from coc_bot.vision.rois import crop_roi
 
@@ -77,3 +77,18 @@ class ScreenClassifier:
                 return ScreenType.CLAN_CHAT
 
         return ScreenType.UNKNOWN
+
+    def is_donation_panel(self, frame: np.ndarray) -> bool:
+        return self.classify(frame) == ScreenType.DONATION_PANEL
+
+    def wait_for_donation_panel(self, capture, timeout_seconds: float = 3.0, poll_interval: float = 0.35) -> bool:
+        """Poll until donation panel appears or timeout."""
+        import time
+
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            frame = capture.screenshot()
+            if self.is_donation_panel(frame):
+                return True
+            time.sleep(poll_interval)
+        return False

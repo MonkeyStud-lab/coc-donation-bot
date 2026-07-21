@@ -179,7 +179,8 @@ class Navigator:
         max_attempts = self.config.chat_max_scroll_attempts
 
         for attempt in range(1, max_attempts + 1):
-            frame = frame or self.capture.screenshot()
+            if frame is None:
+                frame = self.capture.screenshot()
             match = self._find_scroll_down_indicator(frame)
             if match is None:
                 logger.debug("Chat at bottom (scroll-down indicator not visible)")
@@ -207,7 +208,8 @@ class Navigator:
 
     def _scroll_legacy(self, frame: np.ndarray | None) -> None:
         """Fallback when chat_scroll_down template was not calibrated."""
-        frame = frame or self.capture.screenshot()
+        if frame is None:
+            frame = self.capture.screenshot()
 
         bottom_tpl = self.load_template("chat_at_bottom")
         if bottom_tpl is not None and self.matcher.find(frame, bottom_tpl):

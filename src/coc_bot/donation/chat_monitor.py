@@ -59,7 +59,8 @@ class ChatMonitor:
 
     def find_donate_request(self, frame: np.ndarray | None = None) -> DonateRequest | None:
         self._prune_handled()
-        frame = frame or self.capture.screenshot()
+        if frame is None:
+            frame = self.capture.screenshot()
         template = self._load_donate_button()
         if template is None:
             logger.warning("Donate button template not configured")

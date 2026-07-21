@@ -49,13 +49,29 @@ class Navigator:
         timeout = timeout or self.config.state_watchdog_seconds
         deadline = time.time() + timeout
 
+        close_streak = 0
+
         while time.time() < deadline:
             frame = self.capture.screenshot()
             screen = self.classifier.classify(frame)
+            logger.debug("ensure_clan_chat: detected screen={}", screen.value)
 
             if screen == ScreenType.DONATION_PANEL:
+                before = screen
                 self.close_donation_panel(frame)
+                after = self.classifier.classify(self.capture.screenshot())
+                if after == before:
+                    close_streak += 1
+                else:
+                    close_streak = 0
+                if close_streak >= 3:
+                    logger.warning("Stuck in donation-panel close loop — opening clan chat instead")
+                    self._open_clan_chat(self.capture.screenshot())
+                    close_streak = 0
+                    time.sleep(1.0)
                 continue
+
+            close_streak = 0
 
             if screen == ScreenType.POPUP:
                 self._dismiss_popup(frame)
@@ -66,6 +82,7 @@ class Navigator:
                 return True
 
             if screen == ScreenType.HOME or screen == ScreenType.UNKNOWN:
+                logger.info("Not in clan chat (screen={}) — opening chat", screen.value)
                 self._open_clan_chat(frame)
                 time.sleep(1.0)
                 continue

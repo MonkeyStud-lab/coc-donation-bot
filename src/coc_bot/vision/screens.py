@@ -46,54 +46,70 @@ class ScreenClassifier:
         template = self._load(key)
         return template is not None and self.matcher.find(frame, template) is not None
 
+    def _roi_std(self, frame: np.ndarray, roi_key: str) -> float | None:
+        if roi_key not in self.config.rois:
+            return None
+        from coc_bot.vision.rois import crop_roi
+
+        region = crop_roi(frame, self.config.rois[roi_key])
+        return float(np.std(region))
+
+    def _is_home_screen(self, frame: np.ndarray) -> bool:
+        if self._template_visible(frame, "home"):
+            return True
+        if self._template_visible(frame, "open_chat"):
+            return True
+        # Tap-point-only calibration: village screen does not show the chat panel UI.
+        if self.config.tap_points.get("open_chat") and not self._clan_chat_anchor_visible(frame):
+            chat_std = self._roi_std(frame, "chat_panel")
+            if chat_std is not None and chat_std <= 15:
+                return True
+        return False
+
     def _clan_chat_anchor_visible(self, frame: np.ndarray) -> bool:
         """Calibrated anchor visible in chat but hidden when the donation panel is open."""
         return self._template_visible(frame, "clan_chat")
+
+    def _in_clan_chat_context(self, frame: np.ndarray) -> bool:
+        """Chat UI is on screen (panel open or closed). Not true on the village/home screen."""
+        chat_std = self._roi_std(frame, "chat_panel")
+        return chat_std is not None and chat_std > 15
 
     def _donation_panel_heuristic(self, frame: np.ndarray) -> bool:
         """Fallback when clan_chat anchor is obscured by the donation popup."""
         if self._template_visible(frame, "donation_panel"):
             return True
 
-        from coc_bot.vision.rois import crop_roi
+        troop_std = self._roi_std(frame, "donation_troop_bar")
+        spell_std = self._roi_std(frame, "donation_spell_bar")
 
-        if "donation_troop_bar" in self.config.rois:
-            bar = crop_roi(frame, self.config.rois["donation_troop_bar"])
-            if float(np.std(bar)) > 20:
-                return True
-
-        if "donation_spell_bar" in self.config.rois:
-            spell = crop_roi(frame, self.config.rois["donation_spell_bar"])
-            if float(np.std(spell)) > 20:
-                return True
+        # Require both bars — a single busy ROI false-matches on home/chat backgrounds.
+        if troop_std is not None and spell_std is not None:
+            return troop_std > 20 and spell_std > 20
 
         return False
 
+    def is_home_screen(self, frame: np.ndarray) -> bool:
+        return self._is_home_screen(frame)
+
     def classify(self, frame: np.ndarray) -> ScreenType:
-        # clan_chat anchor wins over troop-bar variance — chat UI can look "busy"
-        # in the troop bar ROI even when no donation panel is open.
+        if self._template_visible(frame, "loading"):
+            return ScreenType.LOADING
+
+        if self._template_visible(frame, "popup_dismiss") or self._template_visible(frame, "popup"):
+            return ScreenType.POPUP
+
+        if self._is_home_screen(frame):
+            return ScreenType.HOME
+
         if self._clan_chat_anchor_visible(frame):
             return ScreenType.CLAN_CHAT
 
-        if self._donation_panel_heuristic(frame):
+        if self._in_clan_chat_context(frame) and self._donation_panel_heuristic(frame):
             return ScreenType.DONATION_PANEL
 
-        checks = [
-            ("loading", ScreenType.LOADING),
-            ("home", ScreenType.HOME),
-            ("popup_dismiss", ScreenType.POPUP),
-            ("popup", ScreenType.POPUP),
-        ]
-        for template_key, screen_type in checks:
-            if self._template_visible(frame, template_key):
-                return screen_type
-
-        if "chat_panel" in self.config.rois:
-            from coc_bot.vision.rois import crop_roi
-
-            chat = crop_roi(frame, self.config.rois["chat_panel"])
-            if float(np.std(chat)) > 15:
-                return ScreenType.CLAN_CHAT
+        if self._in_clan_chat_context(frame):
+            return ScreenType.CLAN_CHAT
 
         return ScreenType.UNKNOWN
 

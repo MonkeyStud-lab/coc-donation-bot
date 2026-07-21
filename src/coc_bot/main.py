@@ -209,6 +209,12 @@ class DonationBot:
             is_specific=self._pending_request.is_specific,
         )
         logger.info("Donation round complete (donated={})", donated)
+        if not donated:
+            logger.info(
+                "No donation made — marking request handled to avoid reopening "
+                "(likely open/generic misclassified or already filled)"
+            )
+            self.chat_monitor.mark_handled(self._pending_request)
         self._set_state("scan_chat")
 
     def _recover(self) -> None:

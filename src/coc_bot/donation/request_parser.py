@@ -44,14 +44,24 @@ class RequestParser:
                 icon_cols.append(col)
 
         max_run = self._max_consecutive_run(icon_cols)
-        is_specific = len(icon_cols) >= 4 and max_run >= 2
+        clusters = self._split_clusters(icon_cols)
+        max_cluster = max((len(c) for c in clusters), default=0)
+        # Progress bars (open requests) fill many adjacent columns (high max_run).
+        # Specific requests show separate small icons with shorter runs/clusters.
+        is_specific = (
+            len(icon_cols) >= 4
+            and max_run <= 9
+            and max_cluster <= 10
+        )
 
         if self.debug:
             logger.debug(
-                "Request icon strip: icon_cols={}/{} max_run={} -> specific={}",
+                "Request icon strip: icon_cols={}/{} max_run={} clusters={} max_cluster={} -> specific={}",
                 len(icon_cols),
                 cols,
                 max_run,
+                len(clusters),
+                max_cluster,
                 is_specific,
             )
 
@@ -96,6 +106,18 @@ class RequestParser:
             else:
                 run = 1
         return best
+
+    @staticmethod
+    def _split_clusters(cols: list[int]) -> list[list[int]]:
+        if not cols:
+            return []
+        clusters: list[list[int]] = [[cols[0]]]
+        for col in cols[1:]:
+            if col == clusters[-1][-1] + 1:
+                clusters[-1].append(col)
+            else:
+                clusters.append([col])
+        return clusters
 
     def _chat_message_region(self, frame: np.ndarray, donate_button: MatchResult) -> np.ndarray:
         """Crop the chat message bubble sitting above a Donate button."""

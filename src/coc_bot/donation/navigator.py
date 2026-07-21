@@ -112,6 +112,13 @@ class Navigator:
         if frame is None:
             frame = self.capture.screenshot()
 
+        if not self.classifier.is_donation_panel(frame):
+            logger.debug(
+                "Skip close tap — donation panel not detected (screen={})",
+                self.classifier.classify(frame).value,
+            )
+            return
+
         point = self.config.tap_points.get("tap_outside_donation") or self.config.tap_points.get(
             "close_donation"
         )

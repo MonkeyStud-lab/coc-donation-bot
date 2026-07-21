@@ -42,30 +42,50 @@ class ScreenClassifier:
             self._cache[key] = img
         return img
 
-    def classify(self, frame: np.ndarray) -> ScreenType:
-        # Donation panel: troop bar heuristic and optional dedicated template only
-        for panel_key in ("donation_panel",):
-            template = self._load(panel_key)
-            if template is not None and self.matcher.find(frame, template) is not None:
-                return ScreenType.DONATION_PANEL
+    def _template_visible(self, frame: np.ndarray, key: str) -> bool:
+        template = self._load(key)
+        return template is not None and self.matcher.find(frame, template) is not None
+
+    def _clan_chat_anchor_visible(self, frame: np.ndarray) -> bool:
+        """Calibrated anchor visible in chat but hidden when the donation panel is open."""
+        return self._template_visible(frame, "clan_chat")
+
+    def _donation_panel_heuristic(self, frame: np.ndarray) -> bool:
+        """Fallback when clan_chat anchor is obscured by the donation popup."""
+        if self._template_visible(frame, "donation_panel"):
+            return True
+
+        from coc_bot.vision.rois import crop_roi
 
         if "donation_troop_bar" in self.config.rois:
-            from coc_bot.vision.rois import crop_roi
-
             bar = crop_roi(frame, self.config.rois["donation_troop_bar"])
             if float(np.std(bar)) > 20:
-                return ScreenType.DONATION_PANEL
+                return True
+
+        if "donation_spell_bar" in self.config.rois:
+            spell = crop_roi(frame, self.config.rois["donation_spell_bar"])
+            if float(np.std(spell)) > 20:
+                return True
+
+        return False
+
+    def classify(self, frame: np.ndarray) -> ScreenType:
+        # clan_chat anchor wins over troop-bar variance — chat UI can look "busy"
+        # in the troop bar ROI even when no donation panel is open.
+        if self._clan_chat_anchor_visible(frame):
+            return ScreenType.CLAN_CHAT
+
+        if self._donation_panel_heuristic(frame):
+            return ScreenType.DONATION_PANEL
 
         checks = [
-            ("clan_chat", ScreenType.CLAN_CHAT),
             ("loading", ScreenType.LOADING),
             ("home", ScreenType.HOME),
             ("popup_dismiss", ScreenType.POPUP),
             ("popup", ScreenType.POPUP),
         ]
         for template_key, screen_type in checks:
-            template = self._load(template_key)
-            if template is not None and self.matcher.find(frame, template) is not None:
+            if self._template_visible(frame, template_key):
                 return screen_type
 
         if "chat_panel" in self.config.rois:

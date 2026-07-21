@@ -47,7 +47,14 @@ class DonationBot:
 
         self.client = AdbClient(device=self.config.adb_device)
         self.capture = ScreenCapture(self.client)
-        self.input = InputController(
+        # Navigation must always tap (even in dry-run) so the bot can reach clan chat.
+        self.nav_input = InputController(
+            self.client,
+            jitter_px=self.config.tap_jitter_px,
+            delay_ms=self.config.action_delay_ms,
+            dry_run=False,
+        )
+        self.donation_input = InputController(
             self.client,
             jitter_px=self.config.tap_jitter_px,
             delay_ms=self.config.action_delay_ms,
@@ -58,9 +65,9 @@ class DonationBot:
             threshold=self.config.template_threshold,
             scale_range=self.config.scale_range,
         )
-        self.navigator = Navigator(self.config, self.capture, self.input, self.matcher)
-        self.chat_monitor = ChatMonitor(self.config, self.capture, self.input, self.matcher)
-        self.executor = DonationExecutor(self.config, self.capture, self.input, self.matcher)
+        self.navigator = Navigator(self.config, self.capture, self.nav_input, self.matcher)
+        self.chat_monitor = ChatMonitor(self.config, self.capture, self.donation_input, self.matcher)
+        self.executor = DonationExecutor(self.config, self.capture, self.donation_input, self.matcher)
         self.tracker = RuntimeTracker(self.config)
         self.break_manager = BreakManager(self.config, self.tracker, self.app, self.navigator)
         self._state = "boot"
@@ -143,7 +150,16 @@ class DonationBot:
         if not hasattr(self, "_pending_request"):
             self._set_state("scan_chat")
             return
-        self.chat_monitor.open_donation(self._pending_request)
+        if self.config.dry_run:
+            m = self._pending_request.button_match
+            logger.info(
+                "[DRY-RUN] Would tap Donate at ({}, {}), conf={:.2f}",
+                m.center[0],
+                m.center[1],
+                m.confidence,
+            )
+        else:
+            self.chat_monitor.open_donation(self._pending_request)
         time.sleep(0.8)
         self._set_state("donate")
 
@@ -161,7 +177,7 @@ class DonationBot:
 
     def _recover(self) -> None:
         logger.info("Running recovery sequence")
-        self.input.back()
+        self.nav_input.back()
         time.sleep(0.5)
         self.navigator.ensure_clan_chat()
         self._set_state("scan_chat")
@@ -191,7 +207,7 @@ class DonationBot:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="CoC Donation Bot (educational)")
-    parser.add_argument("--dry-run", action="store_true", help="Detect only, no taps")
+    parser.add_argument("--dry-run", action="store_true", help="Skip donate taps; navigation still runs")
     parser.add_argument("--debug-save-frames", action="store_true", help="Save debug screenshots")
     parser.add_argument("--debug", action="store_true", help="Verbose logging")
     args = parser.parse_args()

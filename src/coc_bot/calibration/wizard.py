@@ -56,6 +56,17 @@ class CalibrationWizard:
             save_template(crop, self.templates_dir / rel)
             self.config.templates["home"] = rel
 
+        print("\n--- Open chat button (from home screen) ---")
+        if prompt_yes_no("Capture open_chat button template?"):
+            coords = prompt_roi("Chat bubble / open chat button on the LEFT of home screen")
+            crop = home_frame[coords[1] : coords[1] + coords[3], coords[0] : coords[0] + coords[2]]
+            rel = "ui/open_chat.png"
+            save_template(crop, self.templates_dir / rel)
+            self.config.templates["open_chat"] = rel
+        else:
+            pt = prompt_point("Tap point at CENTER of chat bubble (home screen)")
+            self.config.tap_points["open_chat"] = list(pt)
+
         print("\n=== Step 2: Clan chat ===")
         print("Open clan chat, then press Enter.")
         input()
@@ -66,16 +77,6 @@ class CalibrationWizard:
 
         requests_roi = prompt_roi("Chat requests list region (where donate buttons appear)")
         self.config.rois["chat_requests"] = _roi_list(requests_roi, w, h)
-
-        if prompt_yes_no("Capture open_chat template from current screen?"):
-            coords = prompt_roi("Open chat button/icon region")
-            crop = chat_frame[coords[1] : coords[1] + coords[3], coords[0] : coords[0] + coords[2]]
-            rel = "ui/open_chat.png"
-            save_template(crop, self.templates_dir / rel)
-            self.config.templates["open_chat"] = rel
-        else:
-            pt = prompt_point("Tap point to open clan chat from home")
-            self.config.tap_points["open_chat"] = list(pt)
 
         if prompt_yes_no("Capture clan_chat anchor template?"):
             coords = prompt_roi("Unique clan chat UI element")

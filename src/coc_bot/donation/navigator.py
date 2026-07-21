@@ -81,6 +81,7 @@ class Navigator:
         h, w = frame.shape[:2]
         point = self.config.tap_points.get("open_chat")
         if point:
+            logger.info("Opening clan chat via tap point ({}, {})", point[0], point[1])
             self.input.tap(point[0], point[1])
             return
         template = self.load_template("open_chat")
@@ -88,10 +89,23 @@ class Navigator:
             match = self.matcher.find(frame, template)
             if match:
                 cx, cy = match.center
+                logger.info(
+                    "Opening clan chat via template at ({}, {}), conf={:.2f}",
+                    cx,
+                    cy,
+                    match.confidence,
+                )
                 self.input.tap(cx, cy)
                 return
-        # Fallback: left side chat button area
-        self.input.tap(int(w * 0.08), int(h * 0.45))
+            logger.warning(
+                "open_chat template saved but not found on screen — recalibrate tap point on home screen"
+            )
+        else:
+            logger.warning("No open_chat template or tap point — using fallback position")
+
+        fx, fy = int(w * 0.08), int(h * 0.45)
+        logger.info("Fallback tap to open chat at ({}, {})", fx, fy)
+        self.input.tap(fx, fy)
 
     def _close_donation_panel(self, frame: np.ndarray) -> None:
         for key in ("panel_close", "quick_donate"):

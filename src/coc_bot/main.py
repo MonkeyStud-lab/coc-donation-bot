@@ -85,7 +85,7 @@ class DonationBot:
         self.break_manager.resume_pending_break()
         self.tracker.start_loop_timing()
 
-        if not self.navigator.ensure_clan_chat():
+        if not self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request):
             logger.error("Could not reach clan chat on startup")
             sys.exit(1)
 
@@ -129,6 +129,9 @@ class DonationBot:
         lo, hi = self.config.scan_interval_ms
         time.sleep(random.uniform(lo, hi) / 1000.0)
 
+    def _has_donate_request(self, frame) -> bool:
+        return self.chat_monitor.find_donate_request(frame) is not None
+
     def _do_scan_chat(self) -> None:
         frame = self.capture.screenshot()
         self._maybe_save_debug(frame, "scan")
@@ -143,7 +146,12 @@ class DonationBot:
 
     def _do_scroll_chat(self) -> None:
         frame = self.capture.screenshot()
-        self.navigator.navigate_to_donation_requests(frame)
+        request = self.chat_monitor.find_donate_request(frame)
+        if request is not None:
+            self._pending_request = request
+            self._set_state("open_donation")
+            return
+        self.navigator.seek_donation_requests_step(frame, self._has_donate_request)
         self._set_state("scan_chat")
 
     def _do_open_donation(self) -> None:
@@ -184,7 +192,7 @@ class DonationBot:
         logger.info("Running recovery sequence")
         self.nav_input.back()
         time.sleep(0.5)
-        self.navigator.ensure_clan_chat()
+        self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request)
         self._set_state("scan_chat")
 
     def _check_watchdog(self) -> None:

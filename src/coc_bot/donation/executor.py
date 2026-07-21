@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import time
 
-import cv2
 from loguru import logger
 
 from coc_bot.adb.capture import ScreenCapture
@@ -16,6 +15,8 @@ from coc_bot.vision.screens import ScreenClassifier, ScreenType
 
 class DonationExecutor:
     """Execute partial donation fulfillment for troops, spells, and siege."""
+
+    BAR_KEYS = ("donation_troop_bar", "donation_spell_bar")
 
     def __init__(
         self,
@@ -49,10 +50,10 @@ class DonationExecutor:
             requested = self.request_parser.parse(frame)
             if not requested:
                 if self.config.donate_open_requests:
-                    logger.info("Open request (no specific units) — donating from castle inventory")
-                    made_donation = self._donate_open_request(slots := self.inventory_parser.parse_slots(frame))
+                    logger.info("Open request — donating all colored slots (bars may scroll)")
+                    made_donation = self._donate_open_request()
                     if not made_donation:
-                        logger.debug("No donatable inventory for open request")
+                        logger.warning("No colored slots tapped for open request")
                         break
                     donated_any = True
                     time.sleep(0.4)
@@ -60,9 +61,14 @@ class DonationExecutor:
                 logger.debug("No requested units detected")
                 break
 
-            slots = self.inventory_parser.parse_slots(frame)
+            # Specific request: CoC sorts requested units to the front; grey slots follow.
+            slots = self.inventory_parser.parse_slots(
+                frame,
+                require_unit_id=False,
+                stop_at_grey=True,
+            )
             if not slots:
-                logger.debug("No donatable inventory slots found")
+                logger.warning("No colored slots at start of troop/spell bars")
                 break
 
             made_donation = self._donate_round(requested, slots)
@@ -75,7 +81,6 @@ class DonationExecutor:
         return donated_any
 
     def _donate_round(self, requested: list[RequestedUnit], slots: list[InventorySlot]) -> bool:
-        inventory = {s.unit_id: s for s in slots}
         remaining = {r.unit_id: r.quantity for r in requested}
         made = False
 
@@ -103,20 +108,81 @@ class DonationExecutor:
             remaining[req.unit_id] = need - donate_qty
             made = True
 
+        if made:
+            return True
+
+        # CoC sorts requested units into the first colored slots — match by position when templates miss.
+        colored = [s for s in slots if s.quantity > 0]
+        if len(colored) >= len(sorted_requests):
+            logger.info("Using slot order for specific request (unit templates did not match)")
+            for req, slot in zip(sorted_requests, colored):
+                donate_qty = min(req.quantity, slot.quantity)
+                if donate_qty <= 0:
+                    continue
+                logger.info("Donating {} x {} via ordered slot @ {}", donate_qty, req.unit_id, slot.center)
+                for _ in range(donate_qty):
+                    self.input.tap(*slot.center)
+                made = True
+
         return made
 
-    def _donate_open_request(self, slots: list[InventorySlot]) -> bool:
-        """Donate available castle units when the request does not specify troop types."""
-        if not slots:
-            return False
+    def _donate_open_request(self) -> bool:
+        """Donate every colored slot, scrolling troop/spell bars horizontally as needed."""
         made = False
-        for slot in slots:
-            if slot.quantity <= 0:
+        for bar_key in self.BAR_KEYS:
+            if bar_key not in self.config.rois:
                 continue
-            logger.info("Open request: tapping {} x{} at {}", slot.unit_id, slot.quantity, slot.center)
-            for _ in range(slot.quantity):
-                self.input.tap(*slot.center)
-            made = True
+            if self._donate_colored_bar(bar_key):
+                made = True
+        return made
+
+    def _donate_colored_bar(self, bar_roi_key: str) -> bool:
+        max_scrolls = self.config.bar_max_scroll_attempts
+        tapped: set[tuple[int, int]] = set()
+        made = False
+
+        for attempt in range(max_scrolls + 1):
+            frame = self.capture.screenshot()
+            slots = self.inventory_parser.parse_bar_slots(
+                frame,
+                bar_roi_key,
+                require_unit_id=False,
+            )
+            fresh = [slot for slot in slots if slot.center not in tapped]
+            if not fresh:
+                if attempt == 0:
+                    logger.debug("No colored slots visible in {}", bar_roi_key)
+                break
+
+            for slot in fresh:
+                logger.info(
+                    "Open request: tapping {} x{} at {}",
+                    slot.unit_id,
+                    slot.quantity,
+                    slot.center,
+                )
+                for _ in range(slot.quantity):
+                    self.input.tap(*slot.center)
+                tapped.add(slot.center)
+                made = True
+
+            if attempt >= max_scrolls:
+                break
+
+            x1, y1, x2, y2 = self.inventory_parser.bar_swipe_line(frame, bar_roi_key)
+            logger.debug(
+                "Scrolling {} toward right ({},{}) -> ({},{}) [{}/{}]",
+                bar_roi_key,
+                x1,
+                y1,
+                x2,
+                y2,
+                attempt + 1,
+                max_scrolls,
+            )
+            self.input.swipe(x1, y1, x2, y2, duration_ms=280)
+            time.sleep(0.35)
+
         return made
 
     def _close_panel(self) -> None:

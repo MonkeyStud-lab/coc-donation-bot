@@ -53,7 +53,7 @@ STEPS: dict[str, CalibrationStep] = {
     "clan_chat": CalibrationStep(
         "clan_chat",
         "Clan chat",
-        "Chat ROIs, clan_chat anchor, scroll-down + request-jump icons",
+        "Chat ROIs, clan_chat anchor, top exclamation + bottom scroll-down icons",
         ("chat_panel", "chat_requests", "clan_chat", "chat_scroll_down", "chat_request_jump"),
     ),
     "donation_request": CalibrationStep(
@@ -71,8 +71,8 @@ STEPS: dict[str, CalibrationStep] = {
     "slot_colors": CalibrationStep(
         "slot_colors",
         "Slot colors",
-        "Donatable troop and spell slot color signatures",
-        ("donatable_troop", "donatable_spell"),
+        "Colored vs grey troop/spell slot samples in the donation panel bars",
+        ("donatable_troop", "disabled_troop", "donatable_spell", "disabled_spell"),
     ),
     "grid": CalibrationStep(
         "grid",
@@ -258,7 +258,9 @@ class CalibrationWizard:
             return all(
                 k in self.config.rois or k in self.config.templates
                 for k in ("chat_panel", "chat_requests", "clan_chat", "chat_scroll_down")
-            ) and "chat_scroll_down" in self.config.templates
+            ) and (
+                "chat_scroll_down" in self.config.templates or "chat_request_jump" in self.config.templates
+            )
         if step.step_id == "donation_request":
             return "donate_button" in self.config.templates and "request_header" in self.config.rois
         if step.step_id == "donation_panel":
@@ -267,7 +269,9 @@ class CalibrationWizard:
                 or self.config.tap_points.get("close_donation")
             )
         if step.step_id == "slot_colors":
-            return "donatable_troop" in self.config.colors and "donatable_spell" in self.config.colors
+            return bool(self.config.colors.get("donatable_troop")) and bool(
+                self.config.colors.get("disabled_troop")
+            )
         if step.step_id == "grid":
             return bool(self.config.grid)
         if step.step_id == "units":
@@ -378,24 +382,32 @@ class CalibrationWizard:
             frame,
         )
 
-        print("\n--- Scroll-down indicator ---")
+        print(
+            "\n--- Scroll-down / jump icon at bottom (optional legacy template) ---\n"
+            "If you already captured the bottom exclamation as chat_scroll_down, you can skip this.\n"
+            "Otherwise scroll chat UP until the bottom icon appears, then capture it."
+        )
         self._maybe_update_template_after_setup(
             "chat_scroll_down",
-            "scroll-down indicator template",
+            "bottom chat jump icon (optional if chat_request_jump captured)",
             "ui/chat_scroll_down.png",
-            "Scroll chat UP until the scroll-down arrow/button appears.",
+            "When the bottom icon is visible, press Enter...",
+            optional=True,
         )
 
         print(
-            "\n--- Donation request jump icon (exclamation mark) ---\n"
-            "When a donation request exists elsewhere in chat, an exclamation icon appears.\n"
-            "Tapping it scrolls directly to the next request."
+            "\n--- Exclamation jump icon (top OR bottom of chat log) ---\n"
+            "Same icon appears at the TOP when a request is above the current view,\n"
+            "or at the BOTTOM when a request is below. Tapping either jumps to a request.\n"
+            "Capture once — the bot searches both ends. (Your chat_scroll_down template\n"
+            "at the bottom also works as a fallback.)\n"
+            "Tip: scroll until the icon is visible at whichever edge applies, then capture it."
         )
         self._maybe_update_template_after_setup(
             "chat_request_jump",
-            "chat_request_jump (exclamation) template",
+            "exclamation jump icon (top or bottom of chat log)",
             "ui/chat_request_jump.png",
-            "Show the exclamation / jump-to-request icon in chat (if visible).",
+            "When the exclamation is visible at the top or bottom, press Enter...",
             optional=True,
         )
 
@@ -443,12 +455,34 @@ class CalibrationWizard:
         )
 
     def step_slot_colors(self) -> None:
-        print("Open the donation panel with troops/spells visible in your castle bar.")
+        print(
+            "Open the donation panel.\n"
+            "Colored slots can be donated; grey slots cannot (wrong type or won't fit).\n"
+            "For best results, show BOTH a colored and a grey troop slot, and both spell slots."
+        )
         _press_enter()
         frame = self.capture.screenshot()
 
-        self._maybe_update_color("donatable_troop", "donatable troop slot color", frame)
-        self._maybe_update_color("donatable_spell", "donatable spell slot color", frame)
+        self._maybe_update_color(
+            "donatable_troop",
+            "COLORED troop/siege slot (can be donated)",
+            frame,
+        )
+        self._maybe_update_color(
+            "disabled_troop",
+            "GREY troop/siege slot (cannot be donated)",
+            frame,
+        )
+        self._maybe_update_color(
+            "donatable_spell",
+            "COLORED spell slot (can be donated)",
+            frame,
+        )
+        self._maybe_update_color(
+            "disabled_spell",
+            "GREY spell slot (cannot be donated)",
+            frame,
+        )
 
     def step_grid(self) -> None:
         if self.config.grid and not prompt_yes_no("Update grid column counts?"):
@@ -460,11 +494,12 @@ class CalibrationWizard:
         spell_default = current.get("spell_bar", {}).get("cols", 5)
         req_default = current.get("request", {}).get("cols", 6)
 
-        print("Enter column counts (Enter keeps current/default).")
+        print("Enter VISIBLE slot counts in each bar (Enter keeps current/default).")
+        print("Count only slots you can see at once — bars scroll horizontally for more.")
         print("Troop bar includes regular troops and siege machines in the same row.")
-        raw = input(f"Troop+siege bar cols [{troop_default}]: ").strip()
+        raw = input(f"Visible troop+siege slots in bar [{troop_default}]: ").strip()
         troop_cols = int(raw) if raw else troop_default
-        raw = input(f"Spell bar cols [{spell_default}]: ").strip()
+        raw = input(f"Visible spell slots in bar [{spell_default}]: ").strip()
         spell_cols = int(raw) if raw else spell_default
         raw = input(f"Request header cols [{req_default}]: ").strip()
         req_cols = int(raw) if raw else req_default

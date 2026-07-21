@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 
 import cv2
 import numpy as np
@@ -10,7 +11,7 @@ from coc_bot.adb.input import InputController
 from coc_bot.adb.capture import ScreenCapture
 from coc_bot.config import BotConfig
 from coc_bot.vision.matcher import MatchResult, TemplateMatcher
-from coc_bot.vision.rois import ROI, roi_center
+from coc_bot.vision.rois import ROI, roi_center, denormalize_roi
 from coc_bot.vision.screens import ScreenClassifier, ScreenType
 
 
@@ -45,7 +46,11 @@ class Navigator:
             self._template_cache[key] = img
         return img
 
-    def ensure_clan_chat(self, timeout: float | None = None) -> bool:
+    def ensure_clan_chat(
+        self,
+        timeout: float | None = None,
+        has_donate_request: Callable[[np.ndarray], bool] | None = None,
+    ) -> bool:
         timeout = timeout or self.config.state_watchdog_seconds
         deadline = time.time() + timeout
 
@@ -78,7 +83,7 @@ class Navigator:
                 continue
 
             if screen == ScreenType.CLAN_CHAT:
-                self.navigate_to_donation_requests(frame)
+                self.navigate_to_donation_requests(frame, has_donate_request)
                 return True
 
             if screen == ScreenType.HOME or screen == ScreenType.UNKNOWN:
@@ -166,101 +171,146 @@ class Navigator:
                 return
         self.input.back()
 
-    def _find_in_chat_panel(self, frame: np.ndarray, template_key: str) -> MatchResult | None:
+    def _chat_region_roi(self, region: str) -> list[float] | None:
+        """
+        Return normalized ROI for chat jump-icon search.
+
+        region: "top" or "bottom" strip of the chat panel.
+        """
+        if region == "top" and "chat_request_jump_area" in self.config.rois:
+            return self.config.rois["chat_request_jump_area"]
+        if region == "bottom" and "chat_scroll_down_area" in self.config.rois:
+            return self.config.rois["chat_scroll_down_area"]
+
+        if "chat_panel" not in self.config.rois:
+            return None
+
+        panel = ROI(*self.config.rois["chat_panel"])
+        strip_h = panel.h * 0.30
+        if region == "top":
+            return [panel.x, panel.y, panel.w, strip_h]
+        if region == "bottom":
+            return [panel.x, panel.y + panel.h - strip_h, panel.w, strip_h]
+        return self.config.rois["chat_panel"]
+
+    def _find_in_chat_region(
+        self,
+        frame: np.ndarray,
+        template_key: str,
+        region: str,
+    ) -> MatchResult | None:
         template = self.load_template(template_key)
         if template is None:
             return None
         threshold = self.config.donate_button_threshold
-        if "chat_panel" in self.config.rois:
-            return self.matcher.find_in_roi(frame, template, self.config.rois["chat_panel"], threshold=threshold)
+        roi_dict = self._chat_region_roi(region)
+        if roi_dict is not None:
+            return self.matcher.find_in_roi(frame, template, roi_dict, threshold=threshold)
         return self.matcher.find(frame, template, threshold=threshold)
 
-    def _find_scroll_down_indicator(self, frame: np.ndarray) -> MatchResult | None:
-        return self._find_in_chat_panel(frame, "chat_scroll_down")
-
     def _find_request_jump_icon(self, frame: np.ndarray) -> MatchResult | None:
-        return self._find_in_chat_panel(frame, "chat_request_jump")
-
-    def _chat_swipe_center(self, frame: np.ndarray) -> tuple[int, int]:
-        h, w = frame.shape[:2]
-        if "chat_panel" in self.config.rois:
-            roi = ROI(*self.config.rois["chat_panel"])
-            return roi_center(roi, w, h)
-        return w // 2, int(h * 0.65)
-
-    def _swipe_chat_toward_bottom(self, frame: np.ndarray) -> None:
-        h, w = frame.shape[:2]
-        cx, cy = self._chat_swipe_center(frame)
-        self.input.swipe(cx, cy, cx, cy - int(h * 0.28), duration_ms=350)
-
-    def navigate_to_donation_requests(self, frame: np.ndarray | None = None) -> None:
         """
-        Move chat view toward donation requests.
+        Exclamation jump icon — same control at top or bottom of the chat log.
 
-        1. Tap the exclamation-mark jump icon if visible (scrolls to next request).
-        2. Otherwise tap scroll-down indicator until it disappears (= at bottom).
+        Top: request is above the current view. Bottom: request is below.
         """
+        for region in ("top", "bottom"):
+            match = self._find_in_chat_region(frame, "chat_request_jump", region)
+            if match is not None:
+                return match
+        # Legacy: bottom icon may have been saved as chat_scroll_down during calibration.
+        return self._find_in_chat_region(frame, "chat_scroll_down", "bottom")
+
+    def _jump_icon_location(self, match: MatchResult, frame: np.ndarray) -> str:
+        if "chat_panel" not in self.config.rois:
+            return "chat"
+        fh, fw = frame.shape[:2]
+        _, panel_y, _, panel_h = denormalize_roi(ROI(*self.config.rois["chat_panel"]), fw, fh)
+        mid_y = panel_y + panel_h // 2
+        return "top" if match.center[1] < mid_y else "bottom"
+
+    def tap_request_jump_if_visible(
+        self,
+        frame: np.ndarray | None = None,
+        *,
+        has_donate_request: Callable[[np.ndarray], bool] | None = None,
+    ) -> bool:
+        """Tap the exclamation jump icon (top or bottom of chat) if no donate button is on screen."""
         if frame is None:
             frame = self.capture.screenshot()
+
+        if has_donate_request and has_donate_request(frame):
+            logger.debug("Donate button visible on screen — skipping exclamation tap")
+            return False
 
         jump = self._find_request_jump_icon(frame)
-        if jump is not None:
-            cx, cy = jump.center
-            logger.info("Tapping donation request jump icon at ({}, {}), conf={:.2f}", cx, cy, jump.confidence)
-            self.input.tap(cx, cy)
-            time.sleep(0.5)
-            return
+        if jump is None:
+            return False
 
-        self.scroll_chat_to_bottom(frame)
+        cx, cy = jump.center
+        where = self._jump_icon_location(jump, frame)
+        logger.info(
+            "Tapping exclamation at {} of chat to jump to request ({}, {}), conf={:.2f}",
+            where,
+            cx,
+            cy,
+            jump.confidence,
+        )
+        self.input.tap(cx, cy)
+        time.sleep(0.5)
+        return True
 
-    def scroll_chat_to_bottom(self, frame: np.ndarray | None = None) -> None:
+    def seek_donation_requests_step(
+        self,
+        frame: np.ndarray | None = None,
+        has_donate_request: Callable[[np.ndarray], bool] | None = None,
+    ) -> str:
         """
-        Scroll to bottom of clan chat.
+        One step toward a donate request.
 
-        At bottom when the scroll-down indicator is NO LONGER visible.
+        Always prefers a visible Donate button over tapping exclamation.
+        Returns: "donate_visible", "jump", or "none".
         """
-        scroll_tpl = self.load_template("chat_scroll_down")
-        if scroll_tpl is None:
-            logger.warning("chat_scroll_down template missing — swiping chat as fallback")
-            self._scroll_by_swipe_only(frame)
-            return
-
-        self._scroll_via_indicator(frame)
-
-    def _scroll_via_indicator(self, frame: np.ndarray | None) -> None:
-        max_attempts = self.config.chat_max_scroll_attempts
-
-        for attempt in range(1, max_attempts + 1):
-            if frame is None:
-                frame = self.capture.screenshot()
-            match = self._find_scroll_down_indicator(frame)
-            if match is None:
-                logger.debug("Chat at bottom (scroll-down indicator absent)")
-                return
-
-            cx, cy = match.center
-            logger.info(
-                "Scroll-down indicator visible — tapping ({}, {}) [{}/{}]",
-                cx,
-                cy,
-                attempt,
-                max_attempts,
-            )
-            self.input.tap(cx, cy)
-            time.sleep(0.45)
-            frame = self.capture.screenshot()
-
-            if self._find_scroll_down_indicator(frame) is not None:
-                logger.debug("Indicator still visible after tap — swiping chat")
-                self._swipe_chat_toward_bottom(frame)
-                time.sleep(0.35)
-                frame = None
-
-        logger.warning("Chat scroll stopped after {} attempts (indicator may still be visible)", max_attempts)
-
-    def _scroll_by_swipe_only(self, frame: np.ndarray | None) -> None:
         if frame is None:
             frame = self.capture.screenshot()
-        for _ in range(3):
-            self._swipe_chat_toward_bottom(frame)
+
+        if has_donate_request and has_donate_request(frame):
+            logger.debug("Donate button on screen — not using exclamation")
+            return "donate_visible"
+
+        if self.tap_request_jump_if_visible(frame, has_donate_request=has_donate_request):
+            return "jump"
+
+        if self.load_template("chat_request_jump") is None and self.load_template("chat_scroll_down") is None:
+            logger.debug(
+                "No donate button in view and no jump icon calibrated "
+                "(calibrate.py --step clan_chat)"
+            )
+        else:
+            logger.debug("No donate button in view and no exclamation icon visible")
+        return "none"
+
+    def navigate_to_donation_requests(
+        self,
+        frame: np.ndarray | None = None,
+        has_donate_request: Callable[[np.ndarray], bool] | None = None,
+    ) -> None:
+        """Initial chat navigation on startup — donate buttons take priority over exclamation."""
+        if frame is None:
             frame = self.capture.screenshot()
+
+        if has_donate_request and has_donate_request(frame):
+            return
+
+        max_steps = self.config.chat_max_scroll_attempts
+        for step in range(1, max_steps + 1):
+            if frame is None:
+                frame = self.capture.screenshot()
+            action = self.seek_donation_requests_step(frame, has_donate_request)
+            if action in ("none", "donate_visible"):
+                return
+            if action == "jump":
+                return
+            frame = None
+            if step >= max_steps:
+                logger.warning("Chat navigation stopped after {} steps", max_steps)

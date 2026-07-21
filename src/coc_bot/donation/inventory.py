@@ -4,12 +4,13 @@ from dataclasses import dataclass
 
 import cv2
 import numpy as np
+from loguru import logger
 
 from coc_bot.config import BotConfig
 from coc_bot.vision.colors import SlotColorDetector
 from coc_bot.vision.matcher import TemplateMatcher
 from coc_bot.vision.ocr import QuantityOCR
-from coc_bot.vision.rois import crop_roi
+from coc_bot.vision.rois import ROI, crop_roi, denormalize_roi
 
 
 @dataclass
@@ -21,7 +22,12 @@ class InventorySlot:
 
 
 class InventoryParser:
-    """Parse available castle troops/spells/siege in the donation panel."""
+    """Parse donatable troops/spells/siege in the donation panel troop+spell bars."""
+
+    BAR_CONFIGS = (
+        ("donation_troop_bar", "troop_bar", "troop"),
+        ("donation_spell_bar", "spell_bar", "spell"),
+    )
 
     def __init__(self, config: BotConfig, matcher: TemplateMatcher | None = None) -> None:
         self.config = config
@@ -29,7 +35,9 @@ class InventoryParser:
         self.ocr = QuantityOCR(confidence_threshold=config.ocr_confidence_threshold)
         self.color_detector = SlotColorDetector(
             troop_color_bgr=config.colors.get("donatable_troop"),
+            troop_grey_bgr=config.colors.get("disabled_troop"),
             spell_color_bgr=config.colors.get("donatable_spell"),
+            spell_grey_bgr=config.colors.get("disabled_spell"),
         )
         self._unit_templates: dict[str, np.ndarray] = {}
 
@@ -49,29 +57,107 @@ class InventoryParser:
 
     def parse(self, frame: np.ndarray) -> dict[str, int]:
         inventory: dict[str, int] = {}
-        slots = self.parse_slots(frame)
-        for slot in slots:
+        for slot in self.parse_slots(frame):
             inventory[slot.unit_id] = inventory.get(slot.unit_id, 0) + slot.quantity
         return inventory
 
-    def parse_slots(self, frame: np.ndarray) -> list[InventorySlot]:
+    def parse_slots(
+        self,
+        frame: np.ndarray,
+        *,
+        require_unit_id: bool = True,
+        stop_at_grey: bool = False,
+        roi_keys: tuple[str, ...] | None = None,
+    ) -> list[InventorySlot]:
+        """Parse colored (donatable) slots currently visible in the troop/spell bars."""
         slots: list[InventorySlot] = []
-        # Troops and siege machines share the same bar in CoC's donation panel.
-        bar_configs = [
-            ("donation_troop_bar", self.color_detector.is_donatable_troop),
-            ("donation_spell_bar", self.color_detector.is_donatable_spell),
-        ]
-        for roi_key, is_donatable in bar_configs:
-            if roi_key not in self.config.rois:
+        for bar_roi_key, grid_key, default_category in self.BAR_CONFIGS:
+            if roi_keys is not None and bar_roi_key not in roi_keys:
                 continue
-            bar = crop_roi(frame, self.config.rois[roi_key])
-            grid_key = "troop_bar" if roi_key == "donation_troop_bar" else "spell_bar"
-            grid = self.config.grid.get(grid_key, {})
-            default_category = "troop" if roi_key == "donation_troop_bar" else "spell"
+            if bar_roi_key not in self.config.rois:
+                continue
             slots.extend(
-                self._walk_bar(bar, is_donatable, grid, frame, roi_key, default_category)
+                self.parse_bar_slots(
+                    frame,
+                    bar_roi_key,
+                    default_category=default_category,
+                    require_unit_id=require_unit_id,
+                    stop_at_grey=stop_at_grey,
+                )
             )
+
+        if not slots:
+            self._log_empty_inventory_hint(require_unit_id=require_unit_id)
         return slots
+
+    def parse_bar_slots(
+        self,
+        frame: np.ndarray,
+        bar_roi_key: str,
+        *,
+        default_category: str | None = None,
+        require_unit_id: bool = True,
+        stop_at_grey: bool = False,
+    ) -> list[InventorySlot]:
+        if bar_roi_key not in self.config.rois:
+            return []
+
+        if default_category is None:
+            default_category = "troop" if bar_roi_key == "donation_troop_bar" else "spell"
+
+        is_donatable = (
+            self.color_detector.is_donatable_troop
+            if default_category == "troop"
+            else self.color_detector.is_donatable_spell
+        )
+        grid_key = "troop_bar" if bar_roi_key == "donation_troop_bar" else "spell_bar"
+        bar = crop_roi(frame, self.config.rois[bar_roi_key])
+        grid = self.config.grid.get(grid_key, {})
+        return self._walk_bar(
+            bar,
+            is_donatable,
+            grid,
+            frame,
+            bar_roi_key,
+            default_category,
+            require_unit_id=require_unit_id,
+            stop_at_grey=stop_at_grey,
+        )
+
+    def bar_swipe_line(self, frame: np.ndarray, bar_roi_key: str) -> tuple[int, int, int, int]:
+        """Return (x1, y, x2, y) to scroll the bar toward the right (reveal more units)."""
+        fh, fw = frame.shape[:2]
+        bar_x, bar_y, bar_w, bar_h = denormalize_roi(ROI(*self.config.rois[bar_roi_key]), fw, fh)
+        cy = bar_y + bar_h // 2
+        x1 = bar_x + int(bar_w * 0.78)
+        x2 = bar_x + int(bar_w * 0.22)
+        return x1, cy, x2, cy
+
+    def _log_empty_inventory_hint(self, *, require_unit_id: bool) -> None:
+        has_color_refs = bool(self.config.colors.get("donatable_troop")) or bool(
+            self.config.colors.get("disabled_troop")
+        )
+        unit_tpl_count = len(self.config.unit_templates)
+        troop_roi = "donation_troop_bar" in self.config.rois
+        spell_roi = "donation_spell_bar" in self.config.rois
+
+        logger.warning(
+            "No colored donatable slots detected (troop_bar={}, spell_bar={}, color_calibrated={}, unit_templates={})",
+            troop_roi,
+            spell_roi,
+            has_color_refs,
+            unit_tpl_count,
+        )
+        if not (troop_roi and spell_roi):
+            logger.warning("Run: python scripts/calibrate.py --step donation_panel")
+        if not has_color_refs:
+            logger.warning("Run: python scripts/calibrate.py --step slot_colors")
+        if require_unit_id and unit_tpl_count == 0:
+            logger.warning("Run: python scripts/calibrate.py --step units")
+        elif require_unit_id and unit_tpl_count > 0:
+            logger.warning(
+                "Unit templates exist but none matched — recalibrate units/grid or lower template_threshold"
+            )
 
     def _walk_bar(
         self,
@@ -81,11 +167,12 @@ class InventoryParser:
         frame: np.ndarray,
         roi_key: str,
         default_category: str,
+        *,
+        require_unit_id: bool = True,
+        stop_at_grey: bool = False,
     ) -> list[InventorySlot]:
-        from coc_bot.vision.rois import ROI, denormalize_roi
-
         slots: list[InventorySlot] = []
-        cols = int(grid.get("cols", 8 if default_category == "troop" else 5))
+        cols = int(grid.get("cols", 6 if default_category == "troop" else 4))
         rows = int(grid.get("rows", 1))
         slot_w = int(grid.get("slot_width", bar.shape[1] // max(cols, 1)))
         slot_h = int(grid.get("slot_height", bar.shape[0] // max(rows, 1)))
@@ -100,11 +187,17 @@ class InventoryParser:
                 if x0 + slot_w > bar.shape[1] or y0 + slot_h > bar.shape[0]:
                     continue
                 cell = bar[y0 : y0 + slot_h, x0 : x0 + slot_w]
+                if not SlotColorDetector.has_icon(cell):
+                    continue
                 if not is_donatable(cell):
+                    if stop_at_grey:
+                        return slots
                     continue
                 unit_id = self._identify_unit(cell)
                 if unit_id is None:
-                    continue
+                    if require_unit_id:
+                        continue
+                    unit_id = f"{default_category}_slot_{row}_{col}"
                 info = self.config.units.get(unit_id)
                 category = info.category if info else default_category
                 qty = self._read_quantity(cell)

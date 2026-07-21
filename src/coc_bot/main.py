@@ -143,7 +143,7 @@ class DonationBot:
 
     def _do_scroll_chat(self) -> None:
         frame = self.capture.screenshot()
-        self.navigator.scroll_chat_to_bottom(frame)
+        self.navigator.navigate_to_donation_requests(frame)
         self._set_state("scan_chat")
 
     def _do_open_donation(self) -> None:

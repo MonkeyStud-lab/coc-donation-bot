@@ -53,8 +53,8 @@ STEPS: dict[str, CalibrationStep] = {
     "clan_chat": CalibrationStep(
         "clan_chat",
         "Clan chat",
-        "Chat ROIs, clan_chat anchor, scroll-down indicator",
-        ("chat_panel", "chat_requests", "clan_chat", "chat_scroll_down"),
+        "Chat ROIs, clan_chat anchor, scroll-down + request-jump icons",
+        ("chat_panel", "chat_requests", "clan_chat", "chat_scroll_down", "chat_request_jump"),
     ),
     "donation_request": CalibrationStep(
         "donation_request",
@@ -65,8 +65,8 @@ STEPS: dict[str, CalibrationStep] = {
     "donation_panel": CalibrationStep(
         "donation_panel",
         "Donation panel",
-        "Troop/spell/siege bars, panel close, quick donate",
-        ("donation_troop_bar", "donation_spell_bar", "panel_close"),
+        "Troop/spell/siege bars, tap-outside-to-close point",
+        ("donation_troop_bar", "donation_spell_bar", "tap_outside_donation"),
     ),
     "slot_colors": CalibrationStep(
         "slot_colors",
@@ -179,7 +179,10 @@ class CalibrationWizard:
         if step.step_id == "donation_request":
             return "donate_button" in self.config.templates and "request_header" in self.config.rois
         if step.step_id == "donation_panel":
-            return "donation_troop_bar" in self.config.rois
+            return "donation_troop_bar" in self.config.rois and bool(
+                self.config.tap_points.get("tap_outside_donation")
+                or self.config.tap_points.get("close_donation")
+            )
         if step.step_id == "slot_colors":
             return "donatable_troop" in self.config.colors and "donatable_spell" in self.config.colors
         if step.step_id == "grid":
@@ -292,12 +295,19 @@ class CalibrationWizard:
         scroll_coords = prompt_roi("Scroll-down indicator (only when NOT at bottom)")
         self._save_template_from_frame(scroll_frame, scroll_coords, "ui/chat_scroll_down.png", "chat_scroll_down")
 
-        if prompt_yes_no("Update chat_at_bottom anchor (optional fallback)?"):
-            print("Scroll chat to the very bottom first.")
-            _press_enter()
-            bottom_frame = self.capture.screenshot()
-            coords = prompt_roi("UI visible only when chat IS at bottom")
-            self._save_template_from_frame(bottom_frame, coords, "ui/chat_at_bottom.png", "chat_at_bottom")
+        print(
+            "\n--- Donation request jump icon (exclamation mark) ---\n"
+            "When a donation request exists elsewhere in chat, an exclamation icon appears.\n"
+            "Tapping it scrolls directly to the next request."
+        )
+        if prompt_yes_no("Capture chat_request_jump (exclamation) template?"):
+            jump_frame = self.capture.screenshot()
+            jump_coords = prompt_roi("Exclamation / jump-to-request icon in chat log")
+            self._save_template_from_frame(
+                jump_frame, jump_coords, "ui/chat_request_jump.png", "chat_request_jump"
+            )
+        elif "chat_request_jump" in self.config.templates:
+            print("Keeping existing chat_request_jump template.")
 
     def step_donation_request(self) -> None:
         w, h = self._frame_size()
@@ -326,14 +336,12 @@ class CalibrationWizard:
         siege_roi = prompt_roi("Siege donation bar region")
         self.config.rois["donation_siege_bar"] = _roi_list(siege_roi, w, h)
 
-        for ui_key, label in [
-            ("panel_close", "Panel close / X button"),
-            ("quick_donate", "Quick donate / confirm button"),
-        ]:
-            if prompt_yes_no(f"Capture {label}?"):
-                coords = prompt_roi(label)
-                rel = f"ui/{ui_key}.png"
-                self._save_template_from_frame(frame, coords, rel, ui_key)
+        print(
+            "\n--- Close donation panel ---\n"
+            "CoC has no X button. Tap OUTSIDE the panel (visible chat/background area) to close it."
+        )
+        pt = prompt_point("Tap point OUTSIDE the donation panel (on dimmed chat/village area)")
+        self.config.tap_points["tap_outside_donation"] = list(pt)
 
     def step_slot_colors(self) -> None:
         print("Open the donation panel with troops/spells visible in your castle bar.")

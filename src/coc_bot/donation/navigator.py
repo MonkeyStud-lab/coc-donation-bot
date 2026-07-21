@@ -54,7 +54,7 @@ class Navigator:
             screen = self.classifier.classify(frame)
 
             if screen == ScreenType.DONATION_PANEL:
-                self._close_donation_panel(frame)
+                self.close_donation_panel(frame)
                 continue
 
             if screen == ScreenType.POPUP:
@@ -62,7 +62,7 @@ class Navigator:
                 continue
 
             if screen == ScreenType.CLAN_CHAT:
-                self.scroll_chat_to_bottom(frame)
+                self.navigate_to_donation_requests(frame)
                 return True
 
             if screen == ScreenType.HOME or screen == ScreenType.UNKNOWN:
@@ -107,20 +107,29 @@ class Navigator:
         logger.info("Fallback tap to open chat at ({}, {})", fx, fy)
         self.input.tap(fx, fy)
 
-    def _close_donation_panel(self, frame: np.ndarray) -> None:
-        for key in ("panel_close", "quick_donate"):
-            template = self.load_template(key)
-            if template is None:
-                continue
-            match = self.matcher.find(frame, template)
-            if match:
-                cx, cy = match.center
-                self.input.tap(cx, cy)
-                return
-        point = self.config.tap_points.get("close_donation")
+    def close_donation_panel(self, frame: np.ndarray | None = None) -> None:
+        """Close donation panel by tapping outside it (CoC has no X button)."""
+        if frame is None:
+            frame = self.capture.screenshot()
+
+        point = self.config.tap_points.get("tap_outside_donation") or self.config.tap_points.get(
+            "close_donation"
+        )
         if point:
+            logger.info("Closing donation panel — tap outside at ({}, {})", point[0], point[1])
             self.input.tap(point[0], point[1])
+            return
+
+        # Fallback: tap upper chat area (usually outside the popup)
+        h, w = frame.shape[:2]
+        if "chat_panel" in self.config.rois:
+            roi = ROI(*self.config.rois["chat_panel"])
+            cx, _ = roi_center(roi, w, h)
+            ty = int(h * 0.12)
+            logger.warning("tap_outside_donation not calibrated — fallback tap ({}, {})", cx, ty)
+            self.input.tap(cx, ty)
         else:
+            logger.warning("tap_outside_donation not calibrated — using BACK")
             self.input.back()
 
     def _dismiss_popup(self, frame: np.ndarray) -> None:
@@ -133,17 +142,20 @@ class Navigator:
                 return
         self.input.back()
 
-    def _find_scroll_down_indicator(self, frame: np.ndarray) -> MatchResult | None:
-        """Find UI element that appears when chat can still scroll toward bottom."""
-        template = self.load_template("chat_scroll_down")
+    def _find_in_chat_panel(self, frame: np.ndarray, template_key: str) -> MatchResult | None:
+        template = self.load_template(template_key)
         if template is None:
             return None
-
         threshold = self.config.donate_button_threshold
         if "chat_panel" in self.config.rois:
             return self.matcher.find_in_roi(frame, template, self.config.rois["chat_panel"], threshold=threshold)
-
         return self.matcher.find(frame, template, threshold=threshold)
+
+    def _find_scroll_down_indicator(self, frame: np.ndarray) -> MatchResult | None:
+        return self._find_in_chat_panel(frame, "chat_scroll_down")
+
+    def _find_request_jump_icon(self, frame: np.ndarray) -> MatchResult | None:
+        return self._find_in_chat_panel(frame, "chat_request_jump")
 
     def _chat_swipe_center(self, frame: np.ndarray) -> tuple[int, int]:
         h, w = frame.shape[:2]
@@ -153,27 +165,43 @@ class Navigator:
         return w // 2, int(h * 0.65)
 
     def _swipe_chat_toward_bottom(self, frame: np.ndarray) -> None:
-        """Swipe up on the chat list to reveal newer messages at the bottom."""
         h, w = frame.shape[:2]
         cx, cy = self._chat_swipe_center(frame)
-        # Finger moves up → chat content scrolls down toward newest messages
         self.input.swipe(cx, cy, cx, cy - int(h * 0.28), duration_ms=350)
+
+    def navigate_to_donation_requests(self, frame: np.ndarray | None = None) -> None:
+        """
+        Move chat view toward donation requests.
+
+        1. Tap the exclamation-mark jump icon if visible (scrolls to next request).
+        2. Otherwise tap scroll-down indicator until it disappears (= at bottom).
+        """
+        if frame is None:
+            frame = self.capture.screenshot()
+
+        jump = self._find_request_jump_icon(frame)
+        if jump is not None:
+            cx, cy = jump.center
+            logger.info("Tapping donation request jump icon at ({}, {}), conf={:.2f}", cx, cy, jump.confidence)
+            self.input.tap(cx, cy)
+            time.sleep(0.5)
+            return
+
+        self.scroll_chat_to_bottom(frame)
 
     def scroll_chat_to_bottom(self, frame: np.ndarray | None = None) -> None:
         """
-        Scroll clan chat to the bottom (newest messages / donation requests).
+        Scroll to bottom of clan chat.
 
-        Uses the calibrated ``chat_scroll_down`` template: an element visible only
-        while the chat is not yet at the bottom. The bot taps it repeatedly until
-        it disappears.
+        At bottom when the scroll-down indicator is NO LONGER visible.
         """
         scroll_tpl = self.load_template("chat_scroll_down")
-        if scroll_tpl is not None:
-            self._scroll_via_indicator(frame)
+        if scroll_tpl is None:
+            logger.warning("chat_scroll_down template missing — swiping chat as fallback")
+            self._scroll_by_swipe_only(frame)
             return
 
-        logger.warning("chat_scroll_down template missing — using legacy scroll fallback")
-        self._scroll_legacy(frame)
+        self._scroll_via_indicator(frame)
 
     def _scroll_via_indicator(self, frame: np.ndarray | None) -> None:
         max_attempts = self.config.chat_max_scroll_attempts
@@ -183,7 +211,7 @@ class Navigator:
                 frame = self.capture.screenshot()
             match = self._find_scroll_down_indicator(frame)
             if match is None:
-                logger.debug("Chat at bottom (scroll-down indicator not visible)")
+                logger.debug("Chat at bottom (scroll-down indicator absent)")
                 return
 
             cx, cy = match.center
@@ -206,17 +234,9 @@ class Navigator:
 
         logger.warning("Chat scroll stopped after {} attempts (indicator may still be visible)", max_attempts)
 
-    def _scroll_legacy(self, frame: np.ndarray | None) -> None:
-        """Fallback when chat_scroll_down template was not calibrated."""
+    def _scroll_by_swipe_only(self, frame: np.ndarray | None) -> None:
         if frame is None:
             frame = self.capture.screenshot()
-
-        bottom_tpl = self.load_template("chat_at_bottom")
-        if bottom_tpl is not None and self.matcher.find(frame, bottom_tpl):
-            return
-
         for _ in range(3):
             self._swipe_chat_toward_bottom(frame)
             frame = self.capture.screenshot()
-            if bottom_tpl is not None and self.matcher.find(frame, bottom_tpl):
-                return

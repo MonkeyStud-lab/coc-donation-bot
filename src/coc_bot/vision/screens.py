@@ -43,13 +43,12 @@ class ScreenClassifier:
         return img
 
     def classify(self, frame: np.ndarray) -> ScreenType:
-        # Donation panel templates (close / quick donate buttons)
-        for panel_key in ("donation_panel", "panel_close", "quick_donate"):
+        # Donation panel: troop bar heuristic and optional dedicated template only
+        for panel_key in ("donation_panel",):
             template = self._load(panel_key)
             if template is not None and self.matcher.find(frame, template) is not None:
                 return ScreenType.DONATION_PANEL
 
-        # Troop bar heuristic BEFORE clan_chat — panel overlays chat and both can match
         if "donation_troop_bar" in self.config.rois:
             from coc_bot.vision.rois import crop_roi
 

@@ -120,23 +120,6 @@ class DonationExecutor:
         return made
 
     def _close_panel(self) -> None:
-        frame = self.capture.screenshot()
-        for key in ("quick_donate", "panel_close"):
-            rel = self.config.templates.get(key)
-            if not rel:
-                continue
-            path = self.config.templates_dir / rel
-            if not path.exists():
-                continue
-            template = cv2.imread(str(path), cv2.IMREAD_COLOR)
-            if template is None:
-                continue
-            match = self.matcher.find(frame, template)
-            if match:
-                self.input.tap(*match.center)
-                return
-        point = self.config.tap_points.get("close_donation")
-        if point:
-            self.input.tap(point[0], point[1])
-        else:
-            self.input.back()
+        from coc_bot.donation.navigator import Navigator
+
+        Navigator(self.config, self.capture, self.input, self.matcher).close_donation_panel()

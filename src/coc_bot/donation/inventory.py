@@ -9,7 +9,6 @@ from loguru import logger
 from coc_bot.config import BotConfig
 from coc_bot.vision.colors import SlotColorDetector
 from coc_bot.vision.matcher import TemplateMatcher
-from coc_bot.vision.ocr import QuantityOCR
 from coc_bot.vision.rois import ROI, crop_roi, denormalize_roi
 
 
@@ -32,7 +31,6 @@ class InventoryParser:
     def __init__(self, config: BotConfig, matcher: TemplateMatcher | None = None) -> None:
         self.config = config
         self.matcher = matcher or TemplateMatcher(threshold=config.template_threshold)
-        self.ocr = QuantityOCR(confidence_threshold=config.ocr_confidence_threshold)
         self.color_detector = SlotColorDetector(
             troop_color_bgr=config.colors.get("donatable_troop"),
             troop_grey_bgr=config.colors.get("disabled_troop"),
@@ -248,10 +246,8 @@ class InventoryParser:
         return best_id
 
     def _read_quantity(self, cell: np.ndarray) -> int:
-        h, w = cell.shape[:2]
-        badge = cell[int(h * 0.65) :, int(w * 0.55) :]
-        qty = self.ocr.read_quantity(badge)
-        return qty if qty is not None else 1
+        """Donation bar slots show elixir cost, not stack size — always 1 per tap."""
+        return 1
 
     def find_slot_for_unit(self, slots: list[InventorySlot], unit_id: str) -> InventorySlot | None:
         for slot in slots:

@@ -119,7 +119,7 @@ class DonationExecutor:
             if slot is None or slot.quantity <= 0:
                 continue
 
-            donate_qty = min(need, slot.quantity)
+            donate_qty = need
             logger.info("Donating {} x {} (requested {})", donate_qty, req.unit_id, need)
             for _ in range(donate_qty):
                 self.input.tap(*slot.center)
@@ -134,7 +134,7 @@ class DonationExecutor:
         if len(colored) >= len(sorted_requests):
             logger.info("Using slot order for specific request (unit templates did not match)")
             for req, slot in zip(sorted_requests, colored):
-                donate_qty = min(req.quantity, slot.quantity)
+                donate_qty = req.quantity
                 if donate_qty <= 0:
                     continue
                 logger.info("Donating {} x {} via ordered slot @ {}", donate_qty, req.unit_id, slot.center)

@@ -11,6 +11,7 @@ from loguru import logger
 from coc_bot.adb.capture import ScreenCapture
 from coc_bot.adb.input import InputController
 from coc_bot.config import BotConfig
+from coc_bot.donation.request_parser import RequestParser
 from coc_bot.vision.matcher import MatchResult, TemplateMatcher
 
 
@@ -18,6 +19,7 @@ from coc_bot.vision.matcher import MatchResult, TemplateMatcher
 class DonateRequest:
     button_match: MatchResult
     signature: str
+    requested: list  # list[RequestedUnit] — empty means open/generic request
 
 
 class ChatMonitor:
@@ -34,6 +36,7 @@ class ChatMonitor:
         self.capture = capture
         self.input = input_ctrl
         self.matcher = matcher or TemplateMatcher(threshold=config.donate_button_threshold)
+        self.request_parser = RequestParser(config, self.matcher)
         self._handled: dict[str, float] = {}
         self._donate_template: np.ndarray | None = None
 
@@ -102,7 +105,13 @@ class ChatMonitor:
                 width=match.width,
                 height=match.height,
             )
-            return DonateRequest(button_match=adjusted, signature=sig)
+            requested = self.request_parser.parse_from_chat(frame, adjusted)
+            if requested:
+                units = ", ".join(f"{u.quantity}x {u.unit_id}" for u in requested)
+                logger.info("Specific request in chat: {}", units)
+            else:
+                logger.debug("Open/generic request (no troop icons matched in chat message)")
+            return DonateRequest(button_match=adjusted, signature=sig, requested=requested)
 
         return None
 

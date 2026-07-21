@@ -6,9 +6,8 @@ import cv2
 import numpy as np
 
 from coc_bot.config import BotConfig
-from coc_bot.vision.matcher import TemplateMatcher
+from coc_bot.vision.matcher import MatchResult, TemplateMatcher
 from coc_bot.vision.ocr import QuantityOCR
-from coc_bot.vision.rois import crop_roi, denormalize_roi, ROI
 
 
 @dataclass
@@ -18,7 +17,7 @@ class RequestedUnit:
 
 
 class RequestParser:
-    """Parse requested units from the donation panel header."""
+    """Parse requested units from the clan chat donation message (not the donation panel)."""
 
     def __init__(self, config: BotConfig, matcher: TemplateMatcher | None = None) -> None:
         self.config = config
@@ -40,27 +39,42 @@ class RequestParser:
             self._unit_templates[unit_id] = img
         return img
 
-    def parse(self, frame: np.ndarray) -> list[RequestedUnit]:
-        if "request_header" not in self.config.rois:
-            return self._parse_full_bar(frame)
+    def parse_from_chat(self, frame: np.ndarray, donate_button: MatchResult) -> list[RequestedUnit]:
+        """
+        Read requested troop/spell icons from the chat message above the Donate button.
 
-        header = crop_roi(frame, self.config.rois["request_header"])
-        return self._match_units_in_region(header)
+        Returns an empty list for open/generic requests (no specific units shown in chat).
+        """
+        region = self._chat_message_region(frame, donate_button)
+        if region.size == 0:
+            return []
+        return self._match_units_in_region(region)
 
-    def _parse_full_bar(self, frame: np.ndarray) -> list[RequestedUnit]:
-        results: list[RequestedUnit] = []
-        for roi_key in ("request_header", "donation_troop_bar"):
-            if roi_key in self.config.rois:
-                region = crop_roi(frame, self.config.rois[roi_key])
-                results.extend(self._match_units_in_region(region))
-        return results
+    def _chat_message_region(self, frame: np.ndarray, donate_button: MatchResult) -> np.ndarray:
+        """Crop the chat message bubble sitting above a Donate button."""
+        h, w = frame.shape[:2]
+        bx, by = donate_button.x, donate_button.y
+        bw, bh = donate_button.width, donate_button.height
+
+        msg_h = max(int(bh * 6), 80)
+        y0 = max(0, by - msg_h)
+        y1 = max(0, by - int(bh * 0.25))
+        x0 = max(0, bx - bw * 2)
+        x1 = min(w, bx + bw * 10)
+
+        if y1 <= y0 or x1 <= x0:
+            return np.array([])
+
+        return frame[y0:y1, x0:x1].copy()
 
     def _match_units_in_region(self, region: np.ndarray) -> list[RequestedUnit]:
+        if not self.config.unit_templates:
+            return []
+
         requested: list[RequestedUnit] = []
-        grid = self.config.grid.get("request", {})
-        cols = int(grid.get("cols", 6))
-        slot_w = int(grid.get("slot_width", region.shape[1] // max(cols, 1)))
-        slot_h = int(grid.get("slot_height", region.shape[0]))
+        cols = 8
+        slot_w = max(1, region.shape[1] // cols)
+        slot_h = region.shape[0]
 
         for col in range(cols):
             x0 = col * slot_w

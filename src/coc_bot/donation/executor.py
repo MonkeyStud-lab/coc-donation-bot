@@ -33,52 +33,71 @@ class DonationExecutor:
         self.inventory_parser = InventoryParser(config, self.matcher)
         self.classifier = ScreenClassifier(config, self.matcher)
 
-    def donate_for_request(self, max_rounds: int = 20) -> bool:
-        """Donate as much as possible for the current open donation panel. Returns True if any donation made."""
-        donated_any = False
-        for round_num in range(max_rounds):
-            frame = self.capture.screenshot()
-            screen = self.classifier.classify(frame)
-            if not self.classifier.is_donation_panel(frame):
-                logger.warning(
-                    "Not on donation panel (round {}), detected screen: {}",
-                    round_num,
-                    screen.value,
-                )
-                break
-
-            requested = self.request_parser.parse(frame)
-            if not requested:
-                if self.config.donate_open_requests:
-                    logger.info("Open request — donating all colored slots (bars may scroll)")
-                    made_donation = self._donate_open_request()
-                    if not made_donation:
-                        logger.warning("No colored slots tapped for open request")
-                        break
-                    donated_any = True
-                    time.sleep(0.4)
-                    continue
-                logger.debug("No requested units detected")
-                break
-
-            # Specific request: CoC sorts requested units to the front; grey slots follow.
-            slots = self.inventory_parser.parse_slots(
-                frame,
-                require_unit_id=False,
-                stop_at_grey=True,
+    def donate_for_request(
+        self,
+        requested: list[RequestedUnit] | None = None,
+        max_rounds: int = 20,
+    ) -> bool:
+        """Donate for the current donation panel. `requested` comes from clan chat (empty = open request)."""
+        frame = self.capture.screenshot()
+        if not self.classifier.is_donation_panel(frame):
+            logger.warning(
+                "Not on donation panel, detected screen: {}",
+                self.classifier.classify(frame).value,
             )
-            if not slots:
-                logger.warning("No colored slots at start of troop/spell bars")
-                break
+            self._close_panel()
+            return False
 
-            made_donation = self._donate_round(requested, slots)
-            if not made_donation:
-                break
-            donated_any = True
-            time.sleep(0.4)
+        if requested is None:
+            requested = []
+
+        if not requested:
+            if self.config.donate_open_requests:
+                logger.info("Open request — donating all colored slots (bars may scroll)")
+                donated_any = self._donate_open_request()
+            else:
+                logger.info("No specific units — tapping colored slots until first grey row")
+                slots = self.inventory_parser.parse_slots(
+                    frame, require_unit_id=False, stop_at_grey=True
+                )
+                donated_any = self._tap_colored_slots(slots)
+        else:
+            logger.info(
+                "Specific request — donating from chat ({} unit types)",
+                len(requested),
+            )
+            donated_any = False
+            for round_num in range(max_rounds):
+                frame = self.capture.screenshot()
+                if not self.classifier.is_donation_panel(frame):
+                    break
+                slots = self.inventory_parser.parse_slots(
+                    frame,
+                    require_unit_id=False,
+                    stop_at_grey=True,
+                )
+                if not slots:
+                    logger.warning("No colored slots at start of troop/spell bars")
+                    break
+                made_donation = self._donate_round(requested, slots)
+                if not made_donation:
+                    made_donation = self._tap_colored_slots(slots)
+                if not made_donation:
+                    break
+                donated_any = True
+                time.sleep(0.4)
 
         self._close_panel()
         return donated_any
+
+    def _tap_colored_slots(self, slots: list[InventorySlot]) -> bool:
+        if not slots:
+            return False
+        for slot in slots:
+            logger.info("Tapping colored slot {} x{} at {}", slot.unit_id, slot.quantity, slot.center)
+            for _ in range(slot.quantity):
+                self.input.tap(*slot.center)
+        return True
 
     def _donate_round(self, requested: list[RequestedUnit], slots: list[InventorySlot]) -> bool:
         remaining = {r.unit_id: r.quantity for r in requested}

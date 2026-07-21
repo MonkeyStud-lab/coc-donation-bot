@@ -184,7 +184,7 @@ class DonationBot:
             self._set_state("scan_chat")
             return
 
-        donated = self.executor.donate_for_request()
+        donated = self.executor.donate_for_request(requested=self._pending_request.requested)
         logger.info("Donation round complete (donated={})", donated)
         self._set_state("scan_chat")
 

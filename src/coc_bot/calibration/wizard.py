@@ -59,8 +59,8 @@ STEPS: dict[str, CalibrationStep] = {
     "donation_request": CalibrationStep(
         "donation_request",
         "Donation request",
-        "Donate button template, request header ROI",
-        ("donate_button", "request_header"),
+        "Donate button template in clan chat",
+        ("donate_button",),
     ),
     "donation_panel": CalibrationStep(
         "donation_panel",
@@ -262,7 +262,7 @@ class CalibrationWizard:
                 "chat_scroll_down" in self.config.templates or "chat_request_jump" in self.config.templates
             )
         if step.step_id == "donation_request":
-            return "donate_button" in self.config.templates and "request_header" in self.config.rois
+            return "donate_button" in self.config.templates
         if step.step_id == "donation_panel":
             return "donation_troop_bar" in self.config.rois and bool(
                 self.config.tap_points.get("tap_outside_donation")
@@ -413,7 +413,10 @@ class CalibrationWizard:
 
     def step_donation_request(self) -> None:
         w, h = self._frame_size()
-        print("Show a donation request with a visible Donate button in clan chat.")
+        print(
+            "Show a donation request with a visible Donate button in clan chat.\n"
+            "Requested troops/spells appear in the chat message only — NOT in the donation panel."
+        )
         _press_enter()
         frame = self.capture.screenshot()
 
@@ -423,12 +426,7 @@ class CalibrationWizard:
             "ui/donate_button.png",
             frame,
         )
-        self._maybe_update_roi(
-            "request_header",
-            "request header ROI",
-            w,
-            h,
-        )
+        self.config.rois.pop("request_header", None)
 
     def step_donation_panel(self) -> None:
         w, h = self._frame_size()
@@ -492,16 +490,14 @@ class CalibrationWizard:
         current = self.config.grid or {}
         troop_bar = current.get("troop_bar", {})
         spell_bar = current.get("spell_bar", {})
-        req_bar = current.get("request", {})
         troop_cols_default = troop_bar.get("cols", 7)
         troop_rows_default = troop_bar.get("rows", 1)
         spell_cols_default = spell_bar.get("cols", 5)
         spell_rows_default = spell_bar.get("rows", 1)
-        req_default = req_bar.get("cols", 6)
 
-        print("Enter VISIBLE slot layout (Enter keeps current/default).")
-        print("Count only what you see before scrolling — e.g. 2 rows x 7 cols = 14 troop slots.")
-        print("The troop bar ROI (donation_panel step) must cover all visible rows.")
+        print("Enter VISIBLE slot layout in the donation panel bars (Enter keeps default).")
+        print("Example: 2 rows x 7 columns of troops visible before scrolling horizontally.")
+        print("Requested troops are shown in clan chat only — no request-header setting needed.")
         print("Troop bar includes regular troops and siege machines.")
         raw = input(f"Troop+siege columns (slots per row) [{troop_cols_default}]: ").strip()
         troop_cols = int(raw) if raw else troop_cols_default
@@ -511,13 +507,10 @@ class CalibrationWizard:
         spell_cols = int(raw) if raw else spell_cols_default
         raw = input(f"Spell rows [{spell_rows_default}]: ").strip()
         spell_rows = int(raw) if raw else spell_rows_default
-        raw = input(f"Request header cols [{req_default}]: ").strip()
-        req_cols = int(raw) if raw else req_default
 
         self.config.grid = {
             "troop_bar": {"cols": troop_cols, "rows": troop_rows},
             "spell_bar": {"cols": spell_cols, "rows": spell_rows},
-            "request": {"cols": req_cols, "rows": 1},
         }
 
     def step_units(self) -> None:

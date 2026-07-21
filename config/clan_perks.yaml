@@ -1,0 +1,20 @@
+# Clan donation limits per donor (Clash Anytime update, March 2025).
+# Source: https://supercell.com/en/games/clashofclans/blog/release-notes/welcome-to-clash-anytime-update/
+# Full per-level table: https://clashofclans.fandom.com/wiki/Clan_Perks
+#
+# troop_housing / spell_housing = housing space you can donate in one action
+# siege_count = plain count (not housing)
+
+limits_by_level:
+  1:  { troop_housing: 6,  spell_housing: 1, siege_count: 1 }
+  2:  { troop_housing: 10, spell_housing: 1, siege_count: 1 }
+  3:  { troop_housing: 10, spell_housing: 2, siege_count: 1 }
+  4:  { troop_housing: 15, spell_housing: 2, siege_count: 1 }
+  5:  { troop_housing: 15, spell_housing: 3, siege_count: 1 }
+  6:  { troop_housing: 25, spell_housing: 3, siege_count: 2 }
+  7:  { troop_housing: 25, spell_housing: 4, siege_count: 2 }
+  8:  { troop_housing: 40, spell_housing: 4, siege_count: 2 }
+  9:  { troop_housing: 55, spell_housing: 4, siege_count: 2 }
+  10: { troop_housing: 55, spell_housing: 4, siege_count: 2 }
+
+# Levels 11+ use the same caps as level 10 (no new donation perks past 10).

@@ -36,10 +36,16 @@ class DonationBot:
         "close_panel",
     }
 
-    def __init__(self, dry_run: bool = False, debug_save_frames: bool = False) -> None:
+    def __init__(
+        self,
+        dry_run: bool = False,
+        debug_save_frames: bool = False,
+        debug: bool = False,
+    ) -> None:
         self.config = load_config()
         self.config.dry_run = dry_run
         self.config.debug_save_frames = debug_save_frames
+        self._debug = debug
 
         if not self.config.calibrated:
             logger.error("Calibration not found. Run: python scripts/calibrate.py")
@@ -66,7 +72,9 @@ class DonationBot:
             scale_range=self.config.scale_range,
         )
         self.navigator = Navigator(self.config, self.capture, self.nav_input, self.matcher)
-        self.chat_monitor = ChatMonitor(self.config, self.capture, self.donation_input, self.matcher)
+        self.chat_monitor = ChatMonitor(
+            self.config, self.capture, self.donation_input, self.matcher, debug=debug
+        )
         self.executor = DonationExecutor(self.config, self.capture, self.donation_input, self.matcher)
         self.tracker = RuntimeTracker(self.config)
         self.break_manager = BreakManager(self.config, self.tracker, self.app, self.navigator)
@@ -241,7 +249,11 @@ def main() -> None:
     args = parser.parse_args()
 
     setup_logging(debug=args.debug, log_file=Path("data") / "bot.log")
-    bot = DonationBot(dry_run=args.dry_run, debug_save_frames=args.debug_save_frames)
+    bot = DonationBot(
+        dry_run=args.dry_run,
+        debug_save_frames=args.debug_save_frames,
+        debug=args.debug,
+    )
     bot.run()
 
 

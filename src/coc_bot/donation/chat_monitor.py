@@ -31,12 +31,14 @@ class ChatMonitor:
         capture: ScreenCapture,
         input_ctrl: InputController,
         matcher: TemplateMatcher | None = None,
+        *,
+        debug: bool = False,
     ) -> None:
         self.config = config
         self.capture = capture
         self.input = input_ctrl
         self.matcher = matcher or TemplateMatcher(threshold=config.donate_button_threshold)
-        self.request_parser = RequestParser(config)
+        self.request_parser = RequestParser(config, debug=debug)
         self._handled: dict[str, float] = {}
         self._donate_template: np.ndarray | None = None
 
@@ -107,9 +109,9 @@ class ChatMonitor:
             )
             is_specific = self.request_parser.has_requested_icons_in_chat(frame, adjusted)
             if is_specific:
-                logger.info("Specific request detected (requested icons in chat)")
+                logger.info("Specific request detected (requested unit icons in chat)")
             else:
-                logger.debug("Open/generic request (no requested icons in chat message)")
+                logger.debug("Open/generic request (capacity bars only — no unit icon row)")
             return DonateRequest(
                 button_match=adjusted,
                 signature=sig,

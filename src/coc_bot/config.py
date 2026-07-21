@@ -12,6 +12,13 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+@dataclass(frozen=True)
+class DonationLimits:
+    troop_housing: int
+    spell_housing: int
+    siege_count: int
+
+
 @dataclass
 class BotConfig:
     adb_device: str
@@ -40,6 +47,8 @@ class BotConfig:
     bar_max_scroll_attempts: int = 8
     donate_open_requests: bool = False
     donation_panel_wait_seconds: float = 3.0
+    clan_level: int = 8
+    clan_donation_limits: dict[int, DonationLimits] = field(default_factory=dict)
     ocr_confidence_threshold: float = 0.5
     debug_save_frames: bool = False
     dry_run: bool = False
@@ -49,6 +58,35 @@ class BotConfig:
     @property
     def calibrated(self) -> bool:
         return self.frame_width > 0 and self.frame_height > 0 and bool(self.rois)
+
+    def donor_limits(self) -> DonationLimits:
+        """Max troops/spells/siege this account can donate per action at current clan level."""
+        level = self.clan_level
+        if level in self.clan_donation_limits:
+            return self.clan_donation_limits[level]
+        # Levels 11+ share level 10 perks
+        if level > 10 and 10 in self.clan_donation_limits:
+            return self.clan_donation_limits[10]
+        # Fallback: lowest tier
+        if self.clan_donation_limits:
+            return self.clan_donation_limits[min(self.clan_donation_limits)]
+        return DonationLimits(troop_housing=6, spell_housing=1, siege_count=1)
+
+
+def _load_clan_perks(root: Path) -> dict[int, DonationLimits]:
+    path = root / "config" / "clan_perks.yaml"
+    if not path.exists():
+        return {}
+    with open(path, encoding="utf-8") as f:
+        raw = yaml.safe_load(f) or {}
+    limits: dict[int, DonationLimits] = {}
+    for level_str, values in raw.get("limits_by_level", {}).items():
+        limits[int(level_str)] = DonationLimits(
+            troop_housing=int(values["troop_housing"]),
+            spell_housing=int(values["spell_housing"]),
+            siege_count=int(values["siege_count"]),
+        )
+    return limits
 
 
 def load_config(
@@ -75,6 +113,8 @@ def load_config(
     timing = merged.get("timing", {})
     runtime = merged.get("runtime", {})
     donation = merged.get("donation", {})
+    clan = merged.get("clan", {})
+    clan_limits = _load_clan_perks(root)
 
     return BotConfig(
         adb_device=os.environ.get("ADB_DEVICE", adb.get("device", "127.0.0.1:5555")),
@@ -103,6 +143,8 @@ def load_config(
         bar_max_scroll_attempts=donation.get("bar_max_scroll_attempts", 8),
         donate_open_requests=donation.get("donate_open_requests", False),
         donation_panel_wait_seconds=float(donation.get("donation_panel_wait_seconds", 3.0)),
+        clan_level=int(clan.get("level", 8)),
+        clan_donation_limits=clan_limits,
         ocr_confidence_threshold=vision.get("ocr_confidence_threshold", 0.5),
         data_dir=root / "data",
         templates_dir=root / "data" / "templates",

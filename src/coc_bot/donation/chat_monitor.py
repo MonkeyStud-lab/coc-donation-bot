@@ -11,7 +11,8 @@ from loguru import logger
 from coc_bot.adb.capture import ScreenCapture
 from coc_bot.adb.input import InputController
 from coc_bot.config import BotConfig
-from coc_bot.donation.request_parser import RequestParser
+from coc_bot.donation.capacity_parser import RequestCapacity, RequestCapacityParser
+from coc_bot.donation.request_parser import RequestKind, RequestParser
 from coc_bot.vision.matcher import MatchResult, TemplateMatcher
 
 
@@ -19,7 +20,9 @@ from coc_bot.vision.matcher import MatchResult, TemplateMatcher
 class DonateRequest:
     button_match: MatchResult
     signature: str
-    is_specific: bool = False  # True = requested icons in chat (not open/generic)
+    is_specific: bool = False  # True = pure specific (Phase 1 colored-slot path)
+    kind: RequestKind = RequestKind.OPEN
+    capacity: RequestCapacity | None = None
 
 
 class ChatMonitor:
@@ -39,6 +42,7 @@ class ChatMonitor:
         self.input = input_ctrl
         self.matcher = matcher or TemplateMatcher(threshold=config.donate_button_threshold)
         self.request_parser = RequestParser(config, debug=debug)
+        self.capacity_parser = RequestCapacityParser(config)
         self._handled: dict[str, float] = {}
         self._donate_template: np.ndarray | None = None
 
@@ -107,15 +111,31 @@ class ChatMonitor:
                 width=match.width,
                 height=match.height,
             )
-            is_specific = self.request_parser.has_requested_icons_in_chat(frame, adjusted)
-            if is_specific:
+            capacity = self.capacity_parser.parse(frame, adjusted)
+            kind = self.request_parser.classify(frame, adjusted, capacity)
+            is_specific = kind == RequestKind.SPECIFIC
+            if kind == RequestKind.SPECIFIC:
                 logger.info("Specific request detected (requested unit icons in chat)")
+            elif kind == RequestKind.HYBRID:
+                logger.info("Hybrid request detected (icons + open capacity remaining)")
             else:
                 logger.debug("Open/generic request (capacity bars only — no unit icon row)")
+            if capacity is not None:
+                logger.info(
+                    "Request capacity troops={}/{} spells={}/{} siege={}/{}",
+                    capacity.troop_remaining,
+                    capacity.troop_total,
+                    capacity.spell_remaining,
+                    capacity.spell_total,
+                    capacity.siege_remaining,
+                    capacity.siege_total,
+                )
             return DonateRequest(
                 button_match=adjusted,
                 signature=sig,
                 is_specific=is_specific,
+                kind=kind,
+                capacity=capacity,
             )
 
         return None

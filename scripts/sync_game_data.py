@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
 Download troop/siege housing space and merge spell seed data into data/game/units.yaml.
+Optionally download unit icons from ClashKing CDN into data/icons/.
 
 NOTE: The coc.guide *website* may redirect-loop in a browser. These direct static
 JSON URLs work from curl/Python (no homepage visit needed):
 
   https://coc.guide/static/json/characters.json
   https://coc.guide/static/json/supers.json
+
+Icon CDN (ClashKingAssets):
+  https://assets.clashk.ing/troops/{unit_id}/icon.webp
+  https://assets.clashk.ing/spells/{unit_id}.webp
 
 If download fails, the existing data/game/units.yaml is left unchanged.
 """
@@ -26,6 +31,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_PATH = ROOT / "data" / "game" / "units.yaml"
+ICONS_DIR = ROOT / "data" / "icons"
 SPELL_SEED = ROOT / "config" / "game_spells_seed.yaml"
 
 # Direct static paths only — do not use https://coc.guide/ (homepage redirects).
@@ -33,6 +39,8 @@ SOURCES = {
     "characters": "https://coc.guide/static/json/characters.json",
     "supers": "https://coc.guide/static/json/supers.json",
 }
+
+ASSETS_BASE = "https://assets.clashk.ing"
 
 TROOP_BUILDINGS = {"Barrack", "Barrack2", "Dark Elixir Barrack"}
 SIEGE_BUILDINGS = {"SiegeWorkshop"}
@@ -62,6 +70,17 @@ def fetch_json(url: str, timeout: float = 30.0) -> dict:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.load(resp)
+
+
+def fetch_bytes(url: str, timeout: float = 30.0) -> bytes | None:
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if getattr(resp, "status", 200) >= 400:
+                return None
+            return resp.read()
+    except (urllib.error.URLError, TimeoutError):
+        return None
 
 
 def _category_from_building(building: str | None) -> str | None:
@@ -141,6 +160,62 @@ def merge_units(*parts: dict[str, dict]) -> dict[str, dict]:
     return merged
 
 
+def load_units_yaml() -> dict[str, dict]:
+    if not OUT_PATH.exists():
+        return {}
+    with open(OUT_PATH, encoding="utf-8") as f:
+        raw = yaml.safe_load(f) or {}
+    return raw.get("units") or {}
+
+
+def icon_urls_for(unit_id: str, category: str) -> list[str]:
+    """Candidate CDN URLs for a unit icon (first hit wins)."""
+    urls: list[str] = []
+    if category == "spell":
+        urls.append(f"{ASSETS_BASE}/spells/{unit_id}.webp")
+        if unit_id.endswith("_spell"):
+            urls.append(f"{ASSETS_BASE}/spells/{unit_id.removesuffix('_spell')}.webp")
+    else:
+        # Troops and siege machines live under /troops/{id}/icon.webp
+        urls.append(f"{ASSETS_BASE}/troops/{unit_id}/icon.webp")
+    return urls
+
+
+def sync_icons(units: dict[str, dict], *, force: bool = False) -> int:
+    """Download icons for known units into data/icons/{category}/{unit_id}.webp."""
+    if not units:
+        units = load_units_yaml()
+    if not units:
+        print("No units available for icon sync.", file=sys.stderr)
+        return 1
+
+    downloaded = 0
+    skipped = 0
+    missing = 0
+    for unit_id, info in sorted(units.items()):
+        category = str(info.get("category", "troop"))
+        out_dir = ICONS_DIR / ("spells" if category == "spell" else "troops")
+        out_path = out_dir / f"{unit_id}.webp"
+        if out_path.exists() and not force:
+            skipped += 1
+            continue
+        data = None
+        for url in icon_urls_for(unit_id, category):
+            data = fetch_bytes(url)
+            if data:
+                break
+        if not data:
+            missing += 1
+            continue
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path.write_bytes(data)
+        downloaded += 1
+        print(f"  icon {unit_id} -> {out_path.relative_to(ROOT)}")
+
+    print(f"Icons: downloaded={downloaded} skipped={skipped} missing={missing} -> {ICONS_DIR}")
+    return 0 if downloaded or skipped else 1
+
+
 def sync(force: bool = False) -> int:
     if OUT_PATH.exists() and not force:
         print(f"Output exists: {OUT_PATH}")
@@ -190,10 +265,32 @@ def sync(force: bool = False) -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Sync CoC unit housing data into data/game/units.yaml")
-    parser.add_argument("--force", action="store_true", help="Overwrite existing units.yaml")
+    parser = argparse.ArgumentParser(
+        description="Sync CoC unit housing data and optional icons"
+    )
+    parser.add_argument("--force", action="store_true", help="Overwrite existing units.yaml / icons")
+    parser.add_argument(
+        "--icons",
+        action="store_true",
+        help="Download unit icons from ClashKing CDN into data/icons/",
+    )
+    parser.add_argument(
+        "--icons-only",
+        action="store_true",
+        help="Only download icons (uses existing units.yaml)",
+    )
     args = parser.parse_args()
-    raise SystemExit(sync(force=args.force))
+
+    if args.icons_only:
+        raise SystemExit(sync_icons({}, force=args.force))
+
+    code = sync(force=args.force)
+    if args.icons:
+        units = load_units_yaml()
+        icon_code = sync_icons(units, force=args.force)
+        if code == 0:
+            code = icon_code
+    raise SystemExit(code)
 
 
 if __name__ == "__main__":

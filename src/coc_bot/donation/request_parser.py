@@ -1,37 +1,86 @@
 from __future__ import annotations
 
+from enum import Enum
+
 import cv2
 import numpy as np
 from loguru import logger
 
 from coc_bot.config import BotConfig
+from coc_bot.donation.capacity_parser import RequestCapacity
 from coc_bot.vision.matcher import MatchResult
 
 
+class RequestKind(str, Enum):
+    SPECIFIC = "specific"
+    OPEN = "open"
+    HYBRID = "hybrid"
+
+
 class RequestParser:
-    """Detect specific vs open donation requests from clan chat messages."""
+    """Detect specific vs open vs hybrid donation requests from clan chat messages."""
 
     def __init__(self, config: BotConfig, *, debug: bool = False) -> None:
         self.config = config
         self.debug = debug
 
     def has_requested_icons_in_chat(self, frame: np.ndarray, donate_button: MatchResult) -> bool:
-        """
-        True when the chat bubble shows a row of requested unit/spell icons.
+        """True when the chat bubble shows a row of requested unit/spell icons (Phase 1 specific)."""
+        return self.classify(frame, donate_button, capacity=None) == RequestKind.SPECIFIC
 
-        Open requests only show the three capacity bars (troop/spell/siege) — no unit icon row.
-        Specific requests add a row of small colorful unit icons just above the Donate button.
+    def classify(
+        self,
+        frame: np.ndarray,
+        donate_button: MatchResult,
+        capacity: RequestCapacity | None = None,
+    ) -> RequestKind:
         """
+        Classify a donation request.
+
+        - specific: clear row of requested icons (Phase 1 colored-slot path)
+        - hybrid: some icons plus open capacity remaining
+        - open: capacity bars only (no unit icon row)
+        """
+        icon_cols, max_run, max_cluster = self._icon_strip_stats(frame, donate_button)
+        is_specific_row = icon_cols >= 4 and max_run <= 9 and max_cluster <= 10
+        has_any_icons = icon_cols >= 1 and max_run <= 9 and max_cluster <= 10
+        remaining = capacity.has_remaining if capacity is not None else False
+
+        # Dense icon rows use the Phase 1 colored-slot path even if capacity bars remain.
+        if is_specific_row:
+            kind = RequestKind.SPECIFIC
+        elif has_any_icons and (remaining or capacity is None):
+            # Sparse icons (e.g. 1 Yeti) + open remainder → hybrid when capacity known,
+            # or when OCR failed but icons are present.
+            kind = RequestKind.HYBRID
+        else:
+            kind = RequestKind.OPEN
+
+        if self.debug:
+            logger.debug(
+                "Request classify: icon_cols={} max_run={} max_cluster={} remaining={} -> {}",
+                icon_cols,
+                max_run,
+                max_cluster,
+                remaining,
+                kind.value,
+            )
+        return kind
+
+    def _icon_strip_stats(
+        self, frame: np.ndarray, donate_button: MatchResult
+    ) -> tuple[int, int, int]:
+        """Return (icon_col_count, max_run, max_cluster)."""
         region = self._chat_message_region(frame, donate_button)
         if region.size == 0:
-            return False
+            return 0, 0, 0
 
         h, _w = region.shape[:2]
         # Requested unit icons sit in a narrow band directly above the Donate button.
         # Capacity bars (sword/potion/siege + progress) are higher up and must be ignored.
         strip = region[int(h * 0.68) : int(h * 0.92), :]
         if strip.size == 0:
-            return False
+            return 0, 0, 0
 
         cols = 20
         sw = max(1, strip.shape[1] // cols)
@@ -46,26 +95,17 @@ class RequestParser:
         max_run = self._max_consecutive_run(icon_cols)
         clusters = self._split_clusters(icon_cols)
         max_cluster = max((len(c) for c in clusters), default=0)
-        # Progress bars (open requests) fill many adjacent columns (high max_run).
-        # Specific requests show separate small icons with shorter runs/clusters.
-        is_specific = (
-            len(icon_cols) >= 4
-            and max_run <= 9
-            and max_cluster <= 10
-        )
 
         if self.debug:
             logger.debug(
-                "Request icon strip: icon_cols={}/{} max_run={} clusters={} max_cluster={} -> specific={}",
+                "Request icon strip: icon_cols={}/{} max_run={} clusters={} max_cluster={}",
                 len(icon_cols),
                 cols,
                 max_run,
                 len(clusters),
                 max_cluster,
-                is_specific,
             )
-
-        return is_specific
+        return len(icon_cols), max_run, max_cluster
 
     @staticmethod
     def _looks_like_unit_icon(cell: np.ndarray) -> bool:

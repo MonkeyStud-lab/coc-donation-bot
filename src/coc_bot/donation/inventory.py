@@ -6,7 +6,9 @@ import numpy as np
 from loguru import logger
 
 from coc_bot.config import BotConfig
+from coc_bot.donation.icon_matcher import IconMatcher
 from coc_bot.vision.colors import SlotColorDetector
+from coc_bot.vision.matcher import TemplateMatcher
 from coc_bot.vision.rois import ROI, crop_roi, denormalize_roi
 
 
@@ -26,7 +28,12 @@ class InventoryParser:
         ("donation_spell_bar", "spell_bar", "spell"),
     )
 
-    def __init__(self, config: BotConfig) -> None:
+    def __init__(
+        self,
+        config: BotConfig,
+        matcher: TemplateMatcher | None = None,
+        icon_matcher: IconMatcher | None = None,
+    ) -> None:
         self.config = config
         self.color_detector = SlotColorDetector(
             troop_color_bgr=config.colors.get("donatable_troop"),
@@ -34,6 +41,7 @@ class InventoryParser:
             spell_color_bgr=config.colors.get("donatable_spell"),
             spell_grey_bgr=config.colors.get("disabled_spell"),
         )
+        self.icon_matcher = icon_matcher or IconMatcher(config, matcher=matcher)
 
     def parse(self, frame: np.ndarray) -> dict[str, int]:
         inventory: dict[str, int] = {}
@@ -47,6 +55,7 @@ class InventoryParser:
         *,
         stop_at_grey: bool = False,
         roi_keys: tuple[str, ...] | None = None,
+        identify: bool = True,
     ) -> list[InventorySlot]:
         """Parse colored (donatable) slots currently visible in the troop/spell bars."""
         slots: list[InventorySlot] = []
@@ -61,6 +70,7 @@ class InventoryParser:
                     bar_roi_key,
                     default_category=default_category,
                     stop_at_grey=stop_at_grey,
+                    identify=identify,
                 )
             )
 
@@ -75,6 +85,7 @@ class InventoryParser:
         *,
         default_category: str | None = None,
         stop_at_grey: bool = False,
+        identify: bool = True,
     ) -> list[InventorySlot]:
         if bar_roi_key not in self.config.rois:
             return []
@@ -101,6 +112,7 @@ class InventoryParser:
             stop_at_grey=stop_at_grey,
             bar_x_offset=x_off,
             bar_y_offset=y_off,
+            identify=identify,
         )
 
     @staticmethod
@@ -158,6 +170,7 @@ class InventoryParser:
         stop_at_grey: bool = False,
         bar_x_offset: int = 0,
         bar_y_offset: int = 0,
+        identify: bool = True,
     ) -> list[InventorySlot]:
         slots: list[InventorySlot] = []
         cols = int(grid.get("cols", 6 if default_category == "troop" else 4))
@@ -169,6 +182,8 @@ class InventoryParser:
         bar_x, bar_y, _, _ = denormalize_roi(ROI(*self.config.rois[roi_key]), fw, fh)
         bar_x += bar_x_offset
         bar_y += bar_y_offset
+
+        preferred = {"troop", "siege"} if default_category == "troop" else {"spell"}
 
         for row in range(rows):
             row_had_colored = False
@@ -186,10 +201,24 @@ class InventoryParser:
                     continue
                 row_had_colored = True
                 unit_id = f"{default_category}_slot_{row}_{col}"
+                category = default_category
+                if identify and self.icon_matcher.available():
+                    matched = self.icon_matcher.match_slot(cell, preferred_categories=preferred)
+                    if matched is not None:
+                        unit_id, conf = matched
+                        category = self.icon_matcher.resolve_category(unit_id, default_category)
+                        logger.debug(
+                            "Slot ({},{}) matched {} conf={:.2f} category={}",
+                            row,
+                            col,
+                            unit_id,
+                            conf,
+                            category,
+                        )
                 qty = 1
                 cx = bar_x + x0 + slot_w // 2
                 cy = bar_y + y0 + slot_h // 2
                 slots.append(
-                    InventorySlot(unit_id=unit_id, quantity=qty, center=(cx, cy), category=default_category)
+                    InventorySlot(unit_id=unit_id, quantity=qty, center=(cx, cy), category=category)
                 )
         return slots

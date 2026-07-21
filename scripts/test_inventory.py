@@ -49,6 +49,11 @@ def main() -> None:
     for slot in slots_specific:
         print(f"  - {slot.unit_id} x{slot.quantity} @ {slot.center} ({slot.category})")
 
+    identified = [s for s in slots_open if not s.unit_id.startswith(("troop_slot_", "spell_slot_"))]
+    print(f"\nIcon-matched slots: {len(identified)}/{len(slots_open)}")
+    if not inventory.icon_matcher.available():
+        print("  (No icons in data/icons/ — run: python scripts/sync_game_data.py --icons-only)")
+
     print("\nCalibration checklist:")
     print(f"  donation_troop_bar ROI: {'yes' if 'donation_troop_bar' in config.rois else 'NO'}")
     print(f"  donation_spell_bar ROI: {'yes' if 'donation_spell_bar' in config.rois else 'NO'}")

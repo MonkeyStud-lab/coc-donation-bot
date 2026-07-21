@@ -44,7 +44,7 @@ class BotConfig:
     donation_order: list[str] = field(default_factory=lambda: ["troop", "spell", "siege"])
     handled_request_ttl_seconds: int = 120
     chat_max_scroll_attempts: int = 20
-    bar_max_scroll_attempts: int = 8
+    bar_max_scroll_attempts: int = 12
     donate_open_requests: bool = False
     donation_panel_wait_seconds: float = 3.0
     clan_level: int = 8
@@ -140,7 +140,7 @@ def load_config(
         donation_order=donation.get("order", ["troop", "spell", "siege"]),
         handled_request_ttl_seconds=donation.get("handled_request_ttl_seconds", 120),
         chat_max_scroll_attempts=donation.get("chat_max_scroll_attempts", 20),
-        bar_max_scroll_attempts=donation.get("bar_max_scroll_attempts", 8),
+        bar_max_scroll_attempts=donation.get("bar_max_scroll_attempts", 12),
         donate_open_requests=donation.get("donate_open_requests", False),
         donation_panel_wait_seconds=float(donation.get("donation_panel_wait_seconds", 3.0)),
         clan_level=int(clan.get("level", 8)),

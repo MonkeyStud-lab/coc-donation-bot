@@ -1,0 +1,2 @@
+# Placeholder so data/icons/ is tracked. Populate with:
+#   python scripts/sync_game_data.py --icons-only

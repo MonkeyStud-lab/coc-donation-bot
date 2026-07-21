@@ -83,6 +83,23 @@ python scripts/sync_game_data.py --force
 
 This writes `data/game/units.yaml`. A bundled seed ships in the repo if you skip sync.
 
+Download unit icons for smart open-request fill (ClashKing CDN):
+
+```bash
+python scripts/sync_game_data.py --icons-only
+```
+
+Icons land in `data/icons/troops/` and `data/icons/spells/`.
+
+### Phase 2 fill-plan check
+
+```bash
+python scripts/test_fill_plan.py              # synthetic budgets (no device)
+python scripts/test_fill_plan.py --live       # ADB: capacity OCR or panel plan
+```
+
+Open requests stay skipped until you set `donation.donate_open_requests: true` in `config/default.yaml` after verifying capacity OCR and icon matching.
+
 ## systemd Service
 
 ```bash

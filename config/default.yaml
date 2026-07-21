@@ -28,8 +28,8 @@ donation:
   order: ["troop", "spell", "siege"]
   handled_request_ttl_seconds: 120
   chat_max_scroll_attempts: 20
-  bar_max_scroll_attempts: 8       # horizontal scrolls per troop/spell bar (open requests)
-  donate_open_requests: false     # false = only donate when specific troops shown in chat
+  bar_max_scroll_attempts: 12      # horizontal scrolls per troop/spell bar (reach siege at far right)
+  donate_open_requests: false     # false until Phase 2 capacity+planner verified; then set true
   donation_panel_wait_seconds: 3.0
 
 # Your clan's level — sets max housing/count YOU can donate per action.

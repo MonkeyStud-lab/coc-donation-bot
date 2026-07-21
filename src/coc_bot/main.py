@@ -15,14 +15,15 @@ from coc_bot.adb.capture import ScreenCapture
 from coc_bot.adb.client import AdbClient, AdbError
 from coc_bot.adb.input import InputController
 from coc_bot.config import load_config
-from coc_bot.donation.chat_monitor import ChatMonitor
+from coc_bot.donation.chat_monitor import ChatMonitor, DonateRequest
 from coc_bot.donation.executor import DonationExecutor
 from coc_bot.donation.navigator import Navigator
+from coc_bot.donation.request_parser import RequestKind
 from coc_bot.logging_utils import setup_logging
 from coc_bot.runtime.breaks import BreakManager
 from coc_bot.runtime.tracker import RuntimeTracker
 from coc_bot.vision.matcher import TemplateMatcher
-from coc_bot.vision.screens import ScreenClassifier, ScreenType
+from coc_bot.vision.screens import ScreenClassifier
 
 
 class DonationBot:
@@ -137,8 +138,11 @@ class DonationBot:
         lo, hi = self.config.scan_interval_ms
         time.sleep(random.uniform(lo, hi) / 1000.0)
 
-    def _should_handle_request(self, request) -> bool:
-        return request.is_specific or self.config.donate_open_requests
+    def _should_handle_request(self, request: DonateRequest) -> bool:
+        if request.kind == RequestKind.SPECIFIC:
+            return True
+        # Open and hybrid need budget-aware fill (donate_open_requests).
+        return self.config.donate_open_requests
 
     def _has_donate_request(self, frame) -> bool:
         request = self.chat_monitor.find_donate_request(frame)
@@ -154,7 +158,10 @@ class DonationBot:
             return
 
         if not self._should_handle_request(request):
-            logger.info("Skipping open/generic request — only specific requests are enabled")
+            logger.info(
+                "Skipping {} request — only specific requests are enabled",
+                request.kind.value,
+            )
             self.chat_monitor.mark_handled(request)
             return
 
@@ -166,7 +173,10 @@ class DonationBot:
         request = self.chat_monitor.find_donate_request(frame)
         if request is not None:
             if not self._should_handle_request(request):
-                logger.info("Skipping open/generic request — only specific requests are enabled")
+                logger.info(
+                    "Skipping {} request — only specific requests are enabled",
+                    request.kind.value,
+                )
                 self.chat_monitor.mark_handled(request)
             else:
                 self._pending_request = request
@@ -198,15 +208,40 @@ class DonationBot:
         self._set_state("donate")
 
     def _do_donate(self) -> None:
+        request = self._pending_request
         if self.config.dry_run:
             frame = self.capture.screenshot()
             self._maybe_save_debug(frame, "donate_dry_run")
-            logger.info("[DRY-RUN] Would execute donation")
+            cap = request.capacity
+            logger.info(
+                "[DRY-RUN] Would execute donation kind={} capacity={}",
+                request.kind.value,
+                None
+                if cap is None
+                else f"t={cap.troop_remaining}/{cap.troop_total} "
+                f"s={cap.spell_remaining}/{cap.spell_total} "
+                f"g={cap.siege_remaining}/{cap.siege_total}",
+            )
+            if request.kind != RequestKind.SPECIFIC:
+                donor = self.config.donor_limits()
+                from coc_bot.donation.fill_planner import FillPlanner
+
+                planner = FillPlanner()
+                tb, sb, gb = planner.initial_budgets(cap, donor)
+                logger.info(
+                    "[DRY-RUN] Fill budgets troop={} spell={} siege={} (clan L{})",
+                    tb,
+                    sb,
+                    gb,
+                    self.config.clan_level,
+                )
             self._set_state("scan_chat")
             return
 
         donated = self.executor.donate_for_request(
-            is_specific=self._pending_request.is_specific,
+            is_specific=request.is_specific,
+            kind=request.kind,
+            capacity=request.capacity,
         )
         logger.info("Donation round complete (donated={})", donated)
         if not donated:

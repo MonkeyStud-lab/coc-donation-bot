@@ -485,28 +485,38 @@ class CalibrationWizard:
         )
 
     def step_grid(self) -> None:
-        if self.config.grid and not prompt_yes_no("Update grid column counts?"):
+        if self.config.grid and not prompt_yes_no("Update grid layout?"):
             _keeping("grid")
             return
 
         current = self.config.grid or {}
-        troop_default = current.get("troop_bar", {}).get("cols", 8)
-        spell_default = current.get("spell_bar", {}).get("cols", 5)
-        req_default = current.get("request", {}).get("cols", 6)
+        troop_bar = current.get("troop_bar", {})
+        spell_bar = current.get("spell_bar", {})
+        req_bar = current.get("request", {})
+        troop_cols_default = troop_bar.get("cols", 7)
+        troop_rows_default = troop_bar.get("rows", 1)
+        spell_cols_default = spell_bar.get("cols", 5)
+        spell_rows_default = spell_bar.get("rows", 1)
+        req_default = req_bar.get("cols", 6)
 
-        print("Enter VISIBLE slot counts in each bar (Enter keeps current/default).")
-        print("Count only slots you can see at once — bars scroll horizontally for more.")
-        print("Troop bar includes regular troops and siege machines in the same row.")
-        raw = input(f"Visible troop+siege slots in bar [{troop_default}]: ").strip()
-        troop_cols = int(raw) if raw else troop_default
-        raw = input(f"Visible spell slots in bar [{spell_default}]: ").strip()
-        spell_cols = int(raw) if raw else spell_default
+        print("Enter VISIBLE slot layout (Enter keeps current/default).")
+        print("Count only what you see before scrolling — e.g. 2 rows x 7 cols = 14 troop slots.")
+        print("The troop bar ROI (donation_panel step) must cover all visible rows.")
+        print("Troop bar includes regular troops and siege machines.")
+        raw = input(f"Troop+siege columns (slots per row) [{troop_cols_default}]: ").strip()
+        troop_cols = int(raw) if raw else troop_cols_default
+        raw = input(f"Troop+siege rows [{troop_rows_default}]: ").strip()
+        troop_rows = int(raw) if raw else troop_rows_default
+        raw = input(f"Spell columns (slots per row) [{spell_cols_default}]: ").strip()
+        spell_cols = int(raw) if raw else spell_cols_default
+        raw = input(f"Spell rows [{spell_rows_default}]: ").strip()
+        spell_rows = int(raw) if raw else spell_rows_default
         raw = input(f"Request header cols [{req_default}]: ").strip()
         req_cols = int(raw) if raw else req_default
 
         self.config.grid = {
-            "troop_bar": {"cols": troop_cols, "rows": 1},
-            "spell_bar": {"cols": spell_cols, "rows": 1},
+            "troop_bar": {"cols": troop_cols, "rows": troop_rows},
+            "spell_bar": {"cols": spell_cols, "rows": spell_rows},
             "request": {"cols": req_cols, "rows": 1},
         }
 

@@ -62,8 +62,8 @@ def main() -> None:
     print(f"  grey spell sample: {'yes' if config.colors.get('disabled_spell') else 'NO'}")
     print(f"  unit templates: {len(config.unit_templates)}")
     grid = config.grid or {}
-    print(f"  visible troop slots: {grid.get('troop_bar', {}).get('cols', '?')}")
-    print(f"  visible spell slots: {grid.get('spell_bar', {}).get('cols', '?')}")
+    print(f"  visible troop grid: {grid.get('troop_bar', {}).get('cols', '?')} cols x {grid.get('troop_bar', {}).get('rows', '?')} rows")
+    print(f"  visible spell grid: {grid.get('spell_bar', {}).get('cols', '?')} cols x {grid.get('spell_bar', {}).get('rows', '?')} rows")
 
     if not slots:
         print("\nNo colored slots found — run:")

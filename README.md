@@ -73,6 +73,16 @@ python scripts/dry_run.py
 python scripts/replay_frame.py path/to/screenshot.png --annotate
 ```
 
+### Sync game unit data (housing space)
+
+The coc.guide **homepage** may fail in a browser (`ERR_TOO_MANY_REDIRECTS`). The sync script uses **direct static JSON URLs** instead:
+
+```bash
+python scripts/sync_game_data.py --force
+```
+
+This writes `data/game/units.yaml`. A bundled seed ships in the repo if you skip sync.
+
 ## systemd Service
 
 ```bash

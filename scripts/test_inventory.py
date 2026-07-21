@@ -11,7 +11,6 @@ from coc_bot.adb.capture import ScreenCapture
 from coc_bot.adb.client import AdbClient
 from coc_bot.config import load_config
 from coc_bot.donation.inventory import InventoryParser
-from coc_bot.donation.request_parser import RequestParser
 from coc_bot.vision.matcher import TemplateMatcher
 from coc_bot.vision.screens import ScreenClassifier
 
@@ -28,9 +27,9 @@ def main() -> None:
     matcher = TemplateMatcher(threshold=config.template_threshold)
     classifier = ScreenClassifier(config, matcher)
     inventory = InventoryParser(config, matcher)
-    requests = RequestParser(config, matcher)
 
     print("Open a donation request panel (tap Donate), then continue.")
+    print("(Requested troops are read from clan chat, not this panel — this tests slot detection only.)")
     input("Press Enter to capture and analyze...")
 
     frame = capture.screenshot()
@@ -39,18 +38,15 @@ def main() -> None:
     if screen.value != "donation_panel":
         print("WARNING: donation panel not detected — results may be wrong.")
 
-    requested = requests.parse(frame)
-    if requested:
-        print("\nRequested units (specific request — no bar scroll needed):")
-        for unit in requested:
-            print(f"  - {unit.unit_id} x{unit.quantity}")
-        slots = inventory.parse_slots(frame, require_unit_id=False, stop_at_grey=True)
-        print(f"\nColored slots before first grey: {len(slots)}")
-    else:
-        print("\nRequested units: (none — open/generic request, bars may scroll during donate)")
-        slots = inventory.parse_slots(frame, require_unit_id=False)
+    slots_open = inventory.parse_slots(frame, require_unit_id=False)
+    slots_specific = inventory.parse_slots(frame, require_unit_id=False, stop_at_grey=True)
 
-    for slot in slots:
+    print(f"\nColored slots (open request — full visible grid): {len(slots_open)}")
+    for slot in slots_open:
+        print(f"  - {slot.unit_id} x{slot.quantity} @ {slot.center} ({slot.category})")
+
+    print(f"\nColored slots (specific request — until first grey): {len(slots_specific)}")
+    for slot in slots_specific:
         print(f"  - {slot.unit_id} x{slot.quantity} @ {slot.center} ({slot.category})")
 
     print("\nCalibration checklist:")
@@ -62,10 +58,12 @@ def main() -> None:
     print(f"  grey spell sample: {'yes' if config.colors.get('disabled_spell') else 'NO'}")
     print(f"  unit templates: {len(config.unit_templates)}")
     grid = config.grid or {}
-    print(f"  visible troop grid: {grid.get('troop_bar', {}).get('cols', '?')} cols x {grid.get('troop_bar', {}).get('rows', '?')} rows")
-    print(f"  visible spell grid: {grid.get('spell_bar', {}).get('cols', '?')} cols x {grid.get('spell_bar', {}).get('rows', '?')} rows")
+    troop = grid.get("troop_bar", {})
+    spell = grid.get("spell_bar", {})
+    print(f"  visible troop grid: {troop.get('cols', '?')} cols x {troop.get('rows', '?')} rows")
+    print(f"  visible spell grid: {spell.get('cols', '?')} cols x {spell.get('rows', '?')} rows")
 
-    if not slots:
+    if not slots_open:
         print("\nNo colored slots found — run:")
         print("  python scripts/calibrate.py --step donation_panel")
         print("  python scripts/calibrate.py --step slot_colors")
@@ -73,9 +71,6 @@ def main() -> None:
         sys.exit(1)
 
     print("\nColored slot detection looks OK for the current bar view.")
-
-    if requested and not any(not s.unit_id.endswith("_0") for s in slots):
-        print("Tip: for specific requests, capture unit templates (--step units) to identify troops.")
 
 
 if __name__ == "__main__":

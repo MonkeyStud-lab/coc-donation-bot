@@ -104,6 +104,10 @@ def _press_enter(message: str = "Press Enter when ready...") -> None:
     input(message)
 
 
+def _keeping(label: str) -> None:
+    print(f"Keeping existing {label}.")
+
+
 def print_step_menu(status: dict[str, bool]) -> None:
     print("\nCalibration steps:")
     print("-" * 60)
@@ -129,6 +133,85 @@ class CalibrationWizard:
         self.templates_dir.mkdir(parents=True, exist_ok=True)
         if self.config.calibrated:
             logger.info("Loaded existing calibration from data/calibrated.yaml")
+
+    # --- skip/update helpers (answer 'n' to keep existing values) ---
+
+    def _has_roi(self, key: str) -> bool:
+        return key in self.config.rois
+
+    def _has_template(self, key: str) -> bool:
+        return key in self.config.templates
+
+    def _has_tap(self, key: str) -> bool:
+        return bool(self.config.tap_points.get(key))
+
+    def _has_color(self, key: str) -> bool:
+        return key in self.config.colors
+
+    def _should_update(self, label: str, *, exists: bool, optional: bool = False) -> bool:
+        if not exists:
+            if optional:
+                if prompt_yes_no(f"Capture {label}?"):
+                    return True
+                print(f"Skipping {label}.")
+                return False
+            return True
+        if prompt_yes_no(f"Update {label}?"):
+            return True
+        _keeping(label)
+        return False
+
+    def _maybe_update_roi(self, key: str, label: str, w: int, h: int, *, optional: bool = False) -> None:
+        if not self._should_update(label, exists=self._has_roi(key), optional=optional):
+            return
+        coords = prompt_roi(label)
+        self.config.rois[key] = _roi_list(coords, w, h)
+        logger.info("Saved ROI {}", key)
+
+    def _maybe_update_template(
+        self,
+        key: str,
+        label: str,
+        rel_path: str,
+        frame,
+        *,
+        optional: bool = False,
+    ) -> None:
+        if not self._should_update(label, exists=self._has_template(key), optional=optional):
+            return
+        coords = prompt_roi(label)
+        self._save_template_from_frame(frame, coords, rel_path, key)
+
+    def _maybe_update_template_after_setup(
+        self,
+        key: str,
+        label: str,
+        rel_path: str,
+        setup_message: str,
+        *,
+        optional: bool = False,
+    ) -> None:
+        if not self._should_update(label, exists=self._has_template(key), optional=optional):
+            return
+        print(setup_message)
+        _press_enter()
+        frame = self.capture.screenshot()
+        coords = prompt_roi(label)
+        self._save_template_from_frame(frame, coords, rel_path, key)
+
+    def _maybe_update_tap_point(self, key: str, label: str) -> None:
+        if not self._should_update(label, exists=self._has_tap(key)):
+            return
+        pt = prompt_point(label)
+        self.config.tap_points[key] = list(pt)
+        logger.info("Saved tap point {}", key)
+
+    def _maybe_update_color(self, key: str, label: str, frame) -> None:
+        if not self._should_update(label, exists=self._has_color(key)):
+            return
+        coords = prompt_roi(label)
+        self.config.colors[key] = sample_center_color(frame, coords)
+        logger.info("Saved color {}", key)
 
     def _ensure_connected(self) -> None:
         self.client.ensure_connected()
@@ -253,17 +336,26 @@ class CalibrationWizard:
         self.config.frame_height = h
         logger.info("Frame size: {}x{}", w, h)
 
-        if prompt_yes_no("Capture home anchor template?"):
-            coords = prompt_roi("Home anchor region")
-            self._save_template_from_frame(frame, coords, "ui/home.png", "home")
+        self._maybe_update_template(
+            "home",
+            "home anchor template",
+            "ui/home.png",
+            frame,
+            optional=True,
+        )
 
         print("\n--- Open chat button (must be captured from HOME screen) ---")
-        if prompt_yes_no("Capture open_chat button as image template?"):
-            coords = prompt_roi("Chat bubble on the LEFT of home screen")
-            self._save_template_from_frame(frame, coords, "ui/open_chat.png", "open_chat")
+        has_open = self._has_template("open_chat") or self._has_tap("open_chat")
+        if not has_open or prompt_yes_no("Update open_chat button?"):
+            if prompt_yes_no("Capture open_chat button as image template?"):
+                coords = prompt_roi("Chat bubble on the LEFT of home screen")
+                self._save_template_from_frame(frame, coords, "ui/open_chat.png", "open_chat")
+            else:
+                pt = prompt_point("Tap point at CENTER of chat bubble")
+                self.config.tap_points["open_chat"] = list(pt)
+                logger.info("Saved tap point open_chat")
         else:
-            pt = prompt_point("Tap point at CENTER of chat bubble")
-            self.config.tap_points["open_chat"] = list(pt)
+            _keeping("open_chat")
 
     def step_clan_chat(self) -> None:
         w, h = self._frame_size()
@@ -271,43 +363,41 @@ class CalibrationWizard:
         _press_enter()
         frame = self.capture.screenshot()
 
-        if prompt_yes_no("Update chat panel ROI?"):
-            chat_roi = prompt_roi("Chat panel region (full chat area)")
-            self.config.rois["chat_panel"] = _roi_list(chat_roi, w, h)
-
-        if prompt_yes_no("Update chat requests ROI?"):
-            requests_roi = prompt_roi("Region where Donate buttons appear in chat")
-            self.config.rois["chat_requests"] = _roi_list(requests_roi, w, h)
+        self._maybe_update_roi("chat_panel", "chat panel ROI", w, h)
+        self._maybe_update_roi("chat_requests", "chat requests ROI", w, h)
 
         print(
             "\n--- clan_chat anchor ---\n"
             "Pick UI that is visible in clan chat but HIDDEN when the donation panel is open.\n"
             "Good: selected Clan tab, chat header. Bad: anything covered by the donate popup."
         )
-        if prompt_yes_no("Update clan_chat anchor template?"):
-            coords = prompt_roi("clan_chat anchor (visible in chat, hidden when donating)")
-            self._save_template_from_frame(frame, coords, "ui/clan_chat.png", "clan_chat")
+        self._maybe_update_template(
+            "clan_chat",
+            "clan_chat anchor template",
+            "ui/clan_chat.png",
+            frame,
+        )
 
         print("\n--- Scroll-down indicator ---")
-        print("Scroll chat UP until the scroll-down arrow/button appears.")
-        _press_enter("When the indicator is visible, press Enter...")
-        scroll_frame = self.capture.screenshot()
-        scroll_coords = prompt_roi("Scroll-down indicator (only when NOT at bottom)")
-        self._save_template_from_frame(scroll_frame, scroll_coords, "ui/chat_scroll_down.png", "chat_scroll_down")
+        self._maybe_update_template_after_setup(
+            "chat_scroll_down",
+            "scroll-down indicator template",
+            "ui/chat_scroll_down.png",
+            "Scroll chat UP until the scroll-down arrow/button appears.",
+        )
 
         print(
             "\n--- Donation request jump icon (exclamation mark) ---\n"
             "When a donation request exists elsewhere in chat, an exclamation icon appears.\n"
             "Tapping it scrolls directly to the next request."
         )
-        if prompt_yes_no("Capture chat_request_jump (exclamation) template?"):
-            jump_frame = self.capture.screenshot()
-            jump_coords = prompt_roi("Exclamation / jump-to-request icon in chat log")
-            self._save_template_from_frame(
-                jump_frame, jump_coords, "ui/chat_request_jump.png", "chat_request_jump"
-            )
-        elif "chat_request_jump" in self.config.templates:
-            print("Keeping existing chat_request_jump template.")
+        self._maybe_update_template_after_setup(
+            "chat_request_jump",
+            "chat_request_jump (exclamation) template",
+            "ui/chat_request_jump.png",
+            "Show the exclamation / jump-to-request icon in chat (if visible).",
+            optional=True,
+        )
 
     def step_donation_request(self) -> None:
         w, h = self._frame_size()
@@ -315,11 +405,18 @@ class CalibrationWizard:
         _press_enter()
         frame = self.capture.screenshot()
 
-        donate_coords = prompt_roi("Donate button region")
-        self._save_template_from_frame(frame, donate_coords, "ui/donate_button.png", "donate_button")
-
-        header_roi = prompt_roi("Request header row (requested unit icons when panel opens)")
-        self.config.rois["request_header"] = _roi_list(header_roi, w, h)
+        self._maybe_update_template(
+            "donate_button",
+            "donate button template",
+            "ui/donate_button.png",
+            frame,
+        )
+        self._maybe_update_roi(
+            "request_header",
+            "request header ROI",
+            w,
+            h,
+        )
 
     def step_donation_panel(self) -> None:
         w, h = self._frame_size()
@@ -330,17 +427,8 @@ class CalibrationWizard:
         print(
             "\nThe troop bar holds regular troops AND siege machines in the same area."
         )
-        if prompt_yes_no("Update troop donation bar ROI (troops + siege)?"):
-            troop_roi = prompt_roi("Troop/siege donation bar region")
-            self.config.rois["donation_troop_bar"] = _roi_list(troop_roi, w, h)
-        else:
-            print("Keeping existing donation_troop_bar ROI.")
-
-        if prompt_yes_no("Update spell donation bar ROI?"):
-            spell_roi = prompt_roi("Spell donation bar region")
-            self.config.rois["donation_spell_bar"] = _roi_list(spell_roi, w, h)
-        else:
-            print("Keeping existing donation_spell_bar ROI.")
+        self._maybe_update_roi("donation_troop_bar", "troop donation bar ROI (troops + siege)", w, h)
+        self._maybe_update_roi("donation_spell_bar", "spell donation bar ROI", w, h)
 
         # Legacy — siege shared troop bar in current CoC UI
         self.config.rois.pop("donation_siege_bar", None)
@@ -349,28 +437,24 @@ class CalibrationWizard:
             "\n--- Close donation panel ---\n"
             "CoC has no X button. Tap OUTSIDE the panel (dimmed chat/background) to close it."
         )
-        has_close = bool(
-            self.config.tap_points.get("tap_outside_donation")
-            or self.config.tap_points.get("close_donation")
+        self._maybe_update_tap_point(
+            "tap_outside_donation",
+            "Tap point OUTSIDE the donation panel (dimmed area)",
         )
-        if not has_close or prompt_yes_no("Update tap-outside-to-close point?"):
-            pt = prompt_point("Tap point OUTSIDE the donation panel (dimmed area)")
-            self.config.tap_points["tap_outside_donation"] = list(pt)
-        else:
-            print("Keeping existing tap_outside_donation point.")
 
     def step_slot_colors(self) -> None:
         print("Open the donation panel with troops/spells visible in your castle bar.")
         _press_enter()
         frame = self.capture.screenshot()
 
-        troop_slot = prompt_roi("One donatable TROOP slot (single cell)")
-        self.config.colors["donatable_troop"] = sample_center_color(frame, troop_slot)
-
-        spell_slot = prompt_roi("One donatable SPELL slot (single cell)")
-        self.config.colors["donatable_spell"] = sample_center_color(frame, spell_slot)
+        self._maybe_update_color("donatable_troop", "donatable troop slot color", frame)
+        self._maybe_update_color("donatable_spell", "donatable spell slot color", frame)
 
     def step_grid(self) -> None:
+        if self.config.grid and not prompt_yes_no("Update grid column counts?"):
+            _keeping("grid")
+            return
+
         current = self.config.grid or {}
         troop_default = current.get("troop_bar", {}).get("cols", 8)
         spell_default = current.get("spell_bar", {}).get("cols", 5)
@@ -397,19 +481,21 @@ class CalibrationWizard:
         self._capture_unit_templates()
 
     def step_optional(self) -> None:
-        if prompt_yes_no("Capture loading screen template?"):
-            print("Relaunch CoC to show the loading screen.")
-            _press_enter()
-            frame = self.capture.screenshot()
-            coords = prompt_roi("Loading screen distinctive region")
-            self._save_template_from_frame(frame, coords, "ui/loading.png", "loading")
+        self._maybe_update_template_after_setup(
+            "loading",
+            "loading screen template",
+            "ui/loading.png",
+            "Relaunch CoC to show the loading screen.",
+            optional=True,
+        )
 
-        if prompt_yes_no("Capture popup dismiss button?"):
-            print("Show a dismissible popup/event.")
-            _press_enter()
-            frame = self.capture.screenshot()
-            coords = prompt_roi("Popup close/dismiss button")
-            self._save_template_from_frame(frame, coords, "ui/popup_dismiss.png", "popup_dismiss")
+        self._maybe_update_template_after_setup(
+            "popup_dismiss",
+            "popup dismiss button template",
+            "ui/popup_dismiss.png",
+            "Show a dismissible popup/event.",
+            optional=True,
+        )
 
     def _capture_unit_templates(self) -> None:
         units_by_category: dict[str, list[str]] = {"troop": [], "spell": [], "siege": []}
@@ -420,9 +506,12 @@ class CalibrationWizard:
             print(f"\n--- {category.upper()} templates ---")
             for unit_id in units_by_category.get(category, []):
                 already = unit_id in self.config.unit_templates
-                default = "y" if not already else "n"
-                prompt = f"Capture template for '{unit_id}'?" + (" (exists)" if already else "")
-                if not prompt_yes_no(prompt):
+                prompt = f"Update template for '{unit_id}'?" if already else f"Capture template for '{unit_id}'?"
+                if already and not prompt_yes_no(prompt):
+                    _keeping(f"unit template {unit_id}")
+                    continue
+                if not already and not prompt_yes_no(prompt):
+                    print(f"Skipping {unit_id}.")
                     continue
                 print(f"Show '{unit_id}' in the donation panel.")
                 _press_enter()

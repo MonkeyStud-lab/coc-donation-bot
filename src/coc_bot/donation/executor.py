@@ -57,8 +57,13 @@ class DonationExecutor:
             resolved_kind = RequestKind.SPECIFIC if is_specific else RequestKind.OPEN
 
         if resolved_kind == RequestKind.SPECIFIC:
-            logger.info("Specific request — donating colored slots until first grey per row")
-            donated_any = self._donate_specific_by_colored_slots(max_rounds=max_rounds)
+            # Requested units are colored; others are grey — but greys can sit BETWEEN
+            # colored slots (e.g. Lightning, grey Rage, Freeze). Also Freezes may be
+            # off-screen to the right. So: tap every colored slot and scroll each bar.
+            logger.info(
+                "Specific request — tapping all colored slots (scroll troop/spell bars)"
+            )
+            donated_any = self._donate_open_colored_scroll()
             self._close_panel()
             return donated_any
 
@@ -68,33 +73,14 @@ class DonationExecutor:
             return False
 
         if resolved_kind == RequestKind.HYBRID:
-            logger.info("Hybrid request — specific colored slots first, then fill remaining colored")
-            donated_any = self._donate_specific_by_colored_slots(max_rounds=max_rounds)
-            if self._donate_open_colored_scroll():
-                donated_any = True
+            logger.info("Hybrid request — tapping all colored slots (scroll bars)")
+            donated_any = self._donate_open_colored_scroll()
             self._close_panel()
             return donated_any
 
         logger.info("Open request — tapping colored slots (scroll troop bar incl. siege, then spells)")
         donated_any = self._donate_open_colored_scroll()
         self._close_panel()
-        return donated_any
-
-    def _donate_specific_by_colored_slots(self, max_rounds: int = 20) -> bool:
-        """Donate every colored slot up to the first grey per row."""
-        donated_any = False
-        for _round in range(max_rounds):
-            frame = self.capture.screenshot()
-            if not self.classifier.is_donation_panel(frame):
-                break
-            slots = self.inventory_parser.parse_slots(frame, stop_at_grey=True, identify=False)
-            if not slots:
-                logger.warning("No colored slots at start of troop/spell bars")
-                break
-            if not self._tap_colored_slots(slots):
-                break
-            donated_any = True
-            time.sleep(0.4)
         return donated_any
 
     def _donate_open_colored_scroll(self) -> bool:

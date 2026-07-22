@@ -20,77 +20,57 @@ Python ADB-driven Clash of Clans clan donation bot for **Waydroid on Ubuntu**. U
 - Ubuntu/Debian host with **Waydroid** and Clash of Clans already installed
 - Internet on first setup (apt packages, Python deps, unit icons)
 
-Waydroid must be able to start with Clash of Clans installed. After setup, check ADB:
+## Setup (new computer)
 
 ```bash
-adb devices
-# Should show 127.0.0.1:5555 or similar (e.g. 192.168.240.112:5555)
-```
-
-## Setup
-
-One command installs system packages, the Python environment, unit data, and icons:
-
-```bash
-cd ~/Projects/coc-donation-bot
+cd ~/Projects/coc-donation-bot   # or wherever you cloned the repo
 chmod +x scripts/setup_linux.sh
 ./scripts/setup_linux.sh
 ```
 
-This may ask for your sudo password for `apt` packages. Re-run with `--force` to redo everything.
+This one command installs:
 
-Then install the desktop icon (also runs setup if needed):
+- System packages (`adb`, Python, venv, tk, tesseract, etc.)
+- A Python virtualenv and project dependencies (including EasyOCR)
+- Unit housing data and troop/spell icons
+
+It may ask for your sudo password for `apt`. Re-run with `--force` to redo everything.
+
+Then point ADB at Waydroid (edit `config/default.yaml` or set `ADB_DEVICE`):
 
 ```bash
-./scripts/install_desktop_launcher.sh
+adb devices
+# Should show something like 192.168.240.112:5555 or 127.0.0.1:5555
 ```
 
-## Calibration (required first run)
+### Calibration (required once per screen size)
 
-1. Start Waydroid and open Clash of Clans
-2. Run the calibration wizard:
+1. Open Waydroid and Clash of Clans yourself
+2. Activate the venv and run the wizard:
 
 ```bash
+source .venv/bin/activate
 python scripts/calibrate.py
 ```
 
-3. Follow the prompts to capture ROIs, UI templates, slot colors, and grid layout
+3. Follow the prompts (ROIs, templates, slot colors, grid)
 4. Output is saved to `data/calibrated.yaml` and `data/templates/`
+
+Copy `data/calibrated.yaml` and `data/templates/` if you move to another PC with the **same** resolution; otherwise recalibrate.
 
 ## Usage
 
-### Desktop launcher (recommended)
+Open Waydroid and Clash of Clans manually, then:
 
 ```bash
 cd ~/Projects/coc-donation-bot
-./scripts/install_desktop_launcher.sh
-```
-
-Then double-click **CoC Donation Bot**. A control window opens that:
-
-1. Auto-installs missing deps on first run (if setup was skipped)
-2. Opens **Waydroid** (full UI)
-3. Opens **Clash of Clans**
-4. Runs the donation bot
-5. Lets you **Shut off** the bot from the same window (game stays open)
-
-If Ubuntu asks, choose **Allow Launching** / **Trust and Launch**. Delete any old **Stop CoC Donation Bot** icon if it is still on the desktop.
-
-The Waydroid container may need to be started once with sudo if it is not already enabled:
-
-```bash
-sudo systemctl enable --now waydroid-container
-```
-
-If the session is stopped, run `waydroid session start` once (leave that terminal open) or open CoC normally, then use the desktop icon.
-
-### Run the bot (terminal)
-
-```bash
+source .venv/bin/activate
 python -m coc_bot.main
 ```
 
-### Dry-run (detect only, no taps)
+Stop with `Ctrl+C`.
+
+### Dry-run (detect only, no donation taps)
 
 ```bash
 python -m coc_bot.main --dry-run --debug-save-frames
@@ -104,51 +84,23 @@ python scripts/dry_run.py
 python scripts/replay_frame.py path/to/screenshot.png --annotate
 ```
 
-### Sync game unit data (housing space)
-
-The coc.guide **homepage** may fail in a browser (`ERR_TOO_MANY_REDIRECTS`). The sync script uses **direct static JSON URLs** instead:
+### Sync game unit data / icons again
 
 ```bash
 python scripts/sync_game_data.py --force
-```
-
-This writes `data/game/units.yaml`. A bundled seed ships in the repo if you skip sync.
-
-Download unit icons for smart open-request fill (ClashKing CDN):
-
-```bash
 python scripts/sync_game_data.py --icons-only
 ```
 
-Icons land in `data/icons/troops/` and `data/icons/spells/`.
+## systemd Service (optional)
 
-### Phase 2 fill-plan check
-
-```bash
-python scripts/test_fill_plan.py              # synthetic budgets (no device)
-python scripts/test_fill_plan.py --live       # ADB: capacity OCR or panel plan
-```
-
-Open requests stay skipped until you set `donation.donate_open_requests: true` in `config/default.yaml` after verifying capacity OCR and icon matching.
-
-## systemd Service
+Auto-start the bot in the background (Waydroid + CoC must already be running, or the bot will wait/fail until they are):
 
 ```bash
 mkdir -p ~/.config/systemd/user
 cp systemd/coc-donation-bot.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now coc-donation-bot.service
-```
-
-Enable lingering so the service survives logout:
-
-```bash
 sudo loginctl enable-linger $USER
-```
-
-View logs:
-
-```bash
 journalctl --user -u coc-donation-bot.service -f
 ```
 
@@ -183,6 +135,8 @@ src/coc_bot/
   donation/     # Chat monitor, parsers, executor
   runtime/      # 4-hour tracker, break manager
   calibration/  # Interactive setup wizard
+scripts/
+  setup_linux.sh   # apt + venv + deps + icons (use on a new PC)
 ```
 
 ## Verification Checklist
@@ -193,14 +147,14 @@ src/coc_bot/
 - [ ] Live test performs partial donations correctly
 - [ ] Live test donates troops, spells, and siege in one request
 - [ ] Break cycle force-stops, waits randomized interval, relaunches, and resumes
-- [ ] systemd service reconnects after Waydroid restart
 
 ## Troubleshooting
 
 | Issue | Fix |
 |-------|-----|
-| ADB offline | `adb connect 127.0.0.1:5555`, ensure Waydroid is running |
+| ADB offline | `adb connect 192.168.240.112:5555` (or your IP), ensure Waydroid is running |
 | Screencap fails | Restart Waydroid container, wait 15s after boot |
 | False template matches | Re-run calibration, adjust thresholds in config |
 | No colored slots detected | Re-run slot_colors + grid calibration steps |
 | Bot stuck | Watchdog auto-recovers via BACK + chat navigation |
+| Moving to a new PC | Re-run `./scripts/setup_linux.sh`, then calibrate if resolution differs |

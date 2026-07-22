@@ -156,8 +156,9 @@ fi
 
 stamp_fingerprint >"$STAMP"
 log "Linux setup finished."
-log "Next: calibrate once if needed, then install the desktop icon:"
-log "  python scripts/calibrate.py"
-log "  ./scripts/install_desktop_launcher.sh"
+log "Next steps:"
+log "  1. Open Waydroid and Clash of Clans manually"
+log "  2. Calibrate once:  source .venv/bin/activate && python scripts/calibrate.py"
+log "  3. Run the bot:     python -m coc_bot.main"
 echo
 log "Note: Waydroid + Clash of Clans must already be installed separately."

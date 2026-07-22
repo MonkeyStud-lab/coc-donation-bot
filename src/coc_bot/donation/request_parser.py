@@ -41,27 +41,31 @@ class RequestParser:
         - hybrid: some icons plus open capacity remaining
         - open: capacity bars only (no unit icon row)
         """
-        icon_cols, max_run, max_cluster = self._icon_strip_stats(frame, donate_button)
+        icon_cols, max_run, max_cluster, left_only = self._icon_strip_stats(frame, donate_button)
+        # Left-edge-only color (sword/potion/siege glyphs) is capacity chrome, not unit icons.
+        if left_only:
+            icon_cols = 0
+            max_run = 0
+            max_cluster = 0
+
         is_specific_row = icon_cols >= 4 and max_run <= 9 and max_cluster <= 10
         has_any_icons = icon_cols >= 1 and max_run <= 9 and max_cluster <= 10
         remaining = capacity.has_remaining if capacity is not None else False
 
-        # Dense icon rows use the Phase 1 colored-slot path even if capacity bars remain.
         if is_specific_row:
             kind = RequestKind.SPECIFIC
         elif has_any_icons and (remaining or capacity is None):
-            # Sparse icons (e.g. 1 Yeti) + open remainder → hybrid when capacity known,
-            # or when OCR failed but icons are present.
             kind = RequestKind.HYBRID
         else:
             kind = RequestKind.OPEN
 
         if self.debug:
             logger.debug(
-                "Request classify: icon_cols={} max_run={} max_cluster={} remaining={} -> {}",
+                "Request classify: icon_cols={} max_run={} max_cluster={} left_only={} remaining={} -> {}",
                 icon_cols,
                 max_run,
                 max_cluster,
+                left_only,
                 remaining,
                 kind.value,
             )
@@ -69,18 +73,18 @@ class RequestParser:
 
     def _icon_strip_stats(
         self, frame: np.ndarray, donate_button: MatchResult
-    ) -> tuple[int, int, int]:
-        """Return (icon_col_count, max_run, max_cluster)."""
+    ) -> tuple[int, int, int, bool]:
+        """Return (icon_col_count, max_run, max_cluster, left_edge_only)."""
         region = self._chat_message_region(frame, donate_button)
         if region.size == 0:
-            return 0, 0, 0
+            return 0, 0, 0, False
 
         h, _w = region.shape[:2]
-        # Requested unit icons sit in a narrow band directly above the Donate button.
-        # Capacity bars (sword/potion/siege + progress) are higher up and must be ignored.
-        strip = region[int(h * 0.68) : int(h * 0.92), :]
+        # Unit icons sit above the capacity-bar block. Capacity bars occupy the lower
+        # portion near Donate — scan a mid band and ignore pure left-edge chrome.
+        strip = region[int(h * 0.35) : int(h * 0.70), :]
         if strip.size == 0:
-            return 0, 0, 0
+            return 0, 0, 0, False
 
         cols = 20
         sw = max(1, strip.shape[1] // cols)
@@ -95,17 +99,20 @@ class RequestParser:
         max_run = self._max_consecutive_run(icon_cols)
         clusters = self._split_clusters(icon_cols)
         max_cluster = max((len(c) for c in clusters), default=0)
+        # Capacity category icons sit on the far left; real unit icon rows span further right.
+        left_only = bool(icon_cols) and max(icon_cols) <= int(cols * 0.45)
 
         if self.debug:
             logger.debug(
-                "Request icon strip: icon_cols={}/{} max_run={} clusters={} max_cluster={}",
+                "Request icon strip: icon_cols={}/{} max_run={} clusters={} max_cluster={} left_only={}",
                 len(icon_cols),
                 cols,
                 max_run,
                 len(clusters),
                 max_cluster,
+                left_only,
             )
-        return len(icon_cols), max_run, max_cluster
+        return len(icon_cols), max_run, max_cluster, left_only
 
     @staticmethod
     def _looks_like_unit_icon(cell: np.ndarray) -> bool:
@@ -120,13 +127,11 @@ class RequestParser:
         mean_sat = float(np.mean(sat))
         mean_val = float(np.mean(val))
 
-        # Progress bars and empty bubble are low-saturation; unit icons are vivid.
         if mean_sat < 55:
             return False
         if mean_val < 40:
             return False
 
-        # Reject pale/beige chat bubble background even when it has slight texture.
         bgr = cell.reshape(-1, 3).astype(np.float32)
         if float(np.std(bgr[:, 0] - bgr[:, 1])) < 8 and mean_sat < 70:
             return False
@@ -165,11 +170,11 @@ class RequestParser:
         bx, by = donate_button.x, donate_button.y
         bw, bh = donate_button.width, donate_button.height
 
-        msg_h = max(int(bh * 6), 80)
+        msg_h = max(int(bh * 7), 100)
         y0 = max(0, by - msg_h)
-        y1 = max(0, by - int(bh * 0.25))
+        y1 = max(0, by - int(bh * 0.05))
         x0 = max(0, bx - bw * 2)
-        x1 = min(w, bx + bw * 10)
+        x1 = min(w, bx + bw * 12)
 
         if y1 <= y0 or x1 <= x0:
             return np.array([])

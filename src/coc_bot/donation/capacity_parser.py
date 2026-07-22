@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import cv2
 import numpy as np
 from loguru import logger
 
@@ -50,35 +51,43 @@ class RequestCapacityParser:
         if region.size == 0:
             return None
 
-        h, _w = region.shape[:2]
-        # Capacity bars sit just above Donate (below any requested-unit icons).
-        # Try the lower band first, then the full bubble if needed.
-        bands = [
-            region[int(h * 0.45) : int(h * 0.98), :],
-            region[int(h * 0.25) : int(h * 0.85), :],
+        h, w = region.shape[:2]
+        # Capacity rows sit in the lower part of the bubble (just above Donate).
+        lower = region[int(h * 0.40) : int(h * 0.98), :]
+        if lower.size == 0:
+            return None
+
+        lh, lw = lower.shape[:2]
+        # Three stacked rows; text is on the right of each row (after icon + bar).
+        row_h = max(1, lh // 3)
+        text_x0 = int(lw * 0.40)
+        row_rois = [
+            lower[0:row_h, text_x0:],
+            lower[row_h : 2 * row_h, text_x0:],
+            lower[2 * row_h :, text_x0:],
         ]
 
+        logger.info("Running capacity OCR on 3 row text crops...")
         fractions: list[tuple[int, int]] = []
-        for idx, band in enumerate(bands):
-            if band.size == 0:
-                continue
-            logger.info("Running capacity OCR (pass {}/{})...", idx + 1, len(bands))
-            fractions = self.ocr.read_fractions(band, max_count=3)
-            if len(fractions) >= 3:
+        for idx, row in enumerate(row_rois):
+            frac = self._read_row_fraction(row)
+            logger.debug("Capacity row {} OCR -> {}", idx, frac)
+            if frac is None:
                 break
-            strip_fracs = self._parse_strips(band)
-            if len(strip_fracs) >= 3:
-                fractions = strip_fracs
-                break
+            fractions.append(frac)
+
+        if len(fractions) < 3:
+            # Fallback: whole lower band
+            logger.info("Row OCR incomplete — trying full lower band")
+            fractions = self.ocr.read_fractions(lower, max_count=3)
 
         if len(fractions) < 3:
             logger.debug("Capacity OCR found {}/3 fractions", len(fractions))
             return None
 
-        # Chat UI shows donated/total. Planner needs remaining = total - donated.
         capacity = self._from_donated_totals(fractions[0], fractions[1], fractions[2])
-        logger.debug(
-            "Request capacity: troops={}/{} spells={}/{} siege={}/{} (remaining/total)",
+        logger.info(
+            "Request capacity remaining/total: troops={}/{} spells={}/{} siege={}/{}",
             capacity.troop_remaining,
             capacity.troop_total,
             capacity.spell_remaining,
@@ -87,6 +96,31 @@ class RequestCapacityParser:
             capacity.siege_total,
         )
         return capacity
+
+    def _read_row_fraction(self, row: np.ndarray) -> tuple[int, int] | None:
+        if row.size == 0:
+            return None
+        # Boost white chat text on dark grey.
+        prepared = self._prepare_text_roi(row)
+        frac = self.ocr.read_fraction(prepared)
+        if frac is not None:
+            return frac
+        # Try original color crop as well.
+        return self.ocr.read_fraction(row)
+
+    @staticmethod
+    def _prepare_text_roi(row: np.ndarray) -> np.ndarray:
+        """Upscale + isolate bright glyph pixels for EasyOCR."""
+        if len(row.shape) == 3:
+            gray = cv2.cvtColor(row, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = row
+        up = cv2.resize(gray, None, fx=5, fy=5, interpolation=cv2.INTER_CUBIC)
+        # Keep bright text, then invert to dark-on-light (OCR-friendly).
+        _, bright = cv2.threshold(up, 160, 255, cv2.THRESH_BINARY)
+        inverted = cv2.bitwise_not(bright)
+        # Pad so glyphs aren't edge-clipped.
+        return cv2.copyMakeBorder(inverted, 12, 12, 12, 12, cv2.BORDER_CONSTANT, value=255)
 
     @staticmethod
     def _from_donated_totals(
@@ -111,20 +145,6 @@ class RequestCapacityParser:
             siege_total=gt,
         )
 
-    def _parse_strips(self, capacity_band: np.ndarray) -> list[tuple[int, int]]:
-        h = capacity_band.shape[0]
-        strips = [
-            capacity_band[0 : h // 3, :],
-            capacity_band[h // 3 : 2 * h // 3, :],
-            capacity_band[2 * h // 3 :, :],
-        ]
-        found: list[tuple[int, int]] = []
-        for strip in strips:
-            frac = self.ocr.read_fraction(strip)
-            if frac is not None:
-                found.append(frac)
-        return found
-
     @staticmethod
     def _chat_message_region(frame: np.ndarray, donate_button: MatchResult) -> np.ndarray:
         """Crop the chat message bubble sitting above a Donate button."""
@@ -132,9 +152,9 @@ class RequestCapacityParser:
         bx, by = donate_button.x, donate_button.y
         bw, bh = donate_button.width, donate_button.height
 
-        msg_h = max(int(bh * 6), 80)
+        msg_h = max(int(bh * 7), 100)
         y0 = max(0, by - msg_h)
-        y1 = max(0, by - int(bh * 0.1))
+        y1 = max(0, by - int(bh * 0.05))
         x0 = max(0, bx - bw * 2)
         x1 = min(w, bx + bw * 12)
 

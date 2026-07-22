@@ -142,7 +142,9 @@ def _live() -> int:
     inventory = InventoryParser(config, matcher=matcher)
     planner = FillPlanner()
 
-    print("Open a donation panel (or leave clan chat visible for capacity OCR), then continue.")
+    print("Leave clan chat visible. Prefer ONLY an open request on screen")
+    print("(e.g. Think a Little) — the bot reads the bottom-most Donate button.")
+    print("Move the terminal off the chat panel if it covers Donate.")
     input("Press Enter to capture...")
 
     frame = capture.screenshot()
@@ -179,12 +181,22 @@ def _live() -> int:
     if request.capacity:
         c = request.capacity
         print(
-            f"Capacity troops={c.troop_remaining}/{c.troop_total} "
+            f"Capacity (remaining/total) troops={c.troop_remaining}/{c.troop_total} "
             f"spells={c.spell_remaining}/{c.spell_total} "
             f"siege={c.siege_remaining}/{c.siege_total}"
         )
+        tb, sb, gb = planner.initial_budgets(c, config.donor_limits())
+        print(f"Fill budgets (clan L{config.clan_level}): troop={tb} spell={sb} siege={gb}")
     else:
         print("Capacity OCR returned None")
+        # Save crop for debugging OCR.
+        debug_dir = config.data_dir / "debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        import cv2
+
+        path = debug_dir / "capacity_ocr_fail.png"
+        cv2.imwrite(str(path), frame)
+        print(f"Saved full frame to {path} for debugging")
     return 0
 
 

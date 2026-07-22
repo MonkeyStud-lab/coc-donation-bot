@@ -39,7 +39,7 @@ class RequestCapacity:
 
 
 class RequestCapacityParser:
-    """Read 35/35, 0/1, 0/1 style capacity rows from the chat bubble above Donate."""
+    """Read donated/total capacity rows from the chat bubble above Donate."""
 
     def __init__(self, config: BotConfig) -> None:
         self.config = config
@@ -51,21 +51,59 @@ class RequestCapacityParser:
             return None
 
         h, _w = region.shape[:2]
-        # Capacity bars sit above the requested-icon strip (icons are ~68–92% height).
-        capacity_band = region[int(h * 0.30) : int(h * 0.72), :]
-        if capacity_band.size == 0:
-            return None
+        # Capacity bars sit just above Donate (below any requested-unit icons).
+        # Try the lower band first, then the full bubble if needed.
+        bands = [
+            region[int(h * 0.45) : int(h * 0.98), :],
+            region[int(h * 0.25) : int(h * 0.85), :],
+            region,
+        ]
 
-        fractions = self.ocr.read_fractions(capacity_band, max_count=3)
-        if len(fractions) < 3:
-            # Retry with three horizontal strips in case OCR misses one row.
-            fractions = self._parse_strips(capacity_band)
+        fractions: list[tuple[int, int]] = []
+        for band in bands:
+            if band.size == 0:
+                continue
+            fractions = self.ocr.read_fractions(band, max_count=3)
+            if len(fractions) >= 3:
+                break
+            # Fallback: three horizontal strips inside this band.
+            strip_fracs = self._parse_strips(band)
+            if len(strip_fracs) >= 3:
+                fractions = strip_fracs
+                break
+
         if len(fractions) < 3:
             logger.debug("Capacity OCR found {}/3 fractions", len(fractions))
             return None
 
-        (tr, tt), (sr, st), (gr, gt) = fractions[0], fractions[1], fractions[2]
-        capacity = RequestCapacity(
+        # Chat UI shows donated/total. Planner needs remaining = total - donated.
+        capacity = self._from_donated_totals(fractions[0], fractions[1], fractions[2])
+        logger.debug(
+            "Request capacity: troops={}/{} spells={}/{} siege={}/{} (remaining/total)",
+            capacity.troop_remaining,
+            capacity.troop_total,
+            capacity.spell_remaining,
+            capacity.spell_total,
+            capacity.siege_remaining,
+            capacity.siege_total,
+        )
+        return capacity
+
+    @staticmethod
+    def _from_donated_totals(
+        troop: tuple[int, int],
+        spell: tuple[int, int],
+        siege: tuple[int, int],
+    ) -> RequestCapacity:
+        def rem(donated: int, total: int) -> tuple[int, int]:
+            total = max(total, 0)
+            donated = max(0, min(donated, total))
+            return total - donated, total
+
+        tr, tt = rem(*troop)
+        sr, st = rem(*spell)
+        gr, gt = rem(*siege)
+        return RequestCapacity(
             troop_remaining=tr,
             troop_total=tt,
             spell_remaining=sr,
@@ -73,16 +111,6 @@ class RequestCapacityParser:
             siege_remaining=gr,
             siege_total=gt,
         )
-        logger.debug(
-            "Request capacity: troops={}/{} spells={}/{} siege={}/{}",
-            tr,
-            tt,
-            sr,
-            st,
-            gr,
-            gt,
-        )
-        return capacity
 
     def _parse_strips(self, capacity_band: np.ndarray) -> list[tuple[int, int]]:
         h = capacity_band.shape[0]
@@ -107,9 +135,9 @@ class RequestCapacityParser:
 
         msg_h = max(int(bh * 6), 80)
         y0 = max(0, by - msg_h)
-        y1 = max(0, by - int(bh * 0.25))
+        y1 = max(0, by - int(bh * 0.1))
         x0 = max(0, bx - bw * 2)
-        x1 = min(w, bx + bw * 10)
+        x1 = min(w, bx + bw * 12)
 
         if y1 <= y0 or x1 <= x0:
             return np.array([])

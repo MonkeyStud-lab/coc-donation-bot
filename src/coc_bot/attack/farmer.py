@@ -59,9 +59,6 @@ class AttackFarmer:
             if self.attack_nav.classifier.looks_like_blocking_popup(frame):
                 self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
 
-        logger.info("Home screen ready — zooming out to show the full village")
-        self.attack_nav.zoom_out(repeats=3)
-
         if not self.attack_nav.open_attack_menu():
             self._abort_to_chat()
             return FarmResult(False, "could not open Attack menu")

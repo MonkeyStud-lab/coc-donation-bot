@@ -109,13 +109,6 @@ class AttackNavigator:
         logger.warning("Could not reach home before attack")
         return self.classifier.classify(self.capture.screenshot()) == ScreenType.HOME
 
-    def zoom_out(self, frame: np.ndarray | None = None, *, repeats: int = 3) -> None:
-        """Zoom out so the full village / battlefield is visible."""
-        if frame is None:
-            frame = self.capture.screenshot()
-        h, w = frame.shape[:2]
-        self.input.pinch_zoom_out(w, h, repeats=repeats)
-
     def open_attack_menu(self) -> bool:
         frame = self.capture.screenshot()
         if self.classifier.classify(frame) == ScreenType.ATTACK_MENU:
@@ -145,9 +138,7 @@ class AttackNavigator:
             frame = self.capture.screenshot()
             screen = self.classifier.classify(frame)
             if screen == ScreenType.BATTLE:
-                logger.info("Battle field ready — zooming out before deploy")
-                self.zoom_out(frame, repeats=3)
-                time.sleep(0.4)
+                logger.info("Battle field ready")
                 return True
             if screen == ScreenType.BATTLE_RESULTS:
                 logger.warning("Saw battle results before deploy — opponent may have ended early")

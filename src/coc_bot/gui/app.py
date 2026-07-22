@@ -165,12 +165,6 @@ class BotControlApp(tk.Tk):
         ).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(
             btns,
-            text="Zoom out",
-            style="Secondary.TButton",
-            command=self.zoom_out_now,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(
-            btns,
             text="Close Waydroid + Clash",
             style="Danger.TButton",
             command=self.close_waydroid_and_coc,
@@ -528,48 +522,6 @@ class BotControlApp(tk.Tk):
         bot = self._bot
         if bot is not None:
             bot.request_stop()
-
-    def zoom_out_now(self) -> None:
-        """Pinch-zoom out on the current CoC screen (home or battle)."""
-        self._append_log("==> Zoom out…")
-
-        def worker() -> None:
-            try:
-                from coc_bot.adb.capture import ScreenCapture
-                from coc_bot.adb.client import AdbClient
-                from coc_bot.adb.input import InputController
-
-                cfg = load_config()
-                client = AdbClient(device=cfg.adb_device)
-                client.health_check()
-                frame = ScreenCapture(client).screenshot()
-                h, w = frame.shape[:2]
-                result = InputController(
-                    client,
-                    jitter_px=cfg.tap_jitter_px,
-                    delay_ms=cfg.action_delay_ms,
-                    dry_run=False,
-                ).pinch_zoom_out(w, h, repeats=3)
-                msg = f"Zoom out: ok={result.ok} via {result.method} — {result.detail}"
-                logger.info(msg)
-
-                def done() -> None:
-                    self._append_log(msg)
-                    if result.ok:
-                        messagebox.showinfo("Zoom out", "Zoom gesture sent.\n\nCheck Clash — village should be zoomed out.")
-                    else:
-                        messagebox.showwarning(
-                            "Zoom out failed",
-                            result.detail
-                            + "\n\n(Waydroid does not support adb root — use waydroid shell instead.)",
-                        )
-
-                self.after(0, done)
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("Zoom out failed")
-                self.after(0, lambda: messagebox.showerror("Zoom out failed", str(exc)))
-
-        threading.Thread(target=worker, daemon=True).start()
 
     def request_farm_attack(self) -> None:
         """Queue a farm attack on the running bot, or run a one-shot if stopped."""

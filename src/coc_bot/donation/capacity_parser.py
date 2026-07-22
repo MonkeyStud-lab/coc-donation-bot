@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -39,6 +40,30 @@ class RequestCapacity:
         return self.siege_remaining > 0
 
 
+def chat_message_region(frame: np.ndarray, donate_button: MatchResult) -> np.ndarray:
+    """
+    Crop the chat bubble ABOVE and LEFT of Donate.
+
+    Capacity text (0/35) sits left of the Donate button. Extending far right
+    pulls in village HUD (e.g. builders 5/5) and poisons OCR.
+    """
+    h, w = frame.shape[:2]
+    bx, by = donate_button.x, donate_button.y
+    bw, bh = donate_button.width, donate_button.height
+
+    msg_h = max(int(bh * 7), 100)
+    y0 = max(0, by - msg_h)
+    y1 = max(0, by + int(bh * 0.05))
+    # Bars + fractions are to the left of Donate.
+    x0 = max(0, bx - int(bw * 11))
+    x1 = min(w, bx + int(bw * 0.2))
+
+    if y1 <= y0 or x1 <= x0:
+        return np.array([])
+
+    return frame[y0:y1, x0:x1].copy()
+
+
 class RequestCapacityParser:
     """Read donated/total capacity rows from the chat bubble above Donate."""
 
@@ -47,20 +72,22 @@ class RequestCapacityParser:
         self.ocr = QuantityOCR(confidence_threshold=config.ocr_confidence_threshold)
 
     def parse(self, frame: np.ndarray, donate_button: MatchResult) -> RequestCapacity | None:
-        region = self._chat_message_region(frame, donate_button)
+        region = chat_message_region(frame, donate_button)
         if region.size == 0:
             return None
 
+        self._maybe_save_debug(region, "capacity_region.png")
+
         h, w = region.shape[:2]
         # Capacity rows sit in the lower part of the bubble (just above Donate).
-        lower = region[int(h * 0.40) : int(h * 0.98), :]
+        lower = region[int(h * 0.35) : int(h * 0.98), :]
         if lower.size == 0:
             return None
 
         lh, lw = lower.shape[:2]
-        # Three stacked rows; text is on the right of each row (after icon + bar).
         row_h = max(1, lh // 3)
-        text_x0 = int(lw * 0.40)
+        # Text is toward the right of the bar, still inside the bubble (near Donate).
+        text_x0 = int(lw * 0.35)
         row_rois = [
             lower[0:row_h, text_x0:],
             lower[row_h : 2 * row_h, text_x0:],
@@ -70,19 +97,27 @@ class RequestCapacityParser:
         logger.info("Running capacity OCR on 3 row text crops...")
         fractions: list[tuple[int, int]] = []
         for idx, row in enumerate(row_rois):
+            self._maybe_save_debug(row, f"capacity_row_{idx}.png")
             frac = self._read_row_fraction(row)
-            logger.debug("Capacity row {} OCR -> {}", idx, frac)
+            logger.info("Capacity row {} OCR -> {}", idx, frac)
             if frac is None:
                 break
             fractions.append(frac)
 
         if len(fractions) < 3:
-            # Fallback: whole lower band
             logger.info("Row OCR incomplete — trying full lower band")
             fractions = self.ocr.read_fractions(lower, max_count=3)
+            logger.info("Lower-band OCR fractions -> {}", fractions)
 
         if len(fractions) < 3:
             logger.debug("Capacity OCR found {}/3 fractions", len(fractions))
+            return None
+
+        if not self._plausible_donated_totals(fractions):
+            logger.warning(
+                "Rejecting implausible capacity OCR {} (likely HUD leak or misread)",
+                fractions,
+            )
             return None
 
         capacity = self._from_donated_totals(fractions[0], fractions[1], fractions[2])
@@ -97,15 +132,21 @@ class RequestCapacityParser:
         )
         return capacity
 
+    def _maybe_save_debug(self, image: np.ndarray, name: str) -> None:
+        try:
+            debug_dir = Path(self.config.data_dir) / "debug"
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            cv2.imwrite(str(debug_dir / name), image)
+        except Exception as exc:
+            logger.debug("Could not save debug image {}: {}", name, exc)
+
     def _read_row_fraction(self, row: np.ndarray) -> tuple[int, int] | None:
         if row.size == 0:
             return None
-        # Boost white chat text on dark grey.
         prepared = self._prepare_text_roi(row)
         frac = self.ocr.read_fraction(prepared)
         if frac is not None:
             return frac
-        # Try original color crop as well.
         return self.ocr.read_fraction(row)
 
     @staticmethod
@@ -116,11 +157,26 @@ class RequestCapacityParser:
         else:
             gray = row
         up = cv2.resize(gray, None, fx=5, fy=5, interpolation=cv2.INTER_CUBIC)
-        # Keep bright text, then invert to dark-on-light (OCR-friendly).
         _, bright = cv2.threshold(up, 160, 255, cv2.THRESH_BINARY)
         inverted = cv2.bitwise_not(bright)
-        # Pad so glyphs aren't edge-clipped.
         return cv2.copyMakeBorder(inverted, 12, 12, 12, 12, cv2.BORDER_CONSTANT, value=255)
+
+    @staticmethod
+    def _plausible_donated_totals(fractions: list[tuple[int, int]]) -> bool:
+        """Reject readings that look like village HUD (builders 5/5) or junk."""
+        if len(fractions) < 3:
+            return False
+        (td, tt), (sd, st), (gd, gt) = fractions[0], fractions[1], fractions[2]
+        if tt < 1 or tt > 100 or st < 1 or st > 12 or gt < 1 or gt > 4:
+            return False
+        if td > tt or sd > st or gd > gt:
+            return False
+        # Builders HUD is often 5/5; open CC requests are rarely all tiny equal totals.
+        if tt <= 8 and st >= 3 and gt >= 3:
+            return False
+        if (td, tt) == (sd, st) == (gd, gt):
+            return False
+        return True
 
     @staticmethod
     def _from_donated_totals(
@@ -144,21 +200,3 @@ class RequestCapacityParser:
             siege_remaining=gr,
             siege_total=gt,
         )
-
-    @staticmethod
-    def _chat_message_region(frame: np.ndarray, donate_button: MatchResult) -> np.ndarray:
-        """Crop the chat message bubble sitting above a Donate button."""
-        h, w = frame.shape[:2]
-        bx, by = donate_button.x, donate_button.y
-        bw, bh = donate_button.width, donate_button.height
-
-        msg_h = max(int(bh * 7), 100)
-        y0 = max(0, by - msg_h)
-        y1 = max(0, by - int(bh * 0.05))
-        x0 = max(0, bx - bw * 2)
-        x1 = min(w, bx + bw * 12)
-
-        if y1 <= y0 or x1 <= x0:
-            return np.array([])
-
-        return frame[y0:y1, x0:x1].copy()

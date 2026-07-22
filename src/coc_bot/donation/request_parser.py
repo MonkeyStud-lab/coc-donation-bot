@@ -7,7 +7,7 @@ import numpy as np
 from loguru import logger
 
 from coc_bot.config import BotConfig
-from coc_bot.donation.capacity_parser import RequestCapacity
+from coc_bot.donation.capacity_parser import RequestCapacity, chat_message_region
 from coc_bot.vision.matcher import MatchResult
 
 
@@ -165,18 +165,4 @@ class RequestParser:
         return clusters
 
     def _chat_message_region(self, frame: np.ndarray, donate_button: MatchResult) -> np.ndarray:
-        """Crop the chat message bubble sitting above a Donate button."""
-        h, w = frame.shape[:2]
-        bx, by = donate_button.x, donate_button.y
-        bw, bh = donate_button.width, donate_button.height
-
-        msg_h = max(int(bh * 7), 100)
-        y0 = max(0, by - msg_h)
-        y1 = max(0, by - int(bh * 0.05))
-        x0 = max(0, bx - bw * 2)
-        x1 = min(w, bx + bw * 12)
-
-        if y1 <= y0 or x1 <= x0:
-            return np.array([])
-
-        return frame[y0:y1, x0:x1].copy()
+        return chat_message_region(frame, donate_button)

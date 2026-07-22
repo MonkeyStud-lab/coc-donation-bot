@@ -46,7 +46,7 @@ class BotConfig:
     chat_max_scroll_attempts: int = 20
     bar_max_scroll_attempts: int = 4
     spell_bar_max_scroll_attempts: int = 2
-    donate_open_requests: bool = False
+    donate_open_requests: bool = True
     parse_request_capacity: bool = False
     donation_panel_wait_seconds: float = 3.0
     clan_level: int = 8
@@ -144,7 +144,7 @@ def load_config(
         chat_max_scroll_attempts=donation.get("chat_max_scroll_attempts", 20),
         bar_max_scroll_attempts=donation.get("bar_max_scroll_attempts", 4),
         spell_bar_max_scroll_attempts=donation.get("spell_bar_max_scroll_attempts", 2),
-        donate_open_requests=donation.get("donate_open_requests", False),
+        donate_open_requests=donation.get("donate_open_requests", True),
         parse_request_capacity=donation.get("parse_request_capacity", False),
         donation_panel_wait_seconds=float(donation.get("donation_panel_wait_seconds", 3.0)),
         clan_level=int(clan.get("level", 8)),

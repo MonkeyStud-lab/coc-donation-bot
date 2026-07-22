@@ -30,7 +30,7 @@ donation:
   chat_max_scroll_attempts: 20
   bar_max_scroll_attempts: 4       # troop bar scrolls to reach siege (~3 needed)
   spell_bar_max_scroll_attempts: 2 # spell bar needs fewer scrolls
-  donate_open_requests: false     # true = also fill open requests by tapping colored slots
+  donate_open_requests: true      # fill open requests by tapping colored slots; specific still uses stop-at-grey
   parse_request_capacity: false   # optional EasyOCR of 0/35 bars (slow; not needed for simple fill)
   donation_panel_wait_seconds: 3.0
 

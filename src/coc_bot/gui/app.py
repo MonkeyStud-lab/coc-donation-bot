@@ -18,6 +18,20 @@ from coc_bot.calibration.wizard import STEP_IDS, STEPS, CalibrationWizard
 from coc_bot.config import load_config, user_settings_path
 from coc_bot.gui.debug_actions import DEBUG_ACTIONS, run_debug_action
 from coc_bot.gui.settings_fields import SETTINGS, current_setting_values, save_settings_from_gui
+from coc_bot.gui.theme import (
+    ACCENT,
+    BG,
+    BORDER,
+    LOG_BG,
+    LOG_FG,
+    SURFACE,
+    TEXT,
+    TEXT_SECONDARY,
+    apply_theme,
+    finish_scrollable,
+    make_scrollable,
+    ui_font,
+)
 
 
 def _project_root() -> Path:
@@ -59,9 +73,10 @@ class BotControlApp(tk.Tk):
         debug: bool = False,
     ) -> None:
         super().__init__()
-        self.title("CoC Donation Bot")
-        self.geometry("720x560")
-        self.minsize(600, 460)
+        self.title("Donation Bot")
+        self.geometry("780x620")
+        self.minsize(640, 500)
+        apply_theme(self)
 
         self._dry_run = dry_run
         self._debug_save_frames = debug_save_frames
@@ -72,18 +87,31 @@ class BotControlApp(tk.Tk):
         self._setting_vars: dict[str, tk.Variable] = {}
         self._debug_busy = False
 
-        self._status = tk.StringVar(value="Ready — open Waydroid + CoC, then press Start")
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+        self._status = tk.StringVar(value="Ready — open Waydroid and Clash of Clans, then press Start")
 
-        self._control_tab = ttk.Frame(notebook, padding=8)
-        self._settings_tab = ttk.Frame(notebook, padding=8)
-        self._calib_tab = ttk.Frame(notebook, padding=8)
-        self._debug_tab = ttk.Frame(notebook, padding=8)
-        notebook.add(self._control_tab, text="Bot")
-        notebook.add(self._settings_tab, text="Settings")
-        notebook.add(self._calib_tab, text="Calibration")
-        notebook.add(self._debug_tab, text="Debugging")
+        header = ttk.Frame(self, padding=(20, 16, 20, 8))
+        header.pack(fill=tk.X)
+        ttk.Label(header, text="Donation Bot", style="Title.TLabel").pack(anchor=tk.W)
+        ttk.Label(
+            header,
+            text="Clan donations for Waydroid · Clash of Clans",
+            style="Subtitle.TLabel",
+        ).pack(anchor=tk.W, pady=(2, 0))
+        ttk.Label(header, textvariable=self._status, style="Status.TLabel").pack(
+            anchor=tk.W, pady=(10, 0)
+        )
+
+        notebook = ttk.Notebook(self)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=16, pady=(4, 16))
+
+        self._control_tab = ttk.Frame(notebook, padding=12)
+        self._settings_tab = ttk.Frame(notebook, padding=4)
+        self._calib_tab = ttk.Frame(notebook, padding=12)
+        self._debug_tab = ttk.Frame(notebook, padding=4)
+        notebook.add(self._control_tab, text="  Bot  ")
+        notebook.add(self._settings_tab, text="  Settings  ")
+        notebook.add(self._calib_tab, text="  Calibration  ")
+        notebook.add(self._debug_tab, text="  Debugging  ")
 
         self._build_control_tab()
         self._build_settings_tab()
@@ -93,86 +121,151 @@ class BotControlApp(tk.Tk):
         self.after(400, self._refresh_calib_status)
         self._install_log_sink()
 
-    def _build_control_tab(self) -> None:
-        top = ttk.Frame(self._control_tab)
-        top.pack(fill=tk.X)
-        ttk.Label(top, textvariable=self._status, wraplength=640).pack(
-            side=tk.LEFT, fill=tk.X, expand=True
-        )
+    def _card(self, parent: ttk.Frame, **pack_opts) -> ttk.Frame:
+        outer = tk.Frame(parent, bg=BORDER, bd=0, highlightthickness=0)
+        outer.pack(fill=tk.X, **pack_opts)
+        inner = tk.Frame(outer, bg=SURFACE, bd=0, highlightthickness=0)
+        inner.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+        return inner
 
-        btns = ttk.Frame(self._control_tab)
-        btns.pack(fill=tk.X, pady=(10, 6))
-        self._start_btn = ttk.Button(btns, text="Start bot", command=self.start_bot)
+    def _build_control_tab(self) -> None:
+        actions = self._card(self._control_tab, pady=(0, 12))
+        pad = tk.Frame(actions, bg=SURFACE)
+        pad.pack(fill=tk.X, padx=16, pady=14)
+
+        tk.Label(
+            pad,
+            text="Controls",
+            bg=SURFACE,
+            fg=TEXT,
+            font=ui_font(13, "bold"),
+            anchor="w",
+        ).pack(fill=tk.X)
+
+        btns = tk.Frame(pad, bg=SURFACE)
+        btns.pack(fill=tk.X, pady=(12, 0))
+        self._start_btn = ttk.Button(btns, text="Start", style="Accent.TButton", command=self.start_bot)
         self._start_btn.pack(side=tk.LEFT)
-        self._stop_btn = ttk.Button(btns, text="Stop bot", command=self.stop_bot, state=tk.DISABLED)
+        self._stop_btn = ttk.Button(
+            btns, text="Stop", style="Secondary.TButton", command=self.stop_bot, state=tk.DISABLED
+        )
         self._stop_btn.pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(
             btns,
             text="Close Waydroid + Clash",
+            style="Danger.TButton",
             command=self.close_waydroid_and_coc,
         ).pack(side=tk.RIGHT)
 
-        ttk.Label(self._control_tab, text="Log").pack(anchor=tk.W, pady=(8, 2))
+        log_card = self._card(self._control_tab)
+        log_pad = tk.Frame(log_card, bg=SURFACE)
+        log_pad.pack(fill=tk.BOTH, expand=True, padx=16, pady=14)
+        tk.Label(
+            log_pad,
+            text="Activity",
+            bg=SURFACE,
+            fg=TEXT,
+            font=ui_font(13, "bold"),
+            anchor="w",
+        ).pack(fill=tk.X)
         self._log = scrolledtext.ScrolledText(
-            self._control_tab, height=16, state=tk.DISABLED, wrap=tk.WORD
+            log_pad,
+            height=16,
+            state=tk.DISABLED,
+            wrap=tk.WORD,
+            font=ui_font(10),
+            bg=LOG_BG,
+            fg=LOG_FG,
+            insertbackground=LOG_FG,
+            relief=tk.FLAT,
+            borderwidth=0,
+            highlightthickness=0,
+            padx=12,
+            pady=10,
         )
-        self._log.pack(fill=tk.BOTH, expand=True)
+        self._log.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
 
     def _build_settings_tab(self) -> None:
-        ttk.Label(
-            self._settings_tab,
-            text="Saved to data/user_settings.yaml. Restart the bot (Stop → Start) after saving "
+        canvas, inner = make_scrollable(self._settings_tab)
+
+        intro = tk.Frame(inner, bg=BG)
+        intro.pack(fill=tk.X, padx=8, pady=(8, 4))
+        tk.Label(
+            intro,
+            text="Settings",
+            bg=BG,
+            fg=TEXT,
+            font=ui_font(13, "bold"),
+            anchor="w",
+        ).pack(fill=tk.X)
+        tk.Label(
+            intro,
+            text="Saved to data/user_settings.yaml. Stop and Start the bot after saving "
             "so a running loop picks up changes.",
-            wraplength=660,
-        ).pack(anchor=tk.W, pady=(0, 8))
-
-        canvas = tk.Canvas(self._settings_tab, highlightthickness=0)
-        scroll = ttk.Scrollbar(self._settings_tab, orient=tk.VERTICAL, command=canvas.yview)
-        inner = ttk.Frame(canvas)
-        inner.bind(
-            "<Configure>",
-            lambda _e: canvas.configure(scrollregion=canvas.bbox("all")),
-        )
-        canvas.create_window((0, 0), window=inner, anchor=tk.NW)
-        canvas.configure(yscrollcommand=scroll.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        def _on_mousewheel(event: tk.Event) -> None:
-            canvas.yview_scroll(int(-event.delta / 120), "units")
-
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+            bg=BG,
+            fg=TEXT_SECONDARY,
+            font=ui_font(10),
+            wraplength=700,
+            justify=tk.LEFT,
+            anchor="w",
+        ).pack(fill=tk.X, pady=(4, 8))
 
         values = current_setting_values()
         current_section = None
         for field in SETTINGS:
             if field.section != current_section:
                 current_section = field.section
-                ttk.Label(inner, text=current_section, font=("", 10, "bold")).pack(
-                    anchor=tk.W, pady=(12, 4)
-                )
+                tk.Label(
+                    inner,
+                    text=current_section,
+                    bg=BG,
+                    fg=TEXT,
+                    font=ui_font(12, "bold"),
+                    anchor="w",
+                ).pack(fill=tk.X, padx=8, pady=(16, 6))
 
-            block = ttk.Frame(inner)
-            block.pack(fill=tk.X, pady=4)
-            ttk.Label(block, text=field.label).pack(anchor=tk.W)
-            ttk.Label(block, text=field.description, wraplength=620, foreground="#444").pack(
-                anchor=tk.W
-            )
+            card = self._card(inner, padx=8, pady=4)
+            block = tk.Frame(card, bg=SURFACE)
+            block.pack(fill=tk.X, padx=14, pady=12)
+
+            tk.Label(
+                block,
+                text=field.label,
+                bg=SURFACE,
+                fg=TEXT,
+                font=ui_font(11, "bold"),
+                anchor="w",
+            ).pack(fill=tk.X)
+            tk.Label(
+                block,
+                text=field.description,
+                bg=SURFACE,
+                fg=TEXT_SECONDARY,
+                font=ui_font(10),
+                wraplength=680,
+                justify=tk.LEFT,
+                anchor="w",
+            ).pack(fill=tk.X, pady=(4, 8))
 
             if field.kind == "bool":
                 var: tk.Variable = tk.BooleanVar(value=bool(values[field.key]))
-                ttk.Checkbutton(block, text="Enabled", variable=var).pack(anchor=tk.W, pady=(2, 0))
+                ttk.Checkbutton(block, text="Enabled", variable=var).pack(anchor=tk.W)
             else:
                 var = tk.StringVar(value=str(values[field.key]))
-                ttk.Entry(block, textvariable=var, width=48).pack(anchor=tk.W, pady=(2, 0))
+                entry = ttk.Entry(block, textvariable=var, width=42)
+                entry.pack(anchor=tk.W, ipady=2)
             self._setting_vars[field.key] = var
 
-        btns = ttk.Frame(self._settings_tab)
-        btns.pack(fill=tk.X, pady=(8, 0))
-        ttk.Button(btns, text="Reload from disk", command=self._reload_settings_fields).pack(
-            side=tk.LEFT
-        )
-        ttk.Button(btns, text="Save settings", command=self._save_settings).pack(side=tk.LEFT, padx=8)
+        btns = tk.Frame(inner, bg=BG)
+        btns.pack(fill=tk.X, padx=8, pady=(16, 24))
+        ttk.Button(
+            btns, text="Reload", style="Secondary.TButton", command=self._reload_settings_fields
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            btns, text="Save Settings", style="Accent.TButton", command=self._save_settings
+        ).pack(side=tk.LEFT, padx=(8, 0))
+
+        finish_scrollable(inner, canvas)
 
     def _reload_settings_fields(self) -> None:
         values = current_setting_values()
@@ -202,75 +295,121 @@ class BotControlApp(tk.Tk):
         )
 
     def _build_calib_tab(self) -> None:
-        ttk.Label(
+        tk.Label(
             self._calib_tab,
-            text="Calibration runs in a separate terminal (needs OpenCV pickers). "
-            "Open Waydroid + CoC first.",
-            wraplength=660,
-        ).pack(anchor=tk.W, pady=(0, 8))
+            text="Calibration runs in a separate terminal (OpenCV pickers). "
+            "Open Waydroid and Clash first.",
+            bg=BG,
+            fg=TEXT_SECONDARY,
+            font=ui_font(10),
+            wraplength=700,
+            justify=tk.LEFT,
+            anchor="w",
+        ).pack(fill=tk.X, pady=(0, 10))
+
+        card = self._card(self._calib_tab, pady=(0, 10))
+        tree_wrap = tk.Frame(card, bg=SURFACE)
+        tree_wrap.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
         cols = ("step", "title", "status")
         self._calib_tree = ttk.Treeview(
-            self._calib_tab, columns=cols, show="headings", height=9, selectmode="browse"
+            tree_wrap, columns=cols, show="headings", height=9, selectmode="browse"
         )
-        self._calib_tree.heading("step", text="Step id")
+        self._calib_tree.heading("step", text="Step")
         self._calib_tree.heading("title", text="Title")
         self._calib_tree.heading("status", text="Status")
-        self._calib_tree.column("step", width=120, stretch=False)
-        self._calib_tree.column("title", width=240)
+        self._calib_tree.column("step", width=130, stretch=False)
+        self._calib_tree.column("title", width=280)
         self._calib_tree.column("status", width=100, stretch=False)
         self._calib_tree.pack(fill=tk.BOTH, expand=True)
 
-        row = ttk.Frame(self._calib_tab)
-        row.pack(fill=tk.X, pady=(8, 0))
-        ttk.Button(row, text="Refresh", command=self._refresh_calib_status).pack(side=tk.LEFT)
-        ttk.Button(row, text="Recalibrate selected", command=self._recalibrate_selected).pack(
-            side=tk.LEFT, padx=(8, 0)
-        )
-        ttk.Button(row, text="Recalibrate all", command=self._recalibrate_all).pack(
-            side=tk.LEFT, padx=(8, 0)
-        )
+        row = tk.Frame(self._calib_tab, bg=BG)
+        row.pack(fill=tk.X, pady=(4, 0))
+        ttk.Button(
+            row, text="Refresh", style="Secondary.TButton", command=self._refresh_calib_status
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            row,
+            text="Recalibrate Selected",
+            style="Secondary.TButton",
+            command=self._recalibrate_selected,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            row, text="Recalibrate All", style="Accent.TButton", command=self._recalibrate_all
+        ).pack(side=tk.LEFT, padx=(8, 0))
 
         self._calib_detail = tk.StringVar(value="")
-        ttk.Label(self._calib_tab, textvariable=self._calib_detail, wraplength=660).pack(
-            anchor=tk.W, pady=(8, 0)
-        )
+        tk.Label(
+            self._calib_tab,
+            textvariable=self._calib_detail,
+            bg=BG,
+            fg=TEXT_SECONDARY,
+            font=ui_font(10),
+            wraplength=700,
+            justify=tk.LEFT,
+            anchor="w",
+        ).pack(fill=tk.X, pady=(12, 0))
         self._calib_tree.bind("<<TreeviewSelect>>", self._on_calib_select)
 
     def _build_debug_tab(self) -> None:
-        ttk.Label(
-            self._debug_tab,
-            text="Run one step at a time while CoC is open. Stop the bot first so tests "
-            "do not fight the main loop. Results also appear in the Bot tab log.",
-            wraplength=660,
-        ).pack(anchor=tk.W, pady=(0, 8))
+        canvas, inner = make_scrollable(self._debug_tab)
 
-        canvas = tk.Canvas(self._debug_tab, highlightthickness=0)
-        scroll = ttk.Scrollbar(self._debug_tab, orient=tk.VERTICAL, command=canvas.yview)
-        inner = ttk.Frame(canvas)
-        inner.bind(
-            "<Configure>",
-            lambda _e: canvas.configure(scrollregion=canvas.bbox("all")),
-        )
-        canvas.create_window((0, 0), window=inner, anchor=tk.NW)
-        canvas.configure(yscrollcommand=scroll.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        intro = tk.Frame(inner, bg=BG)
+        intro.pack(fill=tk.X, padx=8, pady=(8, 4))
+        tk.Label(
+            intro,
+            text="Debugging",
+            bg=BG,
+            fg=TEXT,
+            font=ui_font(13, "bold"),
+            anchor="w",
+        ).pack(fill=tk.X)
+        tk.Label(
+            intro,
+            text="Run one step at a time. Stop the bot first so tests do not conflict. "
+            "Results also appear in the Bot tab log.",
+            bg=BG,
+            fg=TEXT_SECONDARY,
+            font=ui_font(10),
+            wraplength=700,
+            justify=tk.LEFT,
+            anchor="w",
+        ).pack(fill=tk.X, pady=(4, 8))
 
         for action_id, label, description in DEBUG_ACTIONS:
-            block = ttk.Frame(inner)
-            block.pack(fill=tk.X, pady=6)
+            card = self._card(inner, padx=8, pady=4)
+            block = tk.Frame(card, bg=SURFACE)
+            block.pack(fill=tk.X, padx=14, pady=12)
             ttk.Button(
                 block,
                 text=label,
+                style="Secondary.TButton",
                 command=lambda aid=action_id: self._run_debug(aid),
             ).pack(anchor=tk.W)
-            ttk.Label(block, text=description, wraplength=620, foreground="#444").pack(anchor=tk.W)
+            tk.Label(
+                block,
+                text=description,
+                bg=SURFACE,
+                fg=TEXT_SECONDARY,
+                font=ui_font(10),
+                wraplength=680,
+                justify=tk.LEFT,
+                anchor="w",
+            ).pack(fill=tk.X, pady=(8, 0))
 
         self._debug_result = tk.StringVar(value="")
-        ttk.Label(self._debug_tab, textvariable=self._debug_result, wraplength=660).pack(
-            anchor=tk.W, pady=(8, 0)
-        )
+        tk.Label(
+            inner,
+            textvariable=self._debug_result,
+            bg=BG,
+            fg=ACCENT,
+            font=ui_font(11),
+            wraplength=700,
+            justify=tk.LEFT,
+            anchor="w",
+        ).pack(fill=tk.X, padx=8, pady=(12, 24))
+
+        finish_scrollable(inner, canvas)
 
     def _run_debug(self, action_id: str) -> None:
         if self._bot_running():
@@ -327,7 +466,7 @@ class BotControlApp(tk.Tk):
 
         self._start_btn.configure(state=tk.DISABLED)
         self._stop_btn.configure(state=tk.NORMAL)
-        self._status.set("Starting bot…")
+        self._status.set("Bot running")
         self._append_log("==> Starting bot")
 
         def worker() -> None:
@@ -355,14 +494,14 @@ class BotControlApp(tk.Tk):
         if not self._bot_running():
             self._on_bot_stopped()
             return
-        self._status.set("Stopping bot…")
+        self._status.set("Stopping…")
         self._append_log("==> Stop requested (Clash stays open)")
         bot = self._bot
         if bot is not None:
             bot.request_stop()
 
     def _on_bot_stopped(self) -> None:
-        self._status.set("Bot stopped")
+        self._status.set("Ready — open Waydroid and Clash of Clans, then press Start")
         self._start_btn.configure(state=tk.NORMAL)
         self._stop_btn.configure(state=tk.DISABLED)
         self._bot_thread = None
@@ -493,10 +632,11 @@ class BotControlApp(tk.Tk):
                 logger.remove(self._log_sink_id)
             except ValueError:
                 pass
-        try:
-            self.unbind_all("<MouseWheel>")
-        except tk.TclError:
-            pass
+        for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            try:
+                self.unbind_all(seq)
+            except tk.TclError:
+                pass
         self.destroy()
 
 

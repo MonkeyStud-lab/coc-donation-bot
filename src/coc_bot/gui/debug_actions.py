@@ -224,6 +224,13 @@ class DebugSession:
             f"Full ladder has {len(points)} points."
         )
 
+    def zoom_out(self) -> str:
+        frame = self.capture.screenshot()
+        h, w = frame.shape[:2]
+        screen = self.classifier.classify(frame)
+        self.input.pinch_zoom_out(w, h, repeats=3)
+        return f"Zoomed out 3x on {w}x{h} (screen was {screen.value})."
+
 
 DEBUG_ACTIONS: list[tuple[str, str, str]] = [
     # id, label, description
@@ -308,6 +315,11 @@ DEBUG_ACTIONS: list[tuple[str, str, str]] = [
         "Farm: deploy-edge dry taps",
         "A few taps along the configured deploy edge (no full attack wait).",
     ),
+    (
+        "zoom_out",
+        "Zoom out (pinch)",
+        "Pinch-zoom out a few times so the full village or battlefield is visible.",
+    ),
 ]
 
 
@@ -330,6 +342,7 @@ def run_debug_action(action_id: str) -> str:
         "farm_start_search": session.farm_start_unranked_search,
         "farm_classify": session.farm_classify_battle,
         "farm_deploy_dry": session.farm_deploy_dry_taps,
+        "zoom_out": session.zoom_out,
     }
     fn = mapping.get(action_id)
     if fn is None:

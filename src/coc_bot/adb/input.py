@@ -56,3 +56,48 @@ class InputController:
 
     def scroll_down(self, cx: int, cy: int, distance: int = 400) -> None:
         self.swipe(cx, cy, cx, cy + distance, duration_ms=350)
+
+    def pinch_zoom_out(
+        self,
+        width: int,
+        height: int,
+        *,
+        repeats: int = 3,
+        duration_ms: int = 280,
+    ) -> None:
+        """
+        Pinch-in (fingers move together) to zoom out the village / battlefield.
+
+        Uses two concurrent ADB swipes toward the screen center. Works on most
+        Waydroid / Android builds; repeats a few times to reach max zoom-out.
+        """
+        if width <= 0 or height <= 0:
+            logger.warning("pinch_zoom_out skipped — invalid size {}x{}", width, height)
+            return
+
+        cx, cy = width // 2, height // 2
+        # Keep the gesture on the map, away from bottom army / top resource UI.
+        span = int(min(width, height) * 0.28)
+        x1, y1 = cx - span, cy - span
+        x2, y2 = cx + span, cy + span
+
+        for i in range(max(1, repeats)):
+            if self.dry_run:
+                logger.info(
+                    "[DRY-RUN] pinch zoom-out #{}/{} toward ({}, {})",
+                    i + 1,
+                    repeats,
+                    cx,
+                    cy,
+                )
+            else:
+                # Parallel swipes approximate a two-finger pinch-in.
+                cmd = (
+                    f"input swipe {x1} {y1} {cx} {cy} {duration_ms} & "
+                    f"input swipe {x2} {y2} {cx} {cy} {duration_ms} & "
+                    f"wait"
+                )
+                logger.info("Pinch zoom-out {}/{} (span={})", i + 1, repeats, span)
+                self.client.run_shell(cmd)
+            time.sleep(0.35)
+        self._sleep()

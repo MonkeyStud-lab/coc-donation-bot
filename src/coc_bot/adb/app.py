@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
 import time
 
 import cv2
@@ -31,14 +33,28 @@ class AppController:
 
     def launch(self) -> None:
         """
-        Start Clash of Clans inside the existing Waydroid Android UI via ADB.
+        Start Clash of Clans inside the Waydroid Android UI.
 
-        Does not use `waydroid app launch` (separate dock window) or spam
-        multiple start methods — that left CoC laggy compared to opening it
-        manually from the Waydroid home screen.
+        Uses ADB only (am start / monkey). Avoids `waydroid app launch`, which
+        opens CoC as a separate Linux window/dock icon instead of inside
+        show-full-ui.
         """
         pkg = self.config.coc_package
-        logger.info("Launching {} via ADB (single start)", pkg)
+        logger.info("Launching {} inside Waydroid session", pkg)
+
+        # Make sure the full Android UI window is up (not multi-window app mode).
+        if shutil.which("waydroid"):
+            try:
+                subprocess.Popen(  # noqa: S603
+                    ["waydroid", "show-full-ui"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                logger.info("Ensured waydroid show-full-ui")
+                time.sleep(1.5)
+            except OSError as exc:
+                logger.warning("Could not run show-full-ui: {}", exc)
 
         resolve = self.client.run_shell(
             f"cmd package resolve-activity --brief {pkg}",
@@ -49,7 +65,6 @@ class AppController:
             line = line.strip()
             if line.startswith(pkg) and "/" in line:
                 activity = line
-
         if activity:
             self.client.run_shell(
                 f"am start -a android.intent.action.MAIN "
@@ -58,49 +73,70 @@ class AppController:
             )
             logger.info("Issued am start -n {}", activity)
         else:
-            # One fallback only (same idea as tapping the icon once).
             self.client.run_shell(
-                f"monkey -p {pkg} -c android.intent.category.LAUNCHER 1",
+                f"am start -a android.intent.action.MAIN "
+                f"-c android.intent.category.LAUNCHER {pkg}",
                 check=False,
             )
-            logger.info("Issued monkey launch for {}", pkg)
+            logger.info("Issued am start for package {}", pkg)
+
+        self.client.run_shell(
+            f"monkey -p {pkg} -c android.intent.category.LAUNCHER 1",
+            check=False,
+        )
 
     def wait_until_ready(
         self,
         loading_template: np.ndarray | None = None,
         timeout_seconds: int | None = None,
     ) -> bool:
-        """
-        Wait for CoC to come up without hammering ADB screencap.
-
-        Continuous screenshots during load make Waydroid/CoC feel laggy; prefer
-        pidof + a quiet settle period, then at most a couple of frame checks.
-        """
-        del loading_template  # optional template checks were too screenshot-heavy
         timeout = timeout_seconds or self.config.game_load_timeout_seconds
         deadline = time.time() + timeout
-        logger.info("Waiting for game process (timeout {}s, light checks)...", timeout)
+        logger.info("Waiting for game to load (timeout {}s)...", timeout)
 
+        # Must see the process before treating any frame as "ready".
         while time.time() < deadline:
             if self.is_running():
-                logger.info("Clash process is running — settling without screencap spam")
-                # Let the game finish loading undisturbed (similar to opening manually).
-                settle = min(18.0, max(8.0, timeout * 0.2))
-                time.sleep(settle)
-                # One optional sanity check — not a tight poll loop.
-                try:
-                    frame = self.capture.screenshot()
-                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                    if float(np.std(gray)) > 20.0:
-                        logger.info("Game looks loaded after settle")
-                        return True
-                    logger.info("Process up; frame still quiet — waiting a bit more")
-                    time.sleep(5.0)
-                    return self.is_running()
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Post-launch screenshot skipped: {}", exc)
-                    return True
-            time.sleep(2.0)
+                logger.info("Clash process is running")
+                break
+            time.sleep(1.0)
+        else:
+            logger.warning("Clash process never appeared (pidof empty)")
+            return False
 
-        logger.warning("Clash process never appeared (pidof empty)")
+        process_since = time.time()
+        saw_loading = False
+        from coc_bot.vision.matcher import TemplateMatcher
+
+        matcher = TemplateMatcher(threshold=0.75)
+
+        while time.time() < deadline:
+            frame = self.capture.screenshot()
+            if loading_template is not None:
+                match = matcher.find(frame, loading_template)
+                if match is not None:
+                    saw_loading = True
+                    logger.debug("Loading screen visible")
+                    time.sleep(1.5)
+                    continue
+                if saw_loading:
+                    logger.info("Loading screen cleared")
+                    return True
+                # Process up but no loading template — wait a few seconds then accept busy frame.
+                if time.time() - process_since >= 6.0:
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    if float(np.std(gray)) > 25.0:
+                        logger.info("Game looks loaded (no loading template match)")
+                        return True
+            else:
+                if time.time() - process_since < 5.0:
+                    time.sleep(1.0)
+                    continue
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                if float(np.std(gray)) > 25.0:
+                    logger.info("Frame variance suggests game is loaded")
+                    return True
+            time.sleep(1.5)
+
+        logger.warning("Game load timeout reached")
         return False

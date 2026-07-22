@@ -131,37 +131,37 @@ class DebugSession:
         return f"Force-stopped {self.config.coc_package}."
 
     def relaunch_coc(self) -> str:
+        pkg = self.config.coc_package
         was_running = self.app.is_running()
         if was_running:
             logger.info("Clash already running — force-stopping before relaunch")
             self.app.force_stop()
-            # Give Waydroid a moment to free GPU/CPU before starting again.
-            time.sleep(5.0)
+            time.sleep(2.0)
 
+        loading = self.navigator.load_template("loading")
         self.app.launch()
-        ready = self.app.wait_until_ready()
+        ready = self.app.wait_until_ready(loading_template=loading)
         running = self.app.is_running()
         if ready and running:
-            return (
-                "Clash relaunched inside Waydroid. "
-                "If it still feels laggy, close CoC from Waydroid once and open it manually."
-            )
+            return "Clash relaunched and appears loaded."
         if running and not ready:
             return (
-                "Clash process is running but settle wait was uncertain. "
-                "Check the Waydroid window — avoid using the bot for a minute so it can warm up."
+                "Clash process is running but load wait timed out "
+                "(optional loading template / slow start). Check the game window."
             )
         return (
-            "Clash did not start. Open Waydroid full UI, tap Clash once manually, then retry."
+            "Clash did not start. Try opening it once from Waydroid manually, "
+            "then retry. Also check: waydroid app list | grep -i clash"
         )
 
     def break_cycle_short(self, wait_seconds: int = 8) -> str:
         """Simulate take-a-break: force-stop, wait, relaunch, reopen chat."""
         logger.info("Debug break cycle — force-stop, wait {}s, relaunch", wait_seconds)
         self.app.force_stop()
-        time.sleep(max(5, wait_seconds))
+        time.sleep(max(3, wait_seconds))
+        loading = self.navigator.load_template("loading")
         self.app.launch()
-        self.app.wait_until_ready()
+        self.app.wait_until_ready(loading_template=loading)
         ok = self.navigator.ensure_clan_chat(
             has_donate_request=lambda f: self.chat_monitor.find_donate_request(f) is not None
         )

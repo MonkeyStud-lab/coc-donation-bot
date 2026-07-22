@@ -111,13 +111,15 @@ class ChatMonitor:
                 width=match.width,
                 height=match.height,
             )
-            capacity = self.capacity_parser.parse(frame, adjusted)
+            capacity = None
+            if self.config.parse_request_capacity:
+                capacity = self.capacity_parser.parse(frame, adjusted)
             kind = self.request_parser.classify(frame, adjusted, capacity)
             is_specific = kind == RequestKind.SPECIFIC
             if kind == RequestKind.SPECIFIC:
                 logger.info("Specific request detected (requested unit icons in chat)")
             elif kind == RequestKind.HYBRID:
-                logger.info("Hybrid request detected (icons + open capacity remaining)")
+                logger.info("Hybrid request detected (some icons + open remainder)")
             else:
                 logger.debug("Open/generic request (capacity bars only — no unit icon row)")
             if capacity is not None:

@@ -141,7 +141,7 @@ class DonationBot:
     def _should_handle_request(self, request: DonateRequest) -> bool:
         if request.kind == RequestKind.SPECIFIC:
             return True
-        # Open and hybrid need budget-aware fill (donate_open_requests).
+        # Open and hybrid use simple colored-slot fill when enabled.
         return self.config.donate_open_requests
 
     def _has_donate_request(self, frame) -> bool:
@@ -212,29 +212,10 @@ class DonationBot:
         if self.config.dry_run:
             frame = self.capture.screenshot()
             self._maybe_save_debug(frame, "donate_dry_run")
-            cap = request.capacity
             logger.info(
-                "[DRY-RUN] Would execute donation kind={} capacity={}",
+                "[DRY-RUN] Would execute donation kind={} (open fill=colored slots)",
                 request.kind.value,
-                None
-                if cap is None
-                else f"t={cap.troop_remaining}/{cap.troop_total} "
-                f"s={cap.spell_remaining}/{cap.spell_total} "
-                f"g={cap.siege_remaining}/{cap.siege_total}",
             )
-            if request.kind != RequestKind.SPECIFIC:
-                donor = self.config.donor_limits()
-                from coc_bot.donation.fill_planner import FillPlanner
-
-                planner = FillPlanner()
-                tb, sb, gb = planner.initial_budgets(cap, donor)
-                logger.info(
-                    "[DRY-RUN] Fill budgets troop={} spell={} siege={} (clan L{})",
-                    tb,
-                    sb,
-                    gb,
-                    self.config.clan_level,
-                )
             self._set_state("scan_chat")
             return
 

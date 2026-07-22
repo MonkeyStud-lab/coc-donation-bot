@@ -66,22 +66,22 @@ cd ~/Projects/coc-donation-bot
 ./scripts/install_desktop_launcher.sh
 ```
 
-Then double-click **CoC Donation Bot**. It will:
+Then double-click **CoC Donation Bot**. A control window opens that:
 
-1. Auto-install missing deps on first run (if setup was skipped)
-2. Start the Waydroid container/session if needed
-3. Connect ADB
-4. Launch Clash of Clans
-5. Run the donation bot in a terminal window
+1. Auto-installs missing deps on first run (if setup was skipped)
+2. Starts Waydroid / ADB / Clash of Clans if needed
+3. Runs the donation bot
+4. Lets you **Shut off** the bot from the same window (game stays open)
 
-Use **Stop CoC Donation Bot** to stop the bot (game stays open).  
-If Ubuntu asks, choose **Allow Launching** / **Trust and Launch**.
+If Ubuntu asks, choose **Allow Launching** / **Trust and Launch**. Delete any old **Stop CoC Donation Bot** icon if it is still on the desktop.
 
 The Waydroid container may need to be started once with sudo if it is not already enabled:
 
 ```bash
 sudo systemctl enable --now waydroid-container
 ```
+
+If the session is stopped, run `waydroid session start` once (leave that terminal open) or open CoC normally, then use the desktop icon.
 
 ### Run the bot (terminal)
 

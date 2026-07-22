@@ -1,7 +1,24 @@
 #!/usr/bin/env bash
 # Start Waydroid (if needed), Clash of Clans, then the donation bot.
 # Intended for a clickable Ubuntu desktop launcher.
+# Usage:
+#   ./scripts/start_bot_desktop.sh              # prepare + run bot (terminal mode)
+#   ./scripts/start_bot_desktop.sh --prepare-only  # Waydroid/ADB/CoC only (for GUI)
 set -euo pipefail
+
+PREPARE_ONLY=0
+for arg in "$@"; do
+  case "$arg" in
+    --prepare-only) PREPARE_ONLY=1 ;;
+    -h|--help)
+      echo "Usage: $0 [--prepare-only]"
+      exit 0
+      ;;
+  esac
+done
+
+# Desktop .desktop launches often have a tiny PATH — include normal system bins.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -26,9 +43,22 @@ die() {
   if [[ -t 0 ]]; then
     read -r -p "Press Enter to close..."
   else
-    sleep 8
+    sleep 12
   fi
   exit 1
+}
+
+dump_waydroid_diagnostics() {
+  echo "---- diagnostics ----"
+  echo "PATH=$PATH"
+  command -v waydroid >/dev/null 2>&1 && echo "waydroid=$(command -v waydroid)" || echo "waydroid=NOT FOUND"
+  command -v adb >/dev/null 2>&1 && echo "adb=$(command -v adb)" || echo "adb=NOT FOUND"
+  echo "systemctl waydroid-container: $(systemctl is-active waydroid-container 2>&1 || true)"
+  if command -v waydroid >/dev/null 2>&1; then
+    echo "waydroid status:"
+    waydroid status 2>&1 || true
+  fi
+  echo "--------------------"
 }
 
 COC_PKG="com.supercell.clashofclans"
@@ -79,48 +109,103 @@ export PYTHONUNBUFFERED=1
 
 notify "Starting… (device $ADB_DEVICE)"
 
-container_up() {
-  waydroid status 2>/dev/null | grep -qiE 'Container:[[:space:]]*RUNNING'
+adb_ready() {
+  command -v adb >/dev/null 2>&1 || return 1
+  adb connect "$ADB_DEVICE" >/dev/null 2>&1 || true
+  adb -s "$ADB_DEVICE" get-state 2>/dev/null | grep -qx device
 }
 
-if ! container_up; then
-  notify "Starting Waydroid container…"
+container_up() {
+  # Some Waydroid builds omit the Container line when the session is stopped.
   if systemctl is-active --quiet waydroid-container 2>/dev/null; then
-    :
-  elif systemctl start waydroid-container 2>/dev/null; then
-    :
-  elif sudo -n systemctl start waydroid-container 2>/dev/null; then
-    :
-  else
-    die "Waydroid container is not running. Start it once with: sudo systemctl start waydroid-container"
+    return 0
   fi
-  for _ in $(seq 1 30); do
-    container_up && break
-    sleep 1
-  done
-  container_up || die "Waydroid container did not become ready"
-fi
+  command -v waydroid >/dev/null 2>&1 || return 1
+  local status
+  status="$(waydroid status 2>/dev/null || true)"
+  echo "$status" | grep -qiE 'Container:[[:space:]]*RUNNING' && return 0
+  return 1
+}
 
 session_up() {
+  command -v waydroid >/dev/null 2>&1 || return 1
   waydroid status 2>/dev/null | grep -qiE 'Session:[[:space:]]*RUNNING'
 }
 
-if ! session_up; then
-  notify "Starting Waydroid session…"
-  if systemctl --user start waydroid-session.service 2>/dev/null; then
-    :
-  else
-    nohup waydroid session start >>"$LOG_DIR/waydroid-session.log" 2>&1 &
+start_waydroid_container() {
+  if systemctl is-active --quiet waydroid-container 2>/dev/null; then
+    echo "waydroid-container service already active"
+    return 0
   fi
-  for _ in $(seq 1 60); do
-    session_up && break
-    sleep 1
-  done
-  session_up || die "Waydroid session did not become ready (is a Wayland desktop session active?)"
+  if systemctl start waydroid-container 2>/dev/null; then
+    return 0
+  fi
+  if sudo -n systemctl start waydroid-container 2>/dev/null; then
+    return 0
+  fi
+  if command -v waydroid >/dev/null 2>&1 && sudo -n waydroid container start 2>/dev/null; then
+    return 0
+  fi
+  # Interactive sudo (desktop Terminal=true gives a TTY).
+  if [[ -t 0 ]] || [[ -t 1 ]]; then
+    notify "Need your password to start Waydroid…"
+    if sudo systemctl start waydroid-container; then
+      return 0
+    fi
+    if command -v waydroid >/dev/null 2>&1 && sudo waydroid container start; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+# If ADB already works, Waydroid is up enough for the bot — skip fragile status checks.
+if adb_ready; then
+  notify "ADB already connected — skipping Waydroid container/session start"
+else
+  if ! command -v waydroid >/dev/null 2>&1; then
+    dump_waydroid_diagnostics
+    die "waydroid command not found. Install Waydroid or open it manually, then retry."
+  fi
+
+  if ! container_up; then
+    notify "Starting Waydroid container…"
+    if ! start_waydroid_container; then
+      dump_waydroid_diagnostics
+      die "Could not start Waydroid container. In a terminal run: sudo systemctl start waydroid-container"
+    fi
+    for _ in $(seq 1 45); do
+      container_up && break
+      adb_ready && break
+      sleep 1
+    done
+    if ! container_up && ! adb_ready; then
+      dump_waydroid_diagnostics
+      die "Waydroid container did not become ready. Try: sudo systemctl restart waydroid-container && waydroid status"
+    fi
+  fi
+
+  if ! session_up && ! adb_ready; then
+    notify "Starting Waydroid session…"
+    if systemctl --user start waydroid-session.service 2>/dev/null; then
+      :
+    else
+      nohup waydroid session start >>"$LOG_DIR/waydroid-session.log" 2>&1 &
+    fi
+    for _ in $(seq 1 60); do
+      session_up && break
+      adb_ready && break
+      sleep 1
+    done
+    if ! session_up && ! adb_ready; then
+      dump_waydroid_diagnostics
+      die "Waydroid session did not become ready. Open CoC manually (or: waydroid show-full-ui), then retry."
+    fi
+  fi
 fi
 
 notify "Connecting ADB ($ADB_DEVICE)…"
-command -v adb >/dev/null 2>&1 || die "adb not found — install: sudo apt install android-tools-adb"
+command -v adb >/dev/null 2>&1 || die "adb not found — run: ./scripts/setup_linux.sh"
 adb connect "$ADB_DEVICE" >/dev/null || true
 ready=0
 for _ in $(seq 1 30); do
@@ -131,7 +216,10 @@ for _ in $(seq 1 30); do
   adb connect "$ADB_DEVICE" >/dev/null || true
   sleep 1
 done
-[[ "$ready" -eq 1 ]] || die "ADB device $ADB_DEVICE not ready"
+if [[ "$ready" -ne 1 ]]; then
+  dump_waydroid_diagnostics
+  die "ADB device $ADB_DEVICE not ready. Start Waydroid/CoC manually, then: adb connect $ADB_DEVICE"
+fi
 
 notify "Launching Clash of Clans…"
 if command -v waydroid >/dev/null 2>&1; then
@@ -144,6 +232,12 @@ sleep 12
 
 if [[ ! -f "$COC_BOT_CONFIG" ]]; then
   die "Missing calibration file: $COC_BOT_CONFIG — run: python scripts/calibrate.py"
+fi
+
+if [[ "$PREPARE_ONLY" -eq 1 ]]; then
+  notify "Ready — game should be loaded"
+  echo "PREPARE_OK"
+  exit 0
 fi
 
 notify "Bot running — close this window or Ctrl+C to stop"

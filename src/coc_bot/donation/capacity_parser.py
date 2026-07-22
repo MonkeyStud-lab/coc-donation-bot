@@ -56,17 +56,16 @@ class RequestCapacityParser:
         bands = [
             region[int(h * 0.45) : int(h * 0.98), :],
             region[int(h * 0.25) : int(h * 0.85), :],
-            region,
         ]
 
         fractions: list[tuple[int, int]] = []
-        for band in bands:
+        for idx, band in enumerate(bands):
             if band.size == 0:
                 continue
+            logger.info("Running capacity OCR (pass {}/{})...", idx + 1, len(bands))
             fractions = self.ocr.read_fractions(band, max_count=3)
             if len(fractions) >= 3:
                 break
-            # Fallback: three horizontal strips inside this band.
             strip_fracs = self._parse_strips(band)
             if len(strip_fracs) >= 3:
                 fractions = strip_fracs

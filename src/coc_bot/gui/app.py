@@ -536,7 +536,7 @@ class BotControlApp(tk.Tk):
         def worker() -> None:
             try:
                 from coc_bot.adb.capture import ScreenCapture
-                from coc_bot.adb.client import AdbClient, AdbError
+                from coc_bot.adb.client import AdbClient
                 from coc_bot.adb.input import InputController
 
                 cfg = load_config()
@@ -544,15 +544,30 @@ class BotControlApp(tk.Tk):
                 client.health_check()
                 frame = ScreenCapture(client).screenshot()
                 h, w = frame.shape[:2]
-                InputController(
+                result = InputController(
                     client,
                     jitter_px=cfg.tap_jitter_px,
                     delay_ms=cfg.action_delay_ms,
                     dry_run=False,
                 ).pinch_zoom_out(w, h, repeats=3)
-                msg = f"Zoomed out on {w}x{h}"
+                msg = f"Zoom out: ok={result.ok} via {result.method} — {result.detail}"
                 logger.info(msg)
-                self.after(0, lambda: self._append_log(msg))
+
+                def done() -> None:
+                    self._append_log(msg)
+                    if result.ok:
+                        messagebox.showinfo("Zoom out", "Zoom gesture sent.\n\nCheck Clash — village should be zoomed out.")
+                    else:
+                        messagebox.showwarning(
+                            "Zoom out failed",
+                            result.detail
+                            + "\n\nOn the server try:\n"
+                            "  adb root\n"
+                            "then press Zoom out again.\n"
+                            "(Developer Options → Show taps helps verify touches.)",
+                        )
+
+                self.after(0, done)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Zoom out failed")
                 self.after(0, lambda: messagebox.showerror("Zoom out failed", str(exc)))

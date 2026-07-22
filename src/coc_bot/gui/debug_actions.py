@@ -228,8 +228,11 @@ class DebugSession:
         frame = self.capture.screenshot()
         h, w = frame.shape[:2]
         screen = self.classifier.classify(frame)
-        self.input.pinch_zoom_out(w, h, repeats=3)
-        return f"Zoomed out 3x on {w}x{h} (screen was {screen.value})."
+        result = self.input.pinch_zoom_out(w, h, repeats=3)
+        return (
+            f"Zoom out on {w}x{h} (screen={screen.value}): "
+            f"ok={result.ok} via {result.method} — {result.detail}"
+        )
 
 
 DEBUG_ACTIONS: list[tuple[str, str, str]] = [

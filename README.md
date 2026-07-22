@@ -60,6 +60,20 @@ Copy `data/calibrated.yaml` and `data/templates/` if you move to another PC with
 
 ## Usage
 
+### Desktop shortcut (optional)
+
+One-time:
+
+```bash
+cd ~/Projects/coc-donation-bot
+chmod +x scripts/install_run_shortcut.sh
+./scripts/install_run_shortcut.sh
+```
+
+Then double-click **CoC Donation Bot** on the desktop (choose **Allow Launching** if asked). It opens a terminal and runs the bot.
+
+### From a terminal
+
 Open Waydroid and Clash of Clans manually, then:
 
 ```bash

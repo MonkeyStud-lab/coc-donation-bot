@@ -81,6 +81,7 @@ class Navigator:
 
             if screen == ScreenType.POPUP:
                 self._dismiss_popup(frame)
+                time.sleep(1.0)
                 continue
 
             if screen == ScreenType.CLAN_CHAT:
@@ -163,14 +164,33 @@ class Navigator:
             self.input.back()
 
     def _dismiss_popup(self, frame: np.ndarray) -> None:
+        """
+        Clear launch/news modals.
+
+        Prefer tapping the calibrated Okay/Claim button when available. Otherwise
+        tap near the top-right gold area — outside most CoC dialogs and safer
+        than Android BACK (which can leave the game).
+        """
         template = self.load_template("popup_dismiss")
         if template is not None:
             match = self.matcher.find(frame, template)
             if match:
                 cx, cy = match.center
+                logger.info("Dismissing popup via template at ({}, {})", cx, cy)
                 self.input.tap(cx, cy)
                 return
-        self.input.back()
+
+        point = self.config.tap_points.get("dismiss_popup")
+        if point:
+            logger.info("Dismissing popup via tap point ({}, {})", point[0], point[1])
+            self.input.tap(point[0], point[1])
+            return
+
+        h, w = frame.shape[:2]
+        # Near the gold coin / resource strip — outside the centered modal card.
+        tx, ty = int(w * 0.92), int(h * 0.06)
+        logger.info("Dismissing popup — tap outside near top-right ({}, {})", tx, ty)
+        self.input.tap(tx, ty)
 
     def _chat_region_roi(self, region: str) -> list[float] | None:
         """

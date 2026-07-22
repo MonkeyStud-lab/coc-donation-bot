@@ -23,7 +23,7 @@ from coc_bot.logging_utils import setup_logging
 from coc_bot.runtime.breaks import BreakManager
 from coc_bot.runtime.tracker import RuntimeTracker
 from coc_bot.vision.matcher import TemplateMatcher
-from coc_bot.vision.screens import ScreenClassifier
+from coc_bot.vision.screens import ScreenClassifier, ScreenType
 
 
 class DonationBot:
@@ -148,10 +148,37 @@ class DonationBot:
         request = self.chat_monitor.find_donate_request(frame)
         return request is not None and self._should_handle_request(request)
 
+    def _ensure_chat_open(self, frame=None) -> bool:
+        """
+        Re-open clan chat if the user closed it or we drifted to home/unknown.
+
+        The scan/scroll loop alone never calls ensure_clan_chat, so closing chat
+        manually used to leave the bot stuck looking for Donate forever.
+        """
+        if frame is None:
+            frame = self.capture.screenshot()
+        screen = ScreenClassifier(self.config, self.matcher).classify(frame)
+        if screen in (ScreenType.CLAN_CHAT, ScreenType.DONATION_PANEL):
+            return True
+        if screen == ScreenType.LOADING:
+            return False
+
+        logger.info("Chat not open (screen={}) — reopening clan chat", screen.value)
+        ok = self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request)
+        if not ok:
+            logger.warning("Could not reopen clan chat")
+        return ok
+
     def _do_scan_chat(self) -> None:
         frame = self.capture.screenshot()
         self._maybe_save_debug(frame, "scan")
 
+        if not self._ensure_chat_open(frame):
+            self._set_state("scan_chat")
+            return
+
+        # Re-capture after a possible reopen so Donate search uses a fresh frame.
+        frame = self.capture.screenshot()
         request = self.chat_monitor.find_donate_request(frame)
         if request is None:
             self._set_state("scroll_chat")
@@ -169,6 +196,11 @@ class DonationBot:
         self._set_state("open_donation")
 
     def _do_scroll_chat(self) -> None:
+        frame = self.capture.screenshot()
+        if not self._ensure_chat_open(frame):
+            self._set_state("scan_chat")
+            return
+
         frame = self.capture.screenshot()
         request = self.chat_monitor.find_donate_request(frame)
         if request is not None:

@@ -15,6 +15,10 @@ class ScreenType(str, Enum):
     DONATION_PANEL = "donation_panel"
     LOADING = "loading"
     POPUP = "popup"
+    ATTACK_MENU = "attack_menu"
+    MATCHMAKING = "matchmaking"
+    BATTLE = "battle"
+    BATTLE_RESULTS = "battle_results"
     UNKNOWN = "unknown"
 
 
@@ -137,16 +141,48 @@ class ScreenClassifier:
         # Dimmed overlay alone can false-match busy villages; require the green Okay/Claim too.
         return self._has_dimmed_modal_overlay(frame) and self._has_green_dialog_button(frame)
 
+    def _looks_like_matchmaking(self, frame: np.ndarray) -> bool:
+        """Cloud search screen — optional template, else soft blue-sky heuristic."""
+        if self._template_visible(frame, "matchmaking") or self._template_visible(frame, "find_match"):
+            return True
+        h, w = frame.shape[:2]
+        # Upper half is often bright sky/clouds while searching.
+        crop = frame[0 : int(h * 0.45), int(w * 0.15) : int(w * 0.85)]
+        if crop.size == 0:
+            return False
+        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+        blue = cv2.inRange(hsv, (90, 40, 120), (130, 255, 255))
+        white = cv2.inRange(hsv, (0, 0, 200), (180, 60, 255))
+        frac = float((blue | white).mean()) / 255.0
+        return frac > 0.45 and not self._is_home_screen(frame)
+
+    def _looks_like_battle(self, frame: np.ndarray) -> bool:
+        if self._template_visible(frame, "battle"):
+            return True
+        # Army deployment bar lives along the bottom during attacks.
+        h, w = frame.shape[:2]
+        bar = frame[int(h * 0.82) : h, int(w * 0.05) : int(w * 0.95)]
+        if bar.size == 0:
+            return False
+        hsv = cv2.cvtColor(bar, cv2.COLOR_BGR2HSV)
+        # Dark UI strip with troop icons — low value, some saturation spikes.
+        dark = cv2.inRange(hsv, (0, 0, 0), (180, 255, 70))
+        dark_frac = float(dark.mean()) / 255.0
+        return dark_frac > 0.35 and not self._clan_chat_anchor_visible(frame)
+
     def classify(self, frame: np.ndarray) -> ScreenType:
         if self._template_visible(frame, "loading"):
             return ScreenType.LOADING
 
+        if self._template_visible(frame, "return_home") or self._template_visible(
+            frame, "battle_end"
+        ):
+            return ScreenType.BATTLE_RESULTS
+
         if self.looks_like_blocking_popup(frame):
             return ScreenType.POPUP
 
-        if self._is_home_screen(frame):
-            return ScreenType.HOME
-
+        # Prefer chat/donation before battle heuristics — donation bars look like army bars.
         if self._clan_chat_anchor_visible(frame):
             return ScreenType.CLAN_CHAT
 
@@ -155,6 +191,20 @@ class ScreenClassifier:
 
         if self._in_clan_chat_context(frame):
             return ScreenType.CLAN_CHAT
+
+        if self._template_visible(frame, "attack_menu") or self._template_visible(
+            frame, "unranked_battle"
+        ):
+            return ScreenType.ATTACK_MENU
+
+        if self._looks_like_matchmaking(frame):
+            return ScreenType.MATCHMAKING
+
+        if self._looks_like_battle(frame):
+            return ScreenType.BATTLE
+
+        if self._is_home_screen(frame):
+            return ScreenType.HOME
 
         return ScreenType.UNKNOWN
 

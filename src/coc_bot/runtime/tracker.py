@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from loguru import logger
@@ -74,3 +75,27 @@ class RuntimeTracker:
     def remaining_seconds(self) -> float:
         self._flush()
         return max(0.0, self.config.session_limit_seconds - self.state.active_seconds)
+
+    def last_farm_at(self) -> datetime | None:
+        raw = self.state.last_farm_at
+        if not raw:
+            return None
+        try:
+            return datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+
+    def mark_farm_success(self) -> None:
+        self.state.last_farm_at = datetime.now(timezone.utc).isoformat()
+        save_runtime_state(self.state_path, self.state)
+        logger.info("Recorded successful farm at {}", self.state.last_farm_at)
+
+    def seconds_since_last_farm(self) -> float | None:
+        """Seconds since last successful farm, or None if never farmed."""
+        last = self.last_farm_at()
+        if last is None:
+            return None
+        now = datetime.now(timezone.utc)
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        return max(0.0, (now - last).total_seconds())

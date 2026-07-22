@@ -98,6 +98,27 @@ class Navigator:
                 time.sleep(2.0)
                 continue
 
+            if screen in (
+                ScreenType.ATTACK_MENU,
+                ScreenType.MATCHMAKING,
+                ScreenType.BATTLE,
+                ScreenType.BATTLE_RESULTS,
+            ):
+                logger.info(
+                    "ensure_clan_chat: leaving attack UI (screen={})",
+                    screen.value,
+                )
+                if screen == ScreenType.BATTLE_RESULTS:
+                    point = self.config.tap_points.get("return_home")
+                    if point:
+                        self.input.tap(int(point[0]), int(point[1]))
+                    else:
+                        self.input.back()
+                else:
+                    self.input.back()
+                time.sleep(1.2)
+                continue
+
         logger.warning("Failed to reach clan chat within timeout")
         return False
 

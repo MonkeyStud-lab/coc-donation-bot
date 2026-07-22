@@ -13,6 +13,7 @@ class RuntimeState:
     last_break_seconds: int
     cycle_count: int
     break_until: str | None = None
+    last_farm_at: str | None = None  # UTC ISO timestamp of last successful farm
 
     @classmethod
     def fresh(cls) -> RuntimeState:
@@ -27,6 +28,7 @@ class RuntimeState:
             last_break_seconds=int(data.get("last_break_seconds", 0)),
             cycle_count=int(data.get("cycle_count", 0)),
             break_until=data.get("break_until"),
+            last_farm_at=data.get("last_farm_at"),
         )
 
 

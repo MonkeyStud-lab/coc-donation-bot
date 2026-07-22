@@ -119,6 +119,7 @@ class BotControlApp(tk.Tk):
         self._build_debug_tab()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(400, self._refresh_calib_status)
+        self.after(1000, self._refresh_farm_status)
         self._install_log_sink()
 
     def _card(self, parent: ttk.Frame, **pack_opts) -> ttk.Frame:
@@ -158,10 +159,26 @@ class BotControlApp(tk.Tk):
         ).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(
             btns,
+            text="Farm attack now",
+            style="Secondary.TButton",
+            command=self.request_farm_attack,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            btns,
             text="Close Waydroid + Clash",
             style="Danger.TButton",
             command=self.close_waydroid_and_coc,
         ).pack(side=tk.RIGHT)
+
+        self._farm_status = tk.StringVar(value="Farm: —")
+        tk.Label(
+            pad,
+            textvariable=self._farm_status,
+            bg=SURFACE,
+            fg=TEXT_SECONDARY,
+            font=ui_font(10),
+            anchor="w",
+        ).pack(fill=tk.X, pady=(10, 0))
 
         log_card = self._card(self._control_tab)
         log_pad = tk.Frame(log_card, bg=SURFACE)
@@ -505,6 +522,115 @@ class BotControlApp(tk.Tk):
         bot = self._bot
         if bot is not None:
             bot.request_stop()
+
+    def request_farm_attack(self) -> None:
+        """Queue a farm attack on the running bot, or run a one-shot if stopped."""
+        config = load_config()
+        if not config.farm_calibrated:
+            messagebox.showerror(
+                "Farm not calibrated",
+                "Open Calibration → Farm and set attack_button, unranked Battle, and Return Home.\n"
+                "Leave electro dragons as the active army preset.",
+            )
+            return
+
+        bot = self._bot
+        if self._bot_running() and bot is not None:
+            bot.request_farm_attack()
+            self._append_log("==> Farm attack queued (runs when not mid-donation)")
+            self._farm_status.set(bot.farm_status_line())
+            return
+
+        if not messagebox.askyesno(
+            "Farm attack now",
+            "Bot is not running. Run one unranked farm attack now?\n\n"
+            "This will leave chat, Attack → Battle, deploy along the edge, "
+            "and wait for the timer to end.",
+        ):
+            return
+
+        self._append_log("==> Running one-shot farm attack…")
+        self._farm_status.set("Farm: running one-shot…")
+
+        def worker() -> None:
+            try:
+                from coc_bot.attack.farmer import AttackFarmer
+                from coc_bot.adb.capture import ScreenCapture
+                from coc_bot.adb.client import AdbClient
+                from coc_bot.adb.input import InputController
+                from coc_bot.donation.navigator import Navigator
+                from coc_bot.vision.matcher import TemplateMatcher
+
+                cfg = load_config()
+                client = AdbClient(device=cfg.adb_device)
+                client.health_check()
+                capture = ScreenCapture(client)
+                inp = InputController(
+                    client,
+                    jitter_px=cfg.tap_jitter_px,
+                    delay_ms=cfg.action_delay_ms,
+                    dry_run=False,
+                )
+                matcher = TemplateMatcher(
+                    threshold=cfg.template_threshold,
+                    scale_range=cfg.scale_range,
+                )
+                nav = Navigator(cfg, capture, inp, matcher)
+                result = AttackFarmer(cfg, capture, inp, matcher, nav).run_one_attack()
+                if result.success:
+                    from coc_bot.runtime.tracker import RuntimeTracker
+
+                    RuntimeTracker(cfg).mark_farm_success()
+                msg = f"Farm one-shot: success={result.success} ({result.reason})"
+                logger.info(msg)
+
+                def done() -> None:
+                    self._append_log(msg)
+                    self._refresh_farm_status()
+                    if result.success:
+                        messagebox.showinfo("Farm", "Farm attack finished.")
+                    else:
+                        messagebox.showwarning("Farm", f"Farm failed: {result.reason}")
+
+                self.after(0, done)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Farm one-shot failed")
+                self.after(0, lambda: messagebox.showerror("Farm error", str(exc)))
+                self.after(0, self._refresh_farm_status)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _refresh_farm_status(self) -> None:
+        try:
+            bot = self._bot
+            if self._bot_running() and bot is not None:
+                self._farm_status.set(bot.farm_status_line())
+            else:
+                config = load_config()
+                if not config.farm_enabled:
+                    self._farm_status.set("Farm: disabled (enable in Settings)")
+                elif not config.farm_calibrated:
+                    self._farm_status.set("Farm: needs calibration")
+                else:
+                    from coc_bot.runtime.tracker import RuntimeTracker
+
+                    tracker = RuntimeTracker(config)
+                    since = tracker.seconds_since_last_farm()
+                    interval = max(60, int(config.farm_interval_seconds))
+                    if since is None:
+                        self._farm_status.set("Farm: ready (bot stopped)")
+                    else:
+                        remaining = max(0, int(interval - since))
+                        if remaining <= 0:
+                            self._farm_status.set("Farm: due when bot starts")
+                        else:
+                            self._farm_status.set(
+                                f"Farm: next auto in {remaining // 60}m {remaining % 60}s "
+                                "(bot stopped)"
+                            )
+        except Exception:  # noqa: BLE001
+            self._farm_status.set("Farm: —")
+        self.after(5000, self._refresh_farm_status)
 
     def view_bot_screenshot(self) -> None:
         """Grab one ADB frame (what the bot sees) and show it in a preview window."""

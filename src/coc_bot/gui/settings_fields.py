@@ -138,6 +138,61 @@ SETTINGS: list[SettingField] = [
         ("clan", "level"),
     ),
     SettingField(
+        "farm_enabled",
+        "Enable elixir farm attacks",
+        "When enabled, run one unranked Battle per interval (electro dragons along one edge). "
+        "Requires Calibration → Farm. Leave e-drags as the active army preset.",
+        "bool",
+        lambda c: c.farm_enabled,
+        "Farm",
+        ("farm", "enabled"),
+    ),
+    SettingField(
+        "farm_interval_seconds",
+        "Farm interval (seconds)",
+        "Minimum time between successful auto farm attacks (3600 = one per hour).",
+        "int",
+        lambda c: c.farm_interval_seconds,
+        "Farm",
+        ("farm", "interval_seconds"),
+    ),
+    SettingField(
+        "farm_deploy_side",
+        "Deploy side (left / right)",
+        "Which battlefield edge to dump troops along. Use left or right.",
+        "str",
+        lambda c: c.farm_deploy_side,
+        "Farm",
+        ("farm", "deploy_side"),
+    ),
+    SettingField(
+        "farm_match_timeout_seconds",
+        "Matchmaking timeout (seconds)",
+        "How long to wait in Find a Match / clouds before aborting the farm attempt.",
+        "int",
+        lambda c: c.farm_match_timeout_seconds,
+        "Farm",
+        ("farm", "match_timeout_seconds"),
+    ),
+    SettingField(
+        "farm_battle_timeout_seconds",
+        "Battle timeout (seconds)",
+        "Safety cap waiting for the attack timer to end (default 240 > normal ~3 min).",
+        "int",
+        lambda c: c.farm_battle_timeout_seconds,
+        "Farm",
+        ("farm", "battle_timeout_seconds"),
+    ),
+    SettingField(
+        "farm_retry_cooldown_seconds",
+        "Farm failure cooldown (seconds)",
+        "After a failed farm, wait this long before retrying (success-only hourly clock).",
+        "int",
+        lambda c: c.farm_retry_cooldown_seconds,
+        "Farm",
+        ("farm", "retry_cooldown_seconds"),
+    ),
+    SettingField(
         "adb_device",
         "ADB device address",
         "Waydroid ADB target, e.g. 192.168.240.112:5555 or 127.0.0.1:5555. "
@@ -236,6 +291,11 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
             parsed = parse_int_pair(str(raw))
         else:
             parsed = str(raw).strip()
+            if field.key == "farm_deploy_side":
+                side = parsed.lower()
+                if side not in ("left", "right"):
+                    raise ValueError("Deploy side must be 'left' or 'right'")
+                parsed = side
 
         cursor = payload
         for part in field.yaml_path[:-1]:

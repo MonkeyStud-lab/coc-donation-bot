@@ -30,6 +30,7 @@ STEP_IDS = (
     "donation_panel",
     "slot_colors",
     "grid",
+    "farm",
     "optional",
 )
 
@@ -78,6 +79,12 @@ STEPS: dict[str, CalibrationStep] = {
         "Grid layout",
         "Draw visible troop/spell slot grid (pick_grid.py) or enter rows/cols",
         ("grid",),
+    ),
+    "farm": CalibrationStep(
+        "farm",
+        "Farm / unranked attack",
+        "Attack button, unranked Battle, Find a Match, Return Home, optional deploy strip",
+        ("attack_button", "unranked_battle", "return_home"),
     ),
     "optional": CalibrationStep(
         "optional",
@@ -267,6 +274,12 @@ class CalibrationWizard:
             )
         if step.step_id == "grid":
             return bool(self.config.grid)
+        if step.step_id == "farm":
+            return bool(
+                self.config.tap_points.get("attack_button")
+                and self.config.tap_points.get("unranked_battle")
+                and self.config.tap_points.get("return_home")
+            )
         if step.step_id == "optional":
             return "loading" in self.config.templates or "popup_dismiss" in self.config.templates
         return False
@@ -318,6 +331,7 @@ class CalibrationWizard:
             "donation_panel": self.step_donation_panel,
             "slot_colors": self.step_slot_colors,
             "grid": self.step_grid,
+            "farm": self.step_farm,
             "optional": self.step_optional,
         }
 
@@ -517,6 +531,117 @@ class CalibrationWizard:
             "troop_bar": {"cols": troop_cols, "rows": troop_rows},
             "spell_bar": {"cols": spell_cols, "rows": spell_rows},
         }
+
+    def step_farm(self) -> None:
+        """
+        Calibrate unranked Battle farming taps.
+
+        Leave your electro dragon army as the active preset before enabling farm.
+        """
+        w, h = self._frame_size()
+        print(
+            "\n=== Farm / unranked attack ===\n"
+            "IMPORTANT: Leave your electro dragon army as the ACTIVE army preset.\n"
+            "The bot does not train troops or switch armies.\n"
+        )
+
+        print("Go to your village HOME screen (chat closed).")
+        _press_enter()
+        frame = self.capture.screenshot()
+
+        print("\n--- Attack button (bottom of home) ---")
+        has_attack = self._has_tap("attack_button") or self._has_template("attack_button")
+        if not has_attack or prompt_yes_no("Update attack_button?"):
+            if prompt_yes_no("Capture attack_button as image template?"):
+                coords = prompt_roi("Attack button")
+                self._save_template_from_frame(frame, coords, "ui/attack_button.png", "attack_button")
+            pt = prompt_point("Tap point at CENTER of Attack button")
+            self.config.tap_points["attack_button"] = list(pt)
+            logger.info("Saved tap point attack_button")
+        else:
+            _keeping("attack_button")
+
+        print(
+            "\nOpen the Attack menu so you see Ranked vs Battle (unranked).\n"
+            "You can tap Attack yourself, then press Enter."
+        )
+        _press_enter()
+        frame = self.capture.screenshot()
+
+        print("\n--- Unranked Battle (NOT Ranked) ---")
+        has_battle = self._has_tap("unranked_battle") or self._has_template("unranked_battle")
+        if not has_battle or prompt_yes_no("Update unranked_battle?"):
+            if prompt_yes_no("Capture unranked_battle as image template?"):
+                coords = prompt_roi("Unranked Battle button")
+                self._save_template_from_frame(
+                    frame, coords, "ui/unranked_battle.png", "unranked_battle"
+                )
+            pt = prompt_point("Tap point at CENTER of unranked Battle (not Ranked)")
+            self.config.tap_points["unranked_battle"] = list(pt)
+            logger.info("Saved tap point unranked_battle")
+        else:
+            _keeping("unranked_battle")
+
+        print(
+            "\nIf Find a Match is a separate button after Battle, show that screen.\n"
+            "Otherwise skip Find a Match (Battle may start search immediately)."
+        )
+        if prompt_yes_no("Calibrate Find a Match / next button?"):
+            _press_enter()
+            frame = self.capture.screenshot()
+            if prompt_yes_no("Capture find_match as image template?"):
+                coords = prompt_roi("Find a Match button")
+                self._save_template_from_frame(frame, coords, "ui/find_match.png", "find_match")
+            pt = prompt_point("Tap point at CENTER of Find a Match")
+            self.config.tap_points["find_match"] = list(pt)
+            logger.info("Saved tap point find_match")
+        elif self._has_tap("find_match") or self._has_template("find_match"):
+            _keeping("find_match")
+
+        print(
+            "\n--- Return Home (after a finished attack) ---\n"
+            "Finish or wait for any battle end screen that shows Return Home / OK,\n"
+            "or skip and set a tap where that button usually appears."
+        )
+        if prompt_yes_no("Update return_home now (recommended)?"):
+            _press_enter()
+            frame = self.capture.screenshot()
+            if prompt_yes_no("Capture return_home / battle_end as image template?"):
+                coords = prompt_roi("Return Home button")
+                self._save_template_from_frame(frame, coords, "ui/return_home.png", "return_home")
+                self.config.templates["battle_end"] = self.config.templates.get(
+                    "return_home", "ui/return_home.png"
+                )
+            pt = prompt_point("Tap point at CENTER of Return Home")
+            self.config.tap_points["return_home"] = list(pt)
+            logger.info("Saved tap point return_home")
+        elif not self._has_tap("return_home"):
+            # Sensible default near bottom-center for end-of-battle UI.
+            self.config.tap_points["return_home"] = [int(w * 0.50), int(h * 0.85)]
+            logger.info(
+                "Saved default return_home tap ({}, {}) — recalibrate if needed",
+                self.config.tap_points["return_home"][0],
+                self.config.tap_points["return_home"][1],
+            )
+        else:
+            _keeping("return_home")
+
+        print(
+            "\n--- Deploy strip (optional) ---\n"
+            "Vertical strip along the LEFT or RIGHT edge where e-drags deploy.\n"
+            "If skipped, the bot uses a fixed left/right edge from Settings."
+        )
+        if prompt_yes_no("Draw deploy_strip ROI?"):
+            coords = prompt_roi("Vertical deploy strip on one edge of the battle field")
+            self.config.rois["deploy_strip"] = _roi_list(coords, w, h)
+            logger.info("Saved ROI deploy_strip")
+        elif "deploy_strip" in self.config.rois:
+            _keeping("deploy_strip")
+
+        print(
+            "\nFarm calibration saved. Enable farm in Settings after verifying.\n"
+            "Keep electro dragons as the active army preset."
+        )
 
     def step_optional(self) -> None:
         self._maybe_update_template_after_setup(

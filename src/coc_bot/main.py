@@ -14,6 +14,7 @@ from coc_bot.adb.app import AppController
 from coc_bot.adb.capture import ScreenCapture
 from coc_bot.adb.client import AdbClient, AdbError
 from coc_bot.adb.input import InputController
+from coc_bot.attack.farmer import AttackFarmer
 from coc_bot.config import load_config
 from coc_bot.donation.chat_monitor import ChatMonitor, DonateRequest
 from coc_bot.donation.executor import DonationExecutor
@@ -79,16 +80,47 @@ class DonationBot:
         self.executor = DonationExecutor(self.config, self.capture, self.donation_input, self.matcher)
         self.tracker = RuntimeTracker(self.config)
         self.break_manager = BreakManager(self.config, self.tracker, self.app, self.navigator)
+        self.farmer = AttackFarmer(
+            self.config, self.capture, self.nav_input, self.matcher, self.navigator
+        )
         self._state = "boot"
         self._state_entered = time.monotonic()
         self._frame_count = 0
         self._last_anti_idle = time.monotonic()
         self._stop_requested = False
+        self._farm_requested = False
+        self._farm_fail_cooldown_until = 0.0
 
     def request_stop(self) -> None:
         """Ask the main loop to exit after the current tick (leaves CoC running)."""
         self._stop_requested = True
         logger.info("Stop requested — bot will exit after the current action")
+
+    def request_farm_attack(self) -> None:
+        """Queue one farm attack as soon as the loop is not mid-donation."""
+        self._farm_requested = True
+        logger.info("Farm attack requested — will run when not mid-donation")
+
+    def farm_status_line(self) -> str:
+        """Short status for the GUI (next auto farm / cooldown)."""
+        if not self.config.farm_enabled:
+            return "Farm: disabled"
+        if not self.config.farm_calibrated:
+            return "Farm: needs calibration (Calibration → Farm)"
+        if self._farm_requested:
+            return "Farm: manual attack queued"
+        now = time.monotonic()
+        if now < self._farm_fail_cooldown_until:
+            left = int(self._farm_fail_cooldown_until - now)
+            return f"Farm: retry cooldown {left // 60}m {left % 60}s"
+        since = self.tracker.seconds_since_last_farm()
+        interval = max(60, int(self.config.farm_interval_seconds))
+        if since is None:
+            return "Farm: due on next safe tick"
+        remaining = max(0, int(interval - since))
+        if remaining <= 0:
+            return "Farm: due on next safe tick"
+        return f"Farm: next auto in {remaining // 60}m {remaining % 60}s"
 
     def run(self) -> None:
         logger.info("CoC Donation Bot starting (dry_run={})", self.config.dry_run)
@@ -142,6 +174,13 @@ class DonationBot:
             self._set_state("scan_chat")
             return
 
+        # Farm between donation states only — never mid open_donation / donate.
+        if self._maybe_run_farm():
+            self.tracker.tick()
+            lo, hi = self.config.scan_interval_ms
+            time.sleep(random.uniform(lo, hi) / 1000.0)
+            return
+
         if self._state == "scan_chat":
             self._do_scan_chat()
         elif self._state == "scroll_chat":
@@ -156,6 +195,53 @@ class DonationBot:
         self.tracker.tick()
         lo, hi = self.config.scan_interval_ms
         time.sleep(random.uniform(lo, hi) / 1000.0)
+
+    def _farm_due(self) -> bool:
+        if self._farm_requested:
+            return True
+        if not self.config.farm_enabled:
+            return False
+        if not self.config.farm_calibrated:
+            return False
+        if time.monotonic() < self._farm_fail_cooldown_until:
+            return False
+        since = self.tracker.seconds_since_last_farm()
+        interval = max(60, int(self.config.farm_interval_seconds))
+        return since is None or since >= interval
+
+    def _maybe_run_farm(self) -> bool:
+        """Run one farm cycle if due. Returns True if farm work was attempted."""
+        if self._state in ("donate", "open_donation"):
+            return False
+        if not self._farm_due():
+            return False
+
+        manual = self._farm_requested
+        self._farm_requested = False
+        if not self.config.farm_calibrated:
+            logger.warning("Farm requested but calibration incomplete — skipping")
+            return True
+        if not manual and not self.config.farm_enabled:
+            return False
+
+        logger.info("Pausing donations for farm attack (manual={})", manual)
+        self._set_state("farm")
+        result = self.farmer.run_one_attack()
+        if result.success:
+            self.tracker.mark_farm_success()
+            self._farm_fail_cooldown_until = 0.0
+        else:
+            cooldown = max(60, int(self.config.farm_retry_cooldown_seconds))
+            self._farm_fail_cooldown_until = time.monotonic() + cooldown
+            logger.warning(
+                "Farm failed ({}) — retry cooldown {}s",
+                result.reason,
+                cooldown,
+            )
+        self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request)
+        self._set_state("scan_chat")
+        self._last_anti_idle = time.monotonic()
+        return True
 
     def _maybe_anti_idle(self) -> None:
         """Tiny chat-panel swipe so CoC does not disconnect for inactivity."""
@@ -319,6 +405,9 @@ class DonationBot:
         self._set_state("scan_chat")
 
     def _check_watchdog(self) -> None:
+        # Farm battles routinely exceed state_watchdog_seconds.
+        if self._state == "farm":
+            return
         elapsed = time.monotonic() - self._state_entered
         if elapsed > self.config.state_watchdog_seconds:
             logger.warning("Watchdog timeout in state '{}' ({:.0f}s)", self._state, elapsed)

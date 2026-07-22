@@ -55,12 +55,28 @@ class BotConfig:
     ocr_confidence_threshold: float = 0.5
     debug_save_frames: bool = False
     dry_run: bool = False
+    farm_enabled: bool = False
+    farm_interval_seconds: int = 3600
+    farm_deploy_side: str = "left"
+    farm_match_timeout_seconds: int = 120
+    farm_battle_timeout_seconds: int = 240
+    farm_retry_cooldown_seconds: int = 300
     data_dir: Path = field(default_factory=lambda: _project_root() / "data")
     templates_dir: Path = field(default_factory=lambda: _project_root() / "data" / "templates")
 
     @property
     def calibrated(self) -> bool:
         return self.frame_width > 0 and self.frame_height > 0 and bool(self.rois)
+
+    @property
+    def farm_calibrated(self) -> bool:
+        """Minimum taps needed to run an unranked farm attack."""
+        taps = self.tap_points
+        return bool(
+            taps.get("attack_button")
+            and taps.get("unranked_battle")
+            and taps.get("return_home")
+        )
 
     def donor_limits(self) -> DonationLimits:
         """Max troops/spells/siege this account can donate per action at current clan level."""
@@ -153,7 +169,11 @@ def load_config(
     runtime = merged.get("runtime", {})
     donation = merged.get("donation", {})
     clan = merged.get("clan", {})
+    farm = merged.get("farm", {})
     clan_limits = _load_clan_perks(root)
+    deploy_side = str(farm.get("deploy_side", "left")).strip().lower()
+    if deploy_side not in ("left", "right"):
+        deploy_side = "left"
 
     return BotConfig(
         adb_device=os.environ.get("ADB_DEVICE", adb.get("device", "127.0.0.1:5555")),
@@ -188,6 +208,12 @@ def load_config(
         clan_level=int(clan.get("level", 8)),
         clan_donation_limits=clan_limits,
         ocr_confidence_threshold=vision.get("ocr_confidence_threshold", 0.5),
+        farm_enabled=bool(farm.get("enabled", False)),
+        farm_interval_seconds=int(farm.get("interval_seconds", 3600)),
+        farm_deploy_side=deploy_side,
+        farm_match_timeout_seconds=int(farm.get("match_timeout_seconds", 120)),
+        farm_battle_timeout_seconds=int(farm.get("battle_timeout_seconds", 240)),
+        farm_retry_cooldown_seconds=int(farm.get("retry_cooldown_seconds", 300)),
         data_dir=root / "data",
         templates_dir=root / "data" / "templates",
     )

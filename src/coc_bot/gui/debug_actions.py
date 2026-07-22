@@ -12,6 +12,8 @@ from coc_bot.adb.app import AppController
 from coc_bot.adb.capture import ScreenCapture
 from coc_bot.adb.client import AdbClient, AdbError
 from coc_bot.adb.input import InputController
+from coc_bot.attack.deployer import EdgeDeployer
+from coc_bot.attack.navigator import AttackNavigator
 from coc_bot.config import load_config
 from coc_bot.donation.chat_monitor import ChatMonitor
 from coc_bot.donation.navigator import Navigator
@@ -39,6 +41,10 @@ class DebugSession:
         )
         self.classifier = ScreenClassifier(self.config, self.matcher)
         self.navigator = Navigator(self.config, self.capture, self.input, self.matcher)
+        self.attack_nav = AttackNavigator(
+            self.config, self.capture, self.input, self.matcher, self.navigator
+        )
+        self.deployer = EdgeDeployer(self.config, self.input)
         self.chat_monitor = ChatMonitor(
             self.config, self.capture, self.input, self.matcher, debug=True
         )
@@ -169,6 +175,55 @@ class DebugSession:
             return f"Break cycle done (waited {wait_seconds}s) — clan chat open."
         return f"Break cycle finished (waited {wait_seconds}s) but clan chat reopen failed."
 
+    def farm_open_attack_menu(self) -> str:
+        if not self.config.tap_points.get("attack_button"):
+            return "attack_button not calibrated — run Calibration → Farm."
+        ok_home = self.attack_nav.leave_chat_for_home()
+        if not ok_home:
+            return "Could not reach home before opening Attack."
+        ok = self.attack_nav.open_attack_menu()
+        screen = self.classifier.classify(self.capture.screenshot())
+        if ok:
+            return f"Opened Attack menu — screen now: {screen.value}"
+        return f"Failed to open Attack menu — screen: {screen.value}"
+
+    def farm_start_unranked_search(self) -> str:
+        if not self.config.tap_points.get("unranked_battle"):
+            return "unranked_battle not calibrated — run Calibration → Farm."
+        ok = self.attack_nav.start_unranked_battle()
+        time.sleep(1.0)
+        screen = self.classifier.classify(self.capture.screenshot())
+        if ok:
+            return (
+                f"Started unranked Battle / search — screen: {screen.value}. "
+                "Cancel manually if you do not want a full match."
+            )
+        return f"Failed to start unranked Battle — screen: {screen.value}"
+
+    def farm_classify_battle(self) -> str:
+        frame = self.capture.screenshot()
+        screen = self.classifier.classify(frame)
+        return (
+            f"Screen: {screen.value} "
+            f"(farm_calibrated={self.config.farm_calibrated}, "
+            f"deploy_side={self.config.farm_deploy_side})"
+        )
+
+    def farm_deploy_dry_taps(self) -> str:
+        """Tap deploy edge points without waiting for a full attack end."""
+        frame = self.capture.screenshot()
+        screen = self.classifier.classify(frame)
+        points = self.deployer.deploy_points(frame)
+        # Only a short ladder so debug stays quick.
+        for x, y in points[:4]:
+            self.input.tap(x, y)
+            time.sleep(0.1)
+        return (
+            f"Deploy dry-run: {min(4, len(points))} taps on "
+            f"{self.config.farm_deploy_side} edge (screen was {screen.value}). "
+            f"Full ladder has {len(points)} points."
+        )
+
 
 DEBUG_ACTIONS: list[tuple[str, str, str]] = [
     # id, label, description
@@ -233,6 +288,26 @@ DEBUG_ACTIONS: list[tuple[str, str, str]] = [
         "Force-stop CoC, wait ~8s, relaunch, reopen clan chat — simulates the "
         "session-limit break used to avoid long continuous play.",
     ),
+    (
+        "farm_open_attack",
+        "Farm: open Attack menu",
+        "Leave chat if needed, tap Attack. Does not start a match.",
+    ),
+    (
+        "farm_start_search",
+        "Farm: start unranked search",
+        "Tap unranked Battle (+ Find a Match if calibrated). May enter clouds — cancel manually if needed.",
+    ),
+    (
+        "farm_classify",
+        "Farm: classify battle screen",
+        "Report current screen type (attack_menu / matchmaking / battle / results / …).",
+    ),
+    (
+        "farm_deploy_dry",
+        "Farm: deploy-edge dry taps",
+        "A few taps along the configured deploy edge (no full attack wait).",
+    ),
 ]
 
 
@@ -251,6 +326,10 @@ def run_debug_action(action_id: str) -> str:
         "force_stop": session.force_stop_coc,
         "relaunch": session.relaunch_coc,
         "break_cycle": session.break_cycle_short,
+        "farm_open_attack": session.farm_open_attack_menu,
+        "farm_start_search": session.farm_start_unranked_search,
+        "farm_classify": session.farm_classify_battle,
+        "farm_deploy_dry": session.farm_deploy_dry_taps,
     }
     fn = mapping.get(action_id)
     if fn is None:

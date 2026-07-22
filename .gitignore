@@ -11,7 +11,10 @@ data/calibrated.yaml
 data/runtime_state.json
 data/debug/
 data/templates/
+data/icons/
 data/bot.log
+logs/
+.setup_linux_stamp
 
 # IDE
 .idea/

@@ -17,26 +17,32 @@ Python ADB-driven Clash of Clans clan donation bot for **Waydroid on Ubuntu**. U
 
 ## Requirements
 
-### Ubuntu host
+- Ubuntu/Debian host with **Waydroid** and Clash of Clans already installed
+- Internet on first setup (apt packages, Python deps, unit icons)
 
-```bash
-sudo apt install android-tools-adb python3 python3-venv python3-pip
-```
-
-Waydroid must be running with Clash of Clans installed and ADB connected:
+Waydroid must be able to start with Clash of Clans installed. After setup, check ADB:
 
 ```bash
 adb devices
-# Should show 127.0.0.1:5555 or similar
+# Should show 127.0.0.1:5555 or similar (e.g. 192.168.240.112:5555)
 ```
 
 ## Setup
 
+One command installs system packages, the Python environment, unit data, and icons:
+
 ```bash
 cd ~/Projects/coc-donation-bot
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
+chmod +x scripts/setup_linux.sh
+./scripts/setup_linux.sh
+```
+
+This may ask for your sudo password for `apt` packages. Re-run with `--force` to redo everything.
+
+Then install the desktop icon (also runs setup if needed):
+
+```bash
+./scripts/install_desktop_launcher.sh
 ```
 
 ## Calibration (required first run)
@@ -53,7 +59,31 @@ python scripts/calibrate.py
 
 ## Usage
 
-### Run the bot
+### Desktop launcher (recommended)
+
+```bash
+cd ~/Projects/coc-donation-bot
+./scripts/install_desktop_launcher.sh
+```
+
+Then double-click **CoC Donation Bot**. It will:
+
+1. Auto-install missing deps on first run (if setup was skipped)
+2. Start the Waydroid container/session if needed
+3. Connect ADB
+4. Launch Clash of Clans
+5. Run the donation bot in a terminal window
+
+Use **Stop CoC Donation Bot** to stop the bot (game stays open).  
+If Ubuntu asks, choose **Allow Launching** / **Trust and Launch**.
+
+The Waydroid container may need to be started once with sudo if it is not already enabled:
+
+```bash
+sudo systemctl enable --now waydroid-container
+```
+
+### Run the bot (terminal)
 
 ```bash
 python -m coc_bot.main

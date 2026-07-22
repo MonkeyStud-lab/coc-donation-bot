@@ -17,7 +17,7 @@ from coc_bot.calibration.template_capture import (
     prompt_yes_no,
     sample_center_color,
     save_template,
-)
+)  # noqa: F401 — prompt_point/roi used by _pick_* helpers
 from coc_bot.config import BotConfig, load_config, save_calibrated
 from coc_bot.logging_utils import setup_logging
 from coc_bot.vision.rois import normalize_roi
@@ -161,11 +161,27 @@ class CalibrationWizard:
         _keeping(label)
         return False
 
+    def _fresh_frame(self):
+        return self.capture.screenshot()
+
+    def _pick_roi(self, label: str, frame=None):
+        if frame is None:
+            frame = self._fresh_frame()
+        return prompt_roi(label, frame, refresh_cb=self._fresh_frame, return_frame=True)
+
+    def _pick_point(self, label: str, frame=None) -> tuple[int, int]:
+        if frame is None:
+            frame = self._fresh_frame()
+        return prompt_point(label, frame, refresh_cb=self._fresh_frame)
+
     def _maybe_update_roi(self, key: str, label: str, w: int, h: int, *, optional: bool = False) -> None:
         if not self._should_update(label, exists=self._has_roi(key), optional=optional):
             return
-        coords = prompt_roi(label)
-        self.config.rois[key] = _roi_list(coords, w, h)
+        coords, frame = self._pick_roi(label)
+        fh, fw = frame.shape[:2]
+        self.config.rois[key] = _roi_list(coords, fw, fh)
+        self.config.frame_width = fw
+        self.config.frame_height = fh
         logger.info("Saved ROI {}", key)
 
     def _maybe_update_template(
@@ -179,8 +195,8 @@ class CalibrationWizard:
     ) -> None:
         if not self._should_update(label, exists=self._has_template(key), optional=optional):
             return
-        coords = prompt_roi(label)
-        self._save_template_from_frame(frame, coords, rel_path, key)
+        coords, picked_frame = self._pick_roi(label, frame)
+        self._save_template_from_frame(picked_frame, coords, rel_path, key)
 
     def _maybe_update_template_after_setup(
         self,
@@ -195,22 +211,22 @@ class CalibrationWizard:
             return
         print(setup_message)
         _press_enter()
-        frame = self.capture.screenshot()
-        coords = prompt_roi(label)
-        self._save_template_from_frame(frame, coords, rel_path, key)
+        frame = self._fresh_frame()
+        coords, picked_frame = self._pick_roi(label, frame)
+        self._save_template_from_frame(picked_frame, coords, rel_path, key)
 
     def _maybe_update_tap_point(self, key: str, label: str) -> None:
         if not self._should_update(label, exists=self._has_tap(key)):
             return
-        pt = prompt_point(label)
+        pt = self._pick_point(label)
         self.config.tap_points[key] = list(pt)
         logger.info("Saved tap point {}", key)
 
     def _maybe_update_color(self, key: str, label: str, frame) -> None:
         if not self._should_update(label, exists=self._has_color(key)):
             return
-        coords = prompt_roi(label)
-        self.config.colors[key] = sample_center_color(frame, coords)
+        coords, picked_frame = self._pick_roi(label, frame)
+        self.config.colors[key] = sample_center_color(picked_frame, coords)
         logger.info("Saved color {}", key)
 
     def _ensure_connected(self) -> None:
@@ -356,10 +372,10 @@ class CalibrationWizard:
         has_open = self._has_template("open_chat") or self._has_tap("open_chat")
         if not has_open or prompt_yes_no("Update open_chat button?"):
             if prompt_yes_no("Capture open_chat button as image template?"):
-                coords = prompt_roi("Chat bubble on the LEFT of home screen")
-                self._save_template_from_frame(frame, coords, "ui/open_chat.png", "open_chat")
+                coords, picked = self._pick_roi("Chat bubble on the LEFT of home screen", frame)
+                self._save_template_from_frame(picked, coords, "ui/open_chat.png", "open_chat")
             else:
-                pt = prompt_point("Tap point at CENTER of chat bubble")
+                pt = self._pick_point("Tap point at CENTER of chat bubble", frame)
                 self.config.tap_points["open_chat"] = list(pt)
                 logger.info("Saved tap point open_chat")
         else:
@@ -553,9 +569,9 @@ class CalibrationWizard:
         has_attack = self._has_tap("attack_button") or self._has_template("attack_button")
         if not has_attack or prompt_yes_no("Update attack_button?"):
             if prompt_yes_no("Capture attack_button as image template?"):
-                coords = prompt_roi("Attack button")
-                self._save_template_from_frame(frame, coords, "ui/attack_button.png", "attack_button")
-            pt = prompt_point("Tap point at CENTER of Attack button")
+                coords, picked = self._pick_roi("Attack button", frame)
+                self._save_template_from_frame(picked, coords, "ui/attack_button.png", "attack_button")
+            pt = self._pick_point("Tap point at CENTER of Attack button", frame)
             self.config.tap_points["attack_button"] = list(pt)
             logger.info("Saved tap point attack_button")
         else:
@@ -572,11 +588,11 @@ class CalibrationWizard:
         has_battle = self._has_tap("unranked_battle") or self._has_template("unranked_battle")
         if not has_battle or prompt_yes_no("Update unranked_battle?"):
             if prompt_yes_no("Capture unranked_battle as image template?"):
-                coords = prompt_roi("Unranked Battle button")
+                coords, picked = self._pick_roi("Unranked Battle button", frame)
                 self._save_template_from_frame(
-                    frame, coords, "ui/unranked_battle.png", "unranked_battle"
+                    picked, coords, "ui/unranked_battle.png", "unranked_battle"
                 )
-            pt = prompt_point("Tap point at CENTER of unranked Battle (not Ranked)")
+            pt = self._pick_point("Tap point at CENTER of unranked Battle (not Ranked)", frame)
             self.config.tap_points["unranked_battle"] = list(pt)
             logger.info("Saved tap point unranked_battle")
         else:
@@ -590,9 +606,9 @@ class CalibrationWizard:
             _press_enter()
             frame = self.capture.screenshot()
             if prompt_yes_no("Capture find_match as image template?"):
-                coords = prompt_roi("Find a Match button")
-                self._save_template_from_frame(frame, coords, "ui/find_match.png", "find_match")
-            pt = prompt_point("Tap point at CENTER of Find a Match")
+                coords, picked = self._pick_roi("Find a Match button", frame)
+                self._save_template_from_frame(picked, coords, "ui/find_match.png", "find_match")
+            pt = self._pick_point("Tap point at CENTER of Find a Match", frame)
             self.config.tap_points["find_match"] = list(pt)
             logger.info("Saved tap point find_match")
         elif self._has_tap("find_match") or self._has_template("find_match"):
@@ -607,12 +623,12 @@ class CalibrationWizard:
             _press_enter()
             frame = self.capture.screenshot()
             if prompt_yes_no("Capture return_home / battle_end as image template?"):
-                coords = prompt_roi("Return Home button")
-                self._save_template_from_frame(frame, coords, "ui/return_home.png", "return_home")
+                coords, picked = self._pick_roi("Return Home button", frame)
+                self._save_template_from_frame(picked, coords, "ui/return_home.png", "return_home")
                 self.config.templates["battle_end"] = self.config.templates.get(
                     "return_home", "ui/return_home.png"
                 )
-            pt = prompt_point("Tap point at CENTER of Return Home")
+            pt = self._pick_point("Tap point at CENTER of Return Home", frame)
             self.config.tap_points["return_home"] = list(pt)
             logger.info("Saved tap point return_home")
         elif not self._has_tap("return_home"):
@@ -632,8 +648,11 @@ class CalibrationWizard:
             "If skipped, the bot uses a fixed left/right edge from Settings."
         )
         if prompt_yes_no("Draw deploy_strip ROI?"):
-            coords = prompt_roi("Vertical deploy strip on one edge of the battle field")
-            self.config.rois["deploy_strip"] = _roi_list(coords, w, h)
+            coords, picked = self._pick_roi(
+                "Vertical deploy strip on one edge of the battle field"
+            )
+            fh, fw = picked.shape[:2]
+            self.config.rois["deploy_strip"] = _roi_list(coords, fw, fh)
             logger.info("Saved ROI deploy_strip")
         elif "deploy_strip" in self.config.rois:
             _keeping("deploy_strip")

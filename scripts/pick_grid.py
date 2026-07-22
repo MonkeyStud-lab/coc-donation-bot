@@ -23,8 +23,10 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import cv2
-from pick_coordinates import CoordinatePicker, load_frame_from_adb, load_frame_from_path
 
+from pick_coordinates import load_frame_from_adb, load_frame_from_path
+
+from coc_bot.calibration.picker import InteractivePicker
 from coc_bot.config import load_config, save_calibrated
 from coc_bot.vision.rois import ROI, denormalize_roi, normalize_roi
 
@@ -69,10 +71,13 @@ def _pick_grid(label: str, frame) -> tuple[int, int, int, int] | None:
         sys.exit(1)
 
     print(f"\n=== {label} ===")
-    print("Draw a box around ALL visible slot cells (top-left click, then bottom-right).")
+    print("Draw a box around ALL visible slot cells (top-left click, then bottom-right), then Confirm.")
     root = tk.Tk()
-    picker = CoordinatePicker(root, frame)
+    picker = InteractivePicker(root, frame, mode="roi", title=f"Grid: {label}")
+    picker.set_refresh_callback(load_frame_from_adb)
     root.mainloop()
+    if picker.result is not None and len(picker.result) == 4:
+        return picker.result  # type: ignore[return-value]
     return _roi_from_points(picker.points)
 
 

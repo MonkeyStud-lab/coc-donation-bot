@@ -152,6 +152,12 @@ class BotControlApp(tk.Tk):
         self._stop_btn.pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(
             btns,
+            text="View screenshot",
+            style="Secondary.TButton",
+            command=self.view_bot_screenshot,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            btns,
             text="Close Waydroid + Clash",
             style="Danger.TButton",
             command=self.close_waydroid_and_coc,
@@ -499,6 +505,53 @@ class BotControlApp(tk.Tk):
         bot = self._bot
         if bot is not None:
             bot.request_stop()
+
+    def view_bot_screenshot(self) -> None:
+        """Grab one ADB frame (what the bot sees) and show it in a preview window."""
+        self._append_log("==> Requesting screenshot…")
+
+        def worker() -> None:
+            try:
+                import cv2
+                from PIL import Image, ImageTk
+
+                from coc_bot.adb.capture import ScreenCapture
+                from coc_bot.adb.client import AdbClient, AdbError
+
+                config = load_config()
+                client = AdbClient(device=config.adb_device)
+                client.ensure_connected()
+                frame = ScreenCapture(client).screenshot()
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                image = Image.fromarray(rgb)
+                # Fit in a readable preview without huge windows.
+                image.thumbnail((960, 540), Image.Resampling.LANCZOS)
+                h, w = frame.shape[:2]
+
+                def show() -> None:
+                    win = tk.Toplevel(self)
+                    win.title(f"Bot view — {w}×{h}")
+                    win.configure(bg=BG)
+                    photo = ImageTk.PhotoImage(image)
+                    # Keep a reference so Tk does not garbage-collect the image.
+                    win._photo = photo  # type: ignore[attr-defined]
+                    tk.Label(
+                        win,
+                        text="Current ADB screencap (same source the bot uses)",
+                        bg=BG,
+                        fg=TEXT_SECONDARY,
+                        font=ui_font(10),
+                    ).pack(anchor=tk.W, padx=16, pady=(12, 4))
+                    tk.Label(win, image=photo, bg=BG, bd=0).pack(padx=16, pady=(0, 16))
+                    self._append_log(f"==> Screenshot preview {w}×{h}")
+
+                self.after(0, show)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Screenshot preview failed: {}", exc)
+                self.after(0, lambda: messagebox.showerror("Screenshot failed", str(exc)))
+                self.after(0, lambda: self._append_log(f"Screenshot failed: {exc}"))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _on_bot_stopped(self) -> None:
         self._status.set("Ready — open Waydroid and Clash of Clans, then press Start")

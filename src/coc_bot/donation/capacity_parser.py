@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,6 +15,9 @@ from loguru import logger
 from coc_bot.config import BotConfig
 from coc_bot.vision.matcher import MatchResult
 from coc_bot.vision.ocr import QuantityOCR
+
+# Common clan-castle troop request totals (helps score OCR candidates).
+_COMMON_TROOP_TOTALS = {15, 20, 25, 30, 35, 40, 45, 50, 55, 60}
 
 
 @dataclass(frozen=True)
@@ -54,7 +60,6 @@ def chat_message_region(frame: np.ndarray, donate_button: MatchResult) -> np.nda
     msg_h = max(int(bh * 7), 100)
     y0 = max(0, by - msg_h)
     y1 = max(0, by + int(bh * 0.05))
-    # Bars + fractions are to the left of Donate.
     x0 = max(0, bx - int(bw * 11))
     x1 = min(w, bx + int(bw * 0.2))
 
@@ -70,6 +75,7 @@ class RequestCapacityParser:
     def __init__(self, config: BotConfig) -> None:
         self.config = config
         self.ocr = QuantityOCR(confidence_threshold=config.ocr_confidence_threshold)
+        self._has_tesseract = shutil.which("tesseract") is not None
 
     def parse(self, frame: np.ndarray, donate_button: MatchResult) -> RequestCapacity | None:
         region = chat_message_region(frame, donate_button)
@@ -79,15 +85,14 @@ class RequestCapacityParser:
         self._maybe_save_debug(region, "capacity_region.png")
 
         h, w = region.shape[:2]
-        # Capacity rows sit in the lower part of the bubble (just above Donate).
         lower = region[int(h * 0.35) : int(h * 0.98), :]
         if lower.size == 0:
             return None
 
         lh, lw = lower.shape[:2]
         row_h = max(1, lh // 3)
-        # Text is toward the right of the bar, still inside the bubble (near Donate).
-        text_x0 = int(lw * 0.35)
+        # Prefer the rightmost text area (numbers sit near Donate).
+        text_x0 = int(lw * 0.45)
         row_rois = [
             lower[0:row_h, text_x0:],
             lower[row_h : 2 * row_h, text_x0:],
@@ -95,32 +100,39 @@ class RequestCapacityParser:
         ]
 
         logger.info("Running capacity OCR on 3 row text crops...")
-        fractions: list[tuple[int, int]] = []
+        fractions: list[tuple[int, int] | None] = []
         for idx, row in enumerate(row_rois):
             self._maybe_save_debug(row, f"capacity_row_{idx}.png")
-            frac = self._read_row_fraction(row)
-            logger.info("Capacity row {} OCR -> {}", idx, frac)
-            if frac is None:
-                break
+            kind = ("troop", "spell", "siege")[idx]
+            frac = self._read_row_fraction(row, kind=kind)
+            logger.info("Capacity row {} ({}) OCR -> {}", idx, kind, frac)
             fractions.append(frac)
 
-        if len(fractions) < 3:
+        if any(f is None for f in fractions):
             logger.info("Row OCR incomplete — trying full lower band")
-            fractions = self.ocr.read_fractions(lower, max_count=3)
-            logger.info("Lower-band OCR fractions -> {}", fractions)
+            band_fracs = self.ocr.read_fractions(lower, max_count=3)
+            logger.info("Lower-band OCR fractions -> {}", band_fracs)
+            for i, frac in enumerate(band_fracs):
+                if i < 3 and fractions[i] is None:
+                    fractions[i] = frac
 
-        if len(fractions) < 3:
-            logger.debug("Capacity OCR found {}/3 fractions", len(fractions))
-            return None
-
-        if not self._plausible_donated_totals(fractions):
-            logger.warning(
-                "Rejecting implausible capacity OCR {} (likely HUD leak or misread)",
+        if any(f is None for f in fractions):
+            logger.debug(
+                "Capacity OCR found {}/3 fractions ({})",
+                sum(1 for f in fractions if f is not None),
                 fractions,
             )
             return None
 
-        capacity = self._from_donated_totals(fractions[0], fractions[1], fractions[2])
+        typed = [f for f in fractions if f is not None]
+        if not self._plausible_donated_totals(typed):
+            logger.warning(
+                "Rejecting implausible capacity OCR {} (likely HUD leak or misread)",
+                typed,
+            )
+            return None
+
+        capacity = self._from_donated_totals(typed[0], typed[1], typed[2])
         logger.info(
             "Request capacity remaining/total: troops={}/{} spells={}/{} siege={}/{}",
             capacity.troop_remaining,
@@ -140,38 +152,139 @@ class RequestCapacityParser:
         except Exception as exc:
             logger.debug("Could not save debug image {}: {}", name, exc)
 
-    def _read_row_fraction(self, row: np.ndarray) -> tuple[int, int] | None:
+    def _read_row_fraction(
+        self, row: np.ndarray, *, kind: str
+    ) -> tuple[int, int] | None:
         if row.size == 0:
             return None
-        prepared = self._prepare_text_roi(row)
-        frac = self.ocr.read_fraction(prepared)
-        if frac is not None:
-            return frac
-        return self.ocr.read_fraction(row)
 
-    @staticmethod
-    def _prepare_text_roi(row: np.ndarray) -> np.ndarray:
-        """Upscale + isolate bright glyph pixels for EasyOCR."""
+        candidates: list[tuple[int, int, float]] = []
+        variants = self._row_variants(row)
+
+        # Fast path first (tesseract), then EasyOCR.
+        readers = []
+        if self._has_tesseract:
+            readers.append(self._tesseract_fraction)
+        readers.append(self.ocr.read_fraction)
+
+        for prepared in variants:
+            for reader in readers:
+                try:
+                    frac = reader(prepared)
+                except Exception:
+                    frac = None
+                if frac is None:
+                    continue
+                score = self._score_fraction(frac, kind=kind)
+                logger.debug("OCR candidate {} via {} score={:.1f}", frac, reader.__name__, score)
+                if score > 0:
+                    candidates.append((frac[0], frac[1], score))
+            # If we already have a strong hit, stop early.
+            if candidates and max(c[2] for c in candidates) >= 5.0:
+                break
+
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: item[2], reverse=True)
+        best = candidates[0]
+        return best[0], best[1]
+
+    def _row_variants(self, row: np.ndarray) -> list[np.ndarray]:
         if len(row.shape) == 3:
             gray = cv2.cvtColor(row, cv2.COLOR_BGR2GRAY)
+            color = row
         else:
             gray = row
-        up = cv2.resize(gray, None, fx=5, fy=5, interpolation=cv2.INTER_CUBIC)
-        _, bright = cv2.threshold(up, 160, 255, cv2.THRESH_BINARY)
-        inverted = cv2.bitwise_not(bright)
-        return cv2.copyMakeBorder(inverted, 12, 12, 12, 12, cv2.BORDER_CONSTANT, value=255)
+            color = cv2.cvtColor(row, cv2.COLOR_GRAY2BGR)
+
+        up_c = cv2.resize(color, None, fx=5, fy=5, interpolation=cv2.INTER_CUBIC)
+        up_g = cv2.resize(gray, None, fx=5, fy=5, interpolation=cv2.INTER_CUBIC)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(up_g)
+        _, bright = cv2.threshold(up_g, 170, 255, cv2.THRESH_BINARY)
+        _, otsu = cv2.threshold(up_g, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        raw = [up_c, up_g, clahe, bright, cv2.bitwise_not(bright), cv2.bitwise_not(otsu)]
+        return [
+            cv2.copyMakeBorder(
+                v,
+                10,
+                10,
+                10,
+                10,
+                cv2.BORDER_CONSTANT,
+                value=255 if v.ndim == 2 else (255, 255, 255),
+            )
+            for v in raw
+        ]
+
+    def _tesseract_fraction(self, roi: np.ndarray) -> tuple[int, int] | None:
+        if not self._has_tesseract:
+            return None
+        if roi.ndim == 2:
+            img = roi
+        else:
+            img = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            path = tmp.name
+        try:
+            cv2.imwrite(path, img)
+            proc = subprocess.run(
+                [
+                    "tesseract",
+                    path,
+                    "stdout",
+                    "--psm",
+                    "7",
+                    "-c",
+                    "tessedit_char_whitelist=0123456789/",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=8,
+            )
+            text = (proc.stdout or "").strip()
+            return QuantityOCR._parse_fraction_text(text)
+        except Exception as exc:
+            logger.debug("tesseract failed: {}", exc)
+            return None
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    @staticmethod
+    def _score_fraction(frac: tuple[int, int], *, kind: str) -> float:
+        donated, total = frac
+        if total <= 0 or donated < 0 or donated > total:
+            return 0.0
+        score = 1.0
+        if kind == "troop":
+            if total not in _COMMON_TROOP_TOTALS:
+                return 0.0
+            score += 3.0
+            if donated == 0:
+                score += 2.0
+        elif kind == "spell":
+            if total not in {1, 2, 3, 4}:
+                return 0.0
+            score += 3.0
+            if donated == 0:
+                score += 1.5
+        else:  # siege
+            if total not in {1, 2}:
+                return 0.0
+            score += 3.0
+            if donated == 0:
+                score += 1.5
+        return score
 
     @staticmethod
     def _plausible_donated_totals(fractions: list[tuple[int, int]]) -> bool:
-        """Reject readings that look like village HUD (builders 5/5) or junk."""
         if len(fractions) < 3:
             return False
         (td, tt), (sd, st), (gd, gt) = fractions[0], fractions[1], fractions[2]
-        if tt < 1 or tt > 100 or st < 1 or st > 12 or gt < 1 or gt > 4:
+        if tt < 10 or tt > 100 or st < 1 or st > 12 or gt < 1 or gt > 4:
             return False
         if td > tt or sd > st or gd > gt:
             return False
-        # Builders HUD is often 5/5; open CC requests are rarely all tiny equal totals.
         if tt <= 8 and st >= 3 and gt >= 3:
             return False
         if (td, tt) == (sd, st) == (gd, gt):

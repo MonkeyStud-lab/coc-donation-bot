@@ -68,7 +68,17 @@ source .venv/bin/activate
 python -m coc_bot.main
 ```
 
-Stop with `Ctrl+C`.
+A control window opens with:
+
+- **Start bot** / **Stop bot** (Stop leaves Clash running)
+- **Close Waydroid + Clash** — force-stops CoC and stops the Waydroid session
+- **Calibration** tab — shows which steps are Done/Missing; recalibrate one step or all (opens a terminal for the interactive wizard)
+
+Headless / terminal-only (no GUI):
+
+```bash
+python -m coc_bot.main --no-gui
+```
 
 ### Dry-run (detect only, no donation taps)
 

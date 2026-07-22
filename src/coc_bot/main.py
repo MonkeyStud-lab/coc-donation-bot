@@ -83,26 +83,33 @@ class DonationBot:
         self._state_entered = time.monotonic()
         self._frame_count = 0
         self._last_anti_idle = time.monotonic()
+        self._stop_requested = False
+
+    def request_stop(self) -> None:
+        """Ask the main loop to exit after the current tick (leaves CoC running)."""
+        self._stop_requested = True
+        logger.info("Stop requested — bot will exit after the current action")
 
     def run(self) -> None:
         logger.info("CoC Donation Bot starting (dry_run={})", self.config.dry_run)
+        self._stop_requested = False
         try:
             self.client.health_check()
         except AdbError as exc:
             logger.error("ADB health check failed: {}", exc)
-            sys.exit(1)
+            raise
 
         self.break_manager.resume_pending_break()
         self.tracker.start_loop_timing()
 
         if not self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request):
             logger.error("Could not reach clan chat on startup")
-            sys.exit(1)
+            raise RuntimeError("Could not reach clan chat on startup")
 
         self._set_state("scan_chat")
         self._last_anti_idle = time.monotonic()
 
-        while True:
+        while not self._stop_requested:
             try:
                 self._loop_tick()
             except KeyboardInterrupt:
@@ -110,15 +117,24 @@ class DonationBot:
                 self.tracker.tick()
                 break
             except AdbError as exc:
+                if self._stop_requested:
+                    break
                 logger.error("ADB error: {} — reconnecting...", exc)
                 time.sleep(3)
                 self.client.ensure_connected()
             except Exception as exc:
+                if self._stop_requested:
+                    break
                 logger.exception("Unexpected error: {}", exc)
                 self._recover()
                 time.sleep(2)
 
+        self.tracker.tick()
+        logger.info("Bot stopped")
+
     def _loop_tick(self) -> None:
+        if self._stop_requested:
+            return
         self._check_watchdog()
         self._maybe_anti_idle()
 
@@ -330,15 +346,35 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Skip donate taps; navigation still runs")
     parser.add_argument("--debug-save-frames", action="store_true", help="Save debug screenshots")
     parser.add_argument("--debug", action="store_true", help="Verbose logging")
+    parser.add_argument(
+        "--no-gui",
+        action="store_true",
+        help="Run the bot in the terminal only (no control window)",
+    )
     args = parser.parse_args()
 
     setup_logging(debug=args.debug, log_file=Path("data") / "bot.log")
-    bot = DonationBot(
+
+    if args.no_gui:
+        bot = DonationBot(
+            dry_run=args.dry_run,
+            debug_save_frames=args.debug_save_frames,
+            debug=args.debug,
+        )
+        try:
+            bot.run()
+        except (AdbError, RuntimeError) as exc:
+            logger.error("{}", exc)
+            sys.exit(1)
+        return
+
+    from coc_bot.gui.app import run_gui
+
+    run_gui(
         dry_run=args.dry_run,
         debug_save_frames=args.debug_save_frames,
         debug=args.debug,
     )
-    bot.run()
 
 
 if __name__ == "__main__":

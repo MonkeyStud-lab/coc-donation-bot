@@ -131,12 +131,28 @@ class DebugSession:
         return f"Force-stopped {self.config.coc_package}."
 
     def relaunch_coc(self) -> str:
+        pkg = self.config.coc_package
+        was_running = self.app.is_running()
+        if was_running:
+            logger.info("Clash already running — force-stopping before relaunch")
+            self.app.force_stop()
+            time.sleep(2.0)
+
         loading = self.navigator.load_template("loading")
         self.app.launch()
         ready = self.app.wait_until_ready(loading_template=loading)
-        if ready:
+        running = self.app.is_running()
+        if ready and running:
             return "Clash relaunched and appears loaded."
-        return "Clash relaunch timed out waiting for load."
+        if running and not ready:
+            return (
+                "Clash process is running but load wait timed out "
+                "(optional loading template / slow start). Check the game window."
+            )
+        return (
+            "Clash did not start. Try opening it once from Waydroid manually, "
+            "then retry. Also check: waydroid app list | grep -i clash"
+        )
 
     def break_cycle_short(self, wait_seconds: int = 8) -> str:
         """Simulate take-a-break: force-stop, wait, relaunch, reopen chat."""

@@ -46,20 +46,117 @@ class RequestCapacity:
         return self.siege_remaining > 0
 
 
+def find_message_bubble(
+    frame: np.ndarray, donate_button: MatchResult
+) -> tuple[int, int, int, int] | None:
+    """
+    Locate the darker chat-message card that contains this Donate button.
+
+    Clan chat uses a lighter panel background with darker rounded message bubbles.
+    Seeding just left of Donate (inside the card) and flood-filling similar grey
+    keeps OCR/icon search inside one request — resolution-agnostic.
+    """
+    h, w = frame.shape[:2]
+    bx, by = donate_button.x, donate_button.y
+    bw, bh = donate_button.width, donate_button.height
+    cx, cy = donate_button.center
+
+    # Seed inside the bubble: left of the green Donate button.
+    seed_x = max(0, min(w - 1, bx - max(8, bw // 5)))
+    seed_y = max(0, min(h - 1, cy))
+
+    # Search window: chat is on the left; keep village HUD out.
+    x0 = max(0, bx - int(bw * 14))
+    x1 = min(w, bx + bw + 8)
+    y0 = max(0, by - int(bh * 10))
+    y1 = min(h, by + bh + int(bh * 2))
+    if x1 <= x0 or y1 <= y0:
+        return None
+
+    roi = frame[y0:y1, x0:x1]
+    seed_local = (seed_x - x0, seed_y - y0)
+    if not (0 <= seed_local[0] < roi.shape[1] and 0 <= seed_local[1] < roi.shape[0]):
+        return None
+
+    # Flood fill on blurred BGR; darker bubble stays connected around the seed.
+    blur = cv2.GaussianBlur(roi, (5, 5), 0)
+    flood = blur.copy()
+    mask_h, mask_w = flood.shape[:2]
+    mask = np.zeros((mask_h + 2, mask_w + 2), dtype=np.uint8)
+    # Looser thresholds tolerate bubble gradients / slight transparency.
+    cv2.floodFill(
+        flood,
+        mask,
+        seedPoint=seed_local,
+        newVal=(0, 0, 255),
+        loDiff=(12, 12, 12),
+        upDiff=(12, 12, 12),
+        flags=4 | (255 << 8) | cv2.FLOODFILL_MASK_ONLY,
+    )
+    filled = mask[1 : mask_h + 1, 1 : mask_w + 1]
+    if int(np.count_nonzero(filled)) < 500:
+        # Retry with wider color tolerance.
+        flood = blur.copy()
+        mask = np.zeros((mask_h + 2, mask_w + 2), dtype=np.uint8)
+        cv2.floodFill(
+            flood,
+            mask,
+            seedPoint=seed_local,
+            newVal=(0, 0, 255),
+            loDiff=(22, 22, 22),
+            upDiff=(22, 22, 22),
+            flags=4 | (255 << 8) | cv2.FLOODFILL_MASK_ONLY,
+        )
+        filled = mask[1 : mask_h + 1, 1 : mask_w + 1]
+
+    if int(np.count_nonzero(filled)) < 500:
+        return None
+
+    ys, xs = np.where(filled > 0)
+    if len(xs) == 0:
+        return None
+    rx0, rx1 = int(xs.min()), int(xs.max()) + 1
+    ry0, ry1 = int(ys.min()), int(ys.max()) + 1
+
+    # Absolute frame coords; small pad.
+    pad = 4
+    abs_x0 = max(0, x0 + rx0 - pad)
+    abs_y0 = max(0, y0 + ry0 - pad)
+    abs_x1 = min(w, x0 + rx1 + pad)
+    abs_y1 = min(h, y0 + ry1 + pad)
+
+    # Sanity: bubble should cover Donate horizontally/vertically enough.
+    if abs_x1 - abs_x0 < bw or abs_y1 - abs_y0 < bh:
+        return None
+    if not (abs_x0 <= cx <= abs_x1 and abs_y0 <= cy <= abs_y1):
+        # Donate center should lie in/near the bubble (button is on the card).
+        if abs_x1 < bx - 4 or abs_y1 < by - 4:
+            return None
+
+    return abs_x0, abs_y0, abs_x1, abs_y1
+
+
 def chat_message_region(frame: np.ndarray, donate_button: MatchResult) -> np.ndarray:
     """
-    Crop the chat bubble ABOVE and LEFT of Donate.
+    Crop the donation request card for capacity/icon analysis.
 
-    Capacity text (0/35) sits left of the Donate button. Extending far right
-    pulls in village HUD (e.g. builders 5/5) and poisons OCR.
+    Prefer the darker message bubble (color flood from left of Donate).
+    Fall back to a geometry crop left of Donate if bubble detection fails.
     """
+    bubble = find_message_bubble(frame, donate_button)
+    if bubble is not None:
+        x0, y0, x1, y1 = bubble
+        logger.debug("Message bubble at ({},{})-({},{})", x0, y0, x1, y1)
+        return frame[y0:y1, x0:x1].copy()
+
+    logger.debug("Message bubble not found — using geometric left-of-Donate crop")
     h, w = frame.shape[:2]
     bx, by = donate_button.x, donate_button.y
     bw, bh = donate_button.width, donate_button.height
 
     msg_h = max(int(bh * 7), 100)
     y0 = max(0, by - msg_h)
-    y1 = max(0, by + int(bh * 0.05))
+    y1 = max(0, by + bh)
     x0 = max(0, bx - int(bw * 11))
     x1 = min(w, bx + int(bw * 0.2))
 
@@ -76,6 +173,10 @@ class RequestCapacityParser:
         self.config = config
         self.ocr = QuantityOCR(confidence_threshold=config.ocr_confidence_threshold)
         self._has_tesseract = shutil.which("tesseract") is not None
+        if self._has_tesseract:
+            logger.debug("tesseract found — will use as capacity OCR helper")
+        else:
+            logger.debug("tesseract not found — EasyOCR only")
 
     def parse(self, frame: np.ndarray, donate_button: MatchResult) -> RequestCapacity | None:
         region = chat_message_region(frame, donate_button)
@@ -85,21 +186,25 @@ class RequestCapacityParser:
         self._maybe_save_debug(region, "capacity_region.png")
 
         h, w = region.shape[:2]
-        lower = region[int(h * 0.35) : int(h * 0.98), :]
+        # Inside the card: capacity rows are in the lower half (above Donate).
+        # Exclude the green Donate button strip on the far right of the bubble.
+        content = region[:, : max(1, int(w * 0.72))]
+        lower = content[int(h * 0.40) : int(h * 0.92), :]
         if lower.size == 0:
             return None
+        self._maybe_save_debug(lower, "capacity_lower.png")
 
         lh, lw = lower.shape[:2]
         row_h = max(1, lh // 3)
-        # Prefer the rightmost text area (numbers sit near Donate).
-        text_x0 = int(lw * 0.45)
+        # Numbers sit to the right of each icon/bar, still left of Donate.
+        text_x0 = int(lw * 0.38)
         row_rois = [
             lower[0:row_h, text_x0:],
             lower[row_h : 2 * row_h, text_x0:],
             lower[2 * row_h :, text_x0:],
         ]
 
-        logger.info("Running capacity OCR on 3 row text crops...")
+        logger.info("Running capacity OCR on 3 row text crops (bubble-limited)...")
         fractions: list[tuple[int, int] | None] = []
         for idx, row in enumerate(row_rois):
             self._maybe_save_debug(row, f"capacity_row_{idx}.png")
@@ -114,7 +219,9 @@ class RequestCapacityParser:
             logger.info("Lower-band OCR fractions -> {}", band_fracs)
             for i, frac in enumerate(band_fracs):
                 if i < 3 and fractions[i] is None:
-                    fractions[i] = frac
+                    kind = ("troop", "spell", "siege")[i]
+                    if self._score_fraction(frac, kind=kind) > 0:
+                        fractions[i] = frac
 
         if any(f is None for f in fractions):
             logger.debug(
@@ -161,7 +268,6 @@ class RequestCapacityParser:
         candidates: list[tuple[int, int, float]] = []
         variants = self._row_variants(row)
 
-        # Fast path first (tesseract), then EasyOCR.
         readers = []
         if self._has_tesseract:
             readers.append(self._tesseract_fraction)
@@ -179,7 +285,6 @@ class RequestCapacityParser:
                 logger.debug("OCR candidate {} via {} score={:.1f}", frac, reader.__name__, score)
                 if score > 0:
                     candidates.append((frac[0], frac[1], score))
-            # If we already have a strong hit, stop early.
             if candidates and max(c[2] for c in candidates) >= 5.0:
                 break
 
@@ -243,6 +348,8 @@ class RequestCapacityParser:
                 timeout=8,
             )
             text = (proc.stdout or "").strip()
+            if text:
+                logger.debug("tesseract raw text: {!r}", text)
             return QuantityOCR._parse_fraction_text(text)
         except Exception as exc:
             logger.debug("tesseract failed: {}", exc)

@@ -33,30 +33,29 @@ class AppController:
 
     def launch(self) -> None:
         """
-        Start Clash of Clans.
+        Start Clash of Clans inside the Waydroid Android UI.
 
-        Tries several methods because Waydroid often ignores a lone monkey launch.
+        Uses ADB only (am start / monkey). Avoids `waydroid app launch`, which
+        opens CoC as a separate Linux window/dock icon instead of inside
+        show-full-ui.
         """
         pkg = self.config.coc_package
-        logger.info("Launching {}", pkg)
+        logger.info("Launching {} inside Waydroid session", pkg)
 
-        # 1) Host-side Waydroid launcher (most reliable on Ubuntu)
+        # Make sure the full Android UI window is up (not multi-window app mode).
         if shutil.which("waydroid"):
             try:
-                subprocess.run(  # noqa: S603
-                    ["waydroid", "app", "launch", pkg],
-                    check=False,
-                    timeout=45,
-                    capture_output=True,
-                    text=True,
+                subprocess.Popen(  # noqa: S603
+                    ["waydroid", "show-full-ui"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
                 )
-                logger.info("Issued: waydroid app launch {}", pkg)
-            except (OSError, subprocess.TimeoutExpired) as exc:
-                logger.warning("waydroid app launch failed: {}", exc)
+                logger.info("Ensured waydroid show-full-ui")
+                time.sleep(1.5)
+            except OSError as exc:
+                logger.warning("Could not run show-full-ui: {}", exc)
 
-        time.sleep(0.8)
-
-        # 2) Resolve launcher activity and am start
         resolve = self.client.run_shell(
             f"cmd package resolve-activity --brief {pkg}",
             check=False,
@@ -81,7 +80,6 @@ class AppController:
             )
             logger.info("Issued am start for package {}", pkg)
 
-        # 3) Monkey fallback
         self.client.run_shell(
             f"monkey -p {pkg} -c android.intent.category.LAUNCHER 1",
             check=False,

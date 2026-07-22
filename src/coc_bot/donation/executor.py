@@ -98,7 +98,7 @@ class DonationExecutor:
         return donated_any
 
     def _donate_open_colored_scroll(self) -> bool:
-        """Tap every colored slot, scrolling each bar until nothing new remains."""
+        """Tap every colored slot, scrolling each bar a limited number of times."""
         made = False
         for bar_key in self.BAR_KEYS:
             if bar_key not in self.config.rois:
@@ -107,58 +107,53 @@ class DonationExecutor:
                 made = True
         return made
 
+    def _max_scrolls_for_bar(self, bar_roi_key: str) -> int:
+        if bar_roi_key == "donation_spell_bar":
+            return self.config.spell_bar_max_scroll_attempts
+        return self.config.bar_max_scroll_attempts
+
     def _donate_colored_bar(self, bar_roi_key: str) -> bool:
-        max_scrolls = self.config.bar_max_scroll_attempts
-        tapped: set[tuple[int, int]] = set()
+        """
+        Scan for colored slots → tap all → scroll → repeat up to max scrolls.
+
+        Always uses the full scroll budget for the troop bar so siege at the far
+        right is reached (~3 scrolls). After each scroll the view is fully
+        re-scanned (no sticky tap coords).
+        """
+        max_scrolls = self._max_scrolls_for_bar(bar_roi_key)
         made = False
 
+        # Passes = initial view + one scan after each scroll.
         for attempt in range(max_scrolls + 1):
             frame = self.capture.screenshot()
             if not self.classifier.is_donation_panel(frame):
                 break
-            slots = self.inventory_parser.parse_bar_slots(frame, bar_roi_key, identify=False)
-            fresh = [slot for slot in slots if slot.center not in tapped]
-            if not fresh:
-                if attempt == 0:
-                    logger.debug("No colored slots visible in {}", bar_roi_key)
-                if attempt >= max_scrolls:
-                    break
-                x1, y1, x2, y2 = self.inventory_parser.bar_swipe_line(frame, bar_roi_key)
-                logger.debug(
-                    "Scrolling {} toward right ({}/{})",
-                    bar_roi_key,
-                    attempt + 1,
-                    max_scrolls,
-                )
-                self.input.swipe(x1, y1, x2, y2, duration_ms=280)
-                time.sleep(0.35)
-                continue
 
-            for slot in fresh:
+            slots = self.inventory_parser.parse_bar_slots(frame, bar_roi_key, identify=False)
+            if slots:
                 logger.info(
-                    "Open request: tapping {} x{} at {}",
-                    slot.unit_id,
-                    slot.quantity,
-                    slot.center,
+                    "{}: found {} colored slot(s) — tapping",
+                    bar_roi_key,
+                    len(slots),
                 )
-                for _ in range(slot.quantity):
-                    self.input.tap(*slot.center)
-                tapped.add(slot.center)
+                self._tap_colored_slots(slots)
                 made = True
-                time.sleep(0.2)
+                time.sleep(0.35)
+            else:
+                logger.debug("{}: no colored slots on pass {}", bar_roi_key, attempt)
 
             if attempt >= max_scrolls:
                 break
-            # Keep scrolling — siege machines sit at the far right of the troop bar.
+
             x1, y1, x2, y2 = self.inventory_parser.bar_swipe_line(frame, bar_roi_key)
-            logger.debug(
+            logger.info(
                 "Scrolling {} toward right ({}/{})",
                 bar_roi_key,
                 attempt + 1,
                 max_scrolls,
             )
             self.input.swipe(x1, y1, x2, y2, duration_ms=280)
-            time.sleep(0.35)
+            time.sleep(0.45)
 
         return made
 
@@ -169,6 +164,7 @@ class DonationExecutor:
             logger.info("Tapping colored slot {} x{} at {}", slot.unit_id, slot.quantity, slot.center)
             for _ in range(slot.quantity):
                 self.input.tap(*slot.center)
+            time.sleep(0.15)
         return True
 
     def _close_panel(self) -> None:

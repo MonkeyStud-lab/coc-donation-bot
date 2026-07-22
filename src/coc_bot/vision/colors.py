@@ -75,12 +75,23 @@ class SlotColorDetector:
             return False
 
         sample = cell_center_hsv(cell)
+        sat = float(sample[1])
 
         if colored_hsv is not None and grey_hsv is not None:
-            return hsv_distance(sample, colored_hsv) <= hsv_distance(sample, grey_hsv)
+            d_color = hsv_distance(sample, colored_hsv)
+            d_grey = hsv_distance(sample, grey_hsv)
+            if d_color <= d_grey:
+                return True
+            # Requested spells/troops use many hues (Lightning blue vs Freeze cyan).
+            # If the cell is vividly saturated and clearly not grey, treat as donatable.
+            if sat >= self.saturation_threshold and d_grey >= 28.0:
+                return True
+            return False
 
         if colored_hsv is not None:
-            return hsv_distance(sample, colored_hsv) <= 45.0
+            if hsv_distance(sample, colored_hsv) <= 45.0:
+                return True
+            return sat >= self.saturation_threshold
 
         # Fallback: colored icons are saturated; grey icons are not.
-        return float(sample[1]) >= self.saturation_threshold
+        return sat >= self.saturation_threshold

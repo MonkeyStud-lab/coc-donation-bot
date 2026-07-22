@@ -100,42 +100,63 @@ class DonationExecutor:
 
     def _donate_colored_bar(self, bar_roi_key: str) -> bool:
         """
-        Scan for colored slots → tap all → scroll → repeat up to max scrolls.
+        On each view: tap every colored slot (re-scan until none left), then scroll.
 
-        Always uses the full scroll budget for the troop bar so siege at the far
-        right is reached (~3 scrolls). After each scroll the view is fully
-        re-scanned (no sticky tap coords).
+        Never scrolls while colored icons are still visible. Stops after enough
+        consecutive empty views (spells: 1, troops: 2 so siege can still appear).
         """
         max_scrolls = self._max_scrolls_for_bar(bar_roi_key)
+        empty_limit = 1 if bar_roi_key == "donation_spell_bar" else 2
         made = False
+        empty_streak = 0
 
-        # Passes = initial view + one scan after each scroll.
-        for attempt in range(max_scrolls + 1):
-            frame = self.capture.screenshot()
-            if not self.classifier.is_donation_panel(frame):
-                break
+        for scroll_i in range(max_scrolls + 1):
+            tapped_this_view = False
+            # Exhaust colored slots on the current view before any swipe.
+            for _ in range(15):
+                frame = self.capture.screenshot()
+                if not self.classifier.is_donation_panel(frame):
+                    return made
 
-            slots = self.inventory_parser.parse_bar_slots(frame, bar_roi_key, identify=False)
-            if slots:
+                slots = self.inventory_parser.parse_bar_slots(
+                    frame, bar_roi_key, identify=False
+                )
+                if not slots:
+                    break
+
                 logger.info(
-                    "{}: found {} colored slot(s) — tapping",
+                    "{}: found {} colored slot(s) — tapping before scroll",
                     bar_roi_key,
                     len(slots),
                 )
                 self._tap_colored_slots(slots)
                 made = True
-                time.sleep(0.35)
-            else:
-                logger.debug("{}: no colored slots on pass {}", bar_roi_key, attempt)
+                tapped_this_view = True
+                time.sleep(0.4)
 
-            if attempt >= max_scrolls:
+            if tapped_this_view:
+                empty_streak = 0
+            else:
+                empty_streak += 1
+
+            if scroll_i >= max_scrolls:
+                break
+            if empty_streak >= empty_limit and scroll_i > 0:
+                logger.info(
+                    "{}: {} empty view(s) — done scrolling this bar",
+                    bar_roi_key,
+                    empty_streak,
+                )
                 break
 
+            frame = self.capture.screenshot()
+            if not self.classifier.is_donation_panel(frame):
+                break
             x1, y1, x2, y2 = self.inventory_parser.bar_swipe_line(frame, bar_roi_key)
             logger.info(
-                "Scrolling {} toward right ({}/{})",
+                "Scrolling {} toward right ({}/{}) after clearing colored slots",
                 bar_roi_key,
-                attempt + 1,
+                scroll_i + 1,
                 max_scrolls,
             )
             self.input.swipe(x1, y1, x2, y2, duration_ms=280)

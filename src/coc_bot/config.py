@@ -29,6 +29,7 @@ class BotConfig:
     tap_jitter_px: int
     action_delay_ms: tuple[int, int]
     scan_interval_ms: tuple[int, int]
+    anti_idle_seconds: int
     session_limit_seconds: int
     break_min_seconds: int
     break_max_seconds: int
@@ -127,6 +128,7 @@ def load_config(
         tap_jitter_px=timing.get("tap_jitter_px", 6),
         action_delay_ms=tuple(timing.get("action_delay_ms", [120, 350])),
         scan_interval_ms=tuple(timing.get("scan_interval_ms", [800, 1500])),
+        anti_idle_seconds=int(timing.get("anti_idle_seconds", 60)),
         session_limit_seconds=runtime.get("session_limit_seconds", 4 * 3600),
         break_min_seconds=runtime.get("break_min_seconds", 600),
         break_max_seconds=runtime.get("break_max_seconds", 900),

@@ -13,9 +13,11 @@ notify() {
   fi
 }
 
-# Prefer stopping the desktop-started bot process.
+# Stop only the donation loop — do not kill the control GUI (bot_gui.py).
 pkill -f "python -m coc_bot.main" 2>/dev/null || true
-pkill -f "coc_bot.main" 2>/dev/null || true
+pkill -f "[Pp]ython .*-m coc_bot.main" 2>/dev/null || true
+sleep 0.3
+pkill -9 -f "python -m coc_bot.main" 2>/dev/null || true
 
 # Also stop systemd user service if enabled.
 if systemctl --user is-active --quiet coc-donation-bot.service 2>/dev/null; then

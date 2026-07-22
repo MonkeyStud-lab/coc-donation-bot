@@ -82,6 +82,7 @@ class DonationBot:
         self._state = "boot"
         self._state_entered = time.monotonic()
         self._frame_count = 0
+        self._last_anti_idle = time.monotonic()
 
     def run(self) -> None:
         logger.info("CoC Donation Bot starting (dry_run={})", self.config.dry_run)
@@ -99,6 +100,7 @@ class DonationBot:
             sys.exit(1)
 
         self._set_state("scan_chat")
+        self._last_anti_idle = time.monotonic()
 
         while True:
             try:
@@ -118,6 +120,7 @@ class DonationBot:
 
     def _loop_tick(self) -> None:
         self._check_watchdog()
+        self._maybe_anti_idle()
 
         if self.break_manager.check_and_break_if_needed():
             self._set_state("scan_chat")
@@ -137,6 +140,33 @@ class DonationBot:
         self.tracker.tick()
         lo, hi = self.config.scan_interval_ms
         time.sleep(random.uniform(lo, hi) / 1000.0)
+
+    def _maybe_anti_idle(self) -> None:
+        """Tiny chat-panel swipe so CoC does not disconnect for inactivity."""
+        interval = max(20, int(self.config.anti_idle_seconds))
+        # Jitter so the nudge is not perfectly metronomic.
+        due = interval + random.uniform(-8, 8)
+        if time.monotonic() - self._last_anti_idle < due:
+            return
+        # Don't interrupt donation taps / panel opens.
+        if self._state in ("donate", "open_donation"):
+            return
+
+        w = self.config.frame_width or 1853
+        h = self.config.frame_height or 1048
+        if "chat_panel" in self.config.rois:
+            from coc_bot.vision.rois import ROI, roi_center
+
+            cx, cy = roi_center(ROI(*self.config.rois["chat_panel"]), w, h)
+        else:
+            cx, cy = int(w * 0.32), int(h * 0.55)
+
+        dist = random.randint(45, 90)
+        logger.debug("Anti-idle nudge at ({}, {})", cx, cy)
+        self.nav_input.swipe(cx, cy + dist // 2, cx, cy - dist // 2, duration_ms=200)
+        time.sleep(0.12)
+        self.nav_input.swipe(cx, cy - dist // 2, cx, cy + dist // 2, duration_ms=200)
+        self._last_anti_idle = time.monotonic()
 
     def _should_handle_request(self, request: DonateRequest) -> bool:
         if request.kind == RequestKind.SPECIFIC:

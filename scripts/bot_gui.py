@@ -180,11 +180,15 @@ class BotGui(tk.Tk):
                         proc.kill()
                     except OSError:
                         pass
+        self._bot_proc = None
         self.set_status("Bot stopped")
         self._start_btn.configure(state=tk.NORMAL)
         self._stop_btn.configure(state=tk.DISABLED)
         self.append_log("==> Bot shut off (game left running)")
-
+        self.append_log(
+            "Tip: if CoC is still laggy, force-close and reopen it — "
+            "Waydroid often needs a game restart after heavy ADB screenshots."
+        )
     def on_quit(self) -> None:
         if self._bot_running() or self._starting:
             self.stop_bot()

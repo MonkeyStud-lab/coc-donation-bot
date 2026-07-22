@@ -16,6 +16,7 @@ timing:
   tap_jitter_px: 6
   action_delay_ms: [120, 350]
   scan_interval_ms: [800, 1500]
+  anti_idle_seconds: 60   # small screen nudge so CoC does not idle-kick
 
 runtime:
   session_limit_seconds: 14400  # 4 hours

@@ -69,9 +69,10 @@ cd ~/Projects/coc-donation-bot
 Then double-click **CoC Donation Bot**. A control window opens that:
 
 1. Auto-installs missing deps on first run (if setup was skipped)
-2. Starts Waydroid / ADB / Clash of Clans if needed
-3. Runs the donation bot
-4. Lets you **Shut off** the bot from the same window (game stays open)
+2. Opens **Waydroid** (full UI)
+3. Opens **Clash of Clans**
+4. Runs the donation bot
+5. Lets you **Shut off** the bot from the same window (game stays open)
 
 If Ubuntu asks, choose **Allow Launching** / **Trust and Launch**. Delete any old **Stop CoC Donation Bot** icon if it is still on the desktop.
 

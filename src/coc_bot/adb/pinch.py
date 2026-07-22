@@ -222,21 +222,64 @@ def _write_remote_script(client: AdbClient, remote_path: str, content: str) -> N
         raise AdbError(f"Failed to write {remote_path}: {stderr}")
 
 
+def _run_via_waydroid_shell(remote_path: str) -> tuple[bool, str]:
+    """
+    Waydroid blocks ``adb root``. Privileged actions need host ``waydroid shell``.
+
+    Tries passwordless sudo first, then plain ``waydroid shell``.
+    """
+    import shutil
+    import subprocess
+
+    if shutil.which("waydroid") is None:
+        return False, "waydroid command not found on PATH"
+
+    # Ensure executable bit inside the container (adb shell is enough for chmod).
+    runners = [
+        ["sudo", "-n", "waydroid", "shell", "sh", remote_path],
+        ["waydroid", "shell", "sh", remote_path],
+    ]
+    last = "waydroid shell failed"
+    for cmd in runners:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=45,
+            check=False,
+        )
+        out = ((result.stdout or "") + (result.stderr or "")).strip()
+        last = out or f"exit {result.returncode}"
+        if result.returncode == 0 and "Permission denied" not in out:
+            return True, " ".join(cmd[:3]) if cmd[0] == "sudo" else "waydroid shell"
+        logger.debug("Pinch via {} failed: {}", " ".join(cmd), last)
+    return False, last
+
+
 def _run_remote_script(client: AdbClient, remote_path: str) -> tuple[bool, str]:
-    """Execute script; try plain sh then su if permission denied."""
-    for prefix in ("sh", "su 0 sh", "su -c sh"):
-        if prefix == "sh":
-            cmd = f"chmod 755 {remote_path} && sh {remote_path}"
-        elif prefix == "su 0 sh":
-            cmd = f"su 0 sh {remote_path}"
-        else:
-            cmd = f"su -c 'sh {remote_path}'"
+    """Execute pinch script — ADB shell first, then Waydroid root shell."""
+    client.run_shell(f"chmod 755 {remote_path}", check=False)
+
+    for label, cmd in (
+        ("adb sh", f"sh {remote_path}"),
+        ("adb su 0", f"su 0 sh {remote_path}"),
+    ):
         result = client.run_shell(cmd, check=False)
         out = ((result.stdout or "") + (result.stderr or "")).strip()
         if result.returncode == 0 and "Permission denied" not in out:
-            return True, f"ran via {prefix}"
-        logger.debug("Pinch script via {} failed (code={}): {}", prefix, result.returncode, out)
-    return False, out or "permission denied writing /dev/input (try: adb root)"
+            return True, label
+        logger.debug("Pinch script via {} failed (code={}): {}", label, result.returncode, out)
+
+    ok, detail = _run_via_waydroid_shell(remote_path)
+    if ok:
+        return True, detail
+
+    return (
+        False,
+        detail
+        or "need privileged waydroid shell to write /dev/input "
+        "(Waydroid does not support adb root). Try once: sudo waydroid shell",
+    )
 
 
 def pinch_zoom_out_sendevent(
@@ -246,13 +289,7 @@ def pinch_zoom_out_sendevent(
     *,
     repeats: int = 3,
 ) -> ZoomResult:
-    try:
-        client.run(["root"], check=False)
-        time.sleep(0.4)
-        client.ensure_connected()
-    except Exception:  # noqa: BLE001
-        logger.debug("adb root not available — continuing without it")
-
+    # Note: ``adb root`` is intentionally disabled on Waydroid.
     device = discover_touch_device(client)
     if device is None:
         return ZoomResult(False, "sendevent", "no multitouch device found")
@@ -299,18 +336,15 @@ def zoom_out(
     result = pinch_zoom_out_sendevent(client, width, height, repeats=repeats)
     if result.ok:
         return result
-    logger.warning("Sendevent pinch failed: {} — trying keyevent fallback", result.detail)
-    key = pinch_zoom_out_keyevent(client, repeats=10)
-    if key.ok:
-        # Keyevent "succeeds" at sending keys even if CoC ignores them.
-        return ZoomResult(
-            False,
-            "failed",
-            f"sendevent failed ({result.detail}); keyevent sent but CoC usually ignores it. "
-            "Enable Developer Options → Show taps, run: adb root, then retry Zoom out.",
-        )
+    logger.warning("Sendevent pinch failed: {}", result.detail)
     return ZoomResult(
         False,
         "failed",
-        f"Could not zoom. sendevent: {result.detail}. On Waydroid try: adb root",
+        f"{result.detail}\n\n"
+        "Waydroid blocks adb root. Zoom needs a privileged Waydroid shell.\n"
+        "One-time setup (allows passwordless zoom):\n"
+        "  sudo visudo\n"
+        "  # add:  YOUR_USER ALL=(root) NOPASSWD: /usr/bin/waydroid shell\n"
+        "Or run once manually to test:\n"
+        "  sudo waydroid shell sh /data/local/tmp/coc_pinch_zoom.sh",
     )

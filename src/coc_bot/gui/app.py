@@ -561,10 +561,7 @@ class BotControlApp(tk.Tk):
                         messagebox.showwarning(
                             "Zoom out failed",
                             result.detail
-                            + "\n\nOn the server try:\n"
-                            "  adb root\n"
-                            "then press Zoom out again.\n"
-                            "(Developer Options → Show taps helps verify touches.)",
+                            + "\n\n(Waydroid does not support adb root — use waydroid shell instead.)",
                         )
 
                 self.after(0, done)

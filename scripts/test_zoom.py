@@ -22,8 +22,7 @@ def main() -> int:
     client = AdbClient(device=config.adb_device)
     client.health_check()
 
-    print("Attempting adb root…")
-    client.run(["root"], check=False)
+    print("Note: Waydroid does not support adb root; zoom uses waydroid shell if needed.")
 
     device = discover_touch_device(client)
     if device:

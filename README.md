@@ -70,9 +70,10 @@ python -m coc_bot.main
 
 A control window opens with:
 
-- **Start bot** / **Stop bot** (Stop leaves Clash running)
-- **Close Waydroid + Clash** — force-stops CoC and stops the Waydroid session
-- **Calibration** tab — shows which steps are Done/Missing; recalibrate one step or all (opens a terminal for the interactive wizard)
+- **Bot** — Start / Stop (Clash stays open) and Close Waydroid + Clash
+- **Settings** — screenshot interval, anti-idle interval, donation/break options, and more (with descriptions); saved to `data/user_settings.yaml`
+- **Calibration** — Done/Missing steps; recalibrate one step or all
+- **Debugging** — one-shot tests (open chat, classify request, open/close donation, break/relaunch cycle, etc.)
 
 Headless / terminal-only (no GUI):
 

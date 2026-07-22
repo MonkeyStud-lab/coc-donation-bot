@@ -15,7 +15,9 @@ from tkinter import messagebox, scrolledtext, ttk
 from loguru import logger
 
 from coc_bot.calibration.wizard import STEP_IDS, STEPS, CalibrationWizard
-from coc_bot.config import load_config
+from coc_bot.config import load_config, user_settings_path
+from coc_bot.gui.debug_actions import DEBUG_ACTIONS, run_debug_action
+from coc_bot.gui.settings_fields import SETTINGS, current_setting_values, save_settings_from_gui
 
 
 def _project_root() -> Path:
@@ -58,8 +60,8 @@ class BotControlApp(tk.Tk):
     ) -> None:
         super().__init__()
         self.title("CoC Donation Bot")
-        self.geometry("640x480")
-        self.minsize(520, 400)
+        self.geometry("720x560")
+        self.minsize(600, 460)
 
         self._dry_run = dry_run
         self._debug_save_frames = debug_save_frames
@@ -67,18 +69,26 @@ class BotControlApp(tk.Tk):
         self._bot = None
         self._bot_thread: threading.Thread | None = None
         self._log_sink_id: int | None = None
+        self._setting_vars: dict[str, tk.Variable] = {}
+        self._debug_busy = False
 
         self._status = tk.StringVar(value="Ready — open Waydroid + CoC, then press Start")
         notebook = ttk.Notebook(self)
         notebook.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
         self._control_tab = ttk.Frame(notebook, padding=8)
+        self._settings_tab = ttk.Frame(notebook, padding=8)
         self._calib_tab = ttk.Frame(notebook, padding=8)
+        self._debug_tab = ttk.Frame(notebook, padding=8)
         notebook.add(self._control_tab, text="Bot")
+        notebook.add(self._settings_tab, text="Settings")
         notebook.add(self._calib_tab, text="Calibration")
+        notebook.add(self._debug_tab, text="Debugging")
 
         self._build_control_tab()
+        self._build_settings_tab()
         self._build_calib_tab()
+        self._build_debug_tab()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(400, self._refresh_calib_status)
         self._install_log_sink()
@@ -86,7 +96,9 @@ class BotControlApp(tk.Tk):
     def _build_control_tab(self) -> None:
         top = ttk.Frame(self._control_tab)
         top.pack(fill=tk.X)
-        ttk.Label(top, textvariable=self._status, wraplength=560).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(top, textvariable=self._status, wraplength=640).pack(
+            side=tk.LEFT, fill=tk.X, expand=True
+        )
 
         btns = ttk.Frame(self._control_tab)
         btns.pack(fill=tk.X, pady=(10, 6))
@@ -101,15 +113,100 @@ class BotControlApp(tk.Tk):
         ).pack(side=tk.RIGHT)
 
         ttk.Label(self._control_tab, text="Log").pack(anchor=tk.W, pady=(8, 2))
-        self._log = scrolledtext.ScrolledText(self._control_tab, height=16, state=tk.DISABLED, wrap=tk.WORD)
+        self._log = scrolledtext.ScrolledText(
+            self._control_tab, height=16, state=tk.DISABLED, wrap=tk.WORD
+        )
         self._log.pack(fill=tk.BOTH, expand=True)
+
+    def _build_settings_tab(self) -> None:
+        ttk.Label(
+            self._settings_tab,
+            text="Saved to data/user_settings.yaml. Restart the bot (Stop → Start) after saving "
+            "so a running loop picks up changes.",
+            wraplength=660,
+        ).pack(anchor=tk.W, pady=(0, 8))
+
+        canvas = tk.Canvas(self._settings_tab, highlightthickness=0)
+        scroll = ttk.Scrollbar(self._settings_tab, orient=tk.VERTICAL, command=canvas.yview)
+        inner = ttk.Frame(canvas)
+        inner.bind(
+            "<Configure>",
+            lambda _e: canvas.configure(scrollregion=canvas.bbox("all")),
+        )
+        canvas.create_window((0, 0), window=inner, anchor=tk.NW)
+        canvas.configure(yscrollcommand=scroll.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        def _on_mousewheel(event: tk.Event) -> None:
+            canvas.yview_scroll(int(-event.delta / 120), "units")
+
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        values = current_setting_values()
+        current_section = None
+        for field in SETTINGS:
+            if field.section != current_section:
+                current_section = field.section
+                ttk.Label(inner, text=current_section, font=("", 10, "bold")).pack(
+                    anchor=tk.W, pady=(12, 4)
+                )
+
+            block = ttk.Frame(inner)
+            block.pack(fill=tk.X, pady=4)
+            ttk.Label(block, text=field.label).pack(anchor=tk.W)
+            ttk.Label(block, text=field.description, wraplength=620, foreground="#444").pack(
+                anchor=tk.W
+            )
+
+            if field.kind == "bool":
+                var: tk.Variable = tk.BooleanVar(value=bool(values[field.key]))
+                ttk.Checkbutton(block, text="Enabled", variable=var).pack(anchor=tk.W, pady=(2, 0))
+            else:
+                var = tk.StringVar(value=str(values[field.key]))
+                ttk.Entry(block, textvariable=var, width=48).pack(anchor=tk.W, pady=(2, 0))
+            self._setting_vars[field.key] = var
+
+        btns = ttk.Frame(self._settings_tab)
+        btns.pack(fill=tk.X, pady=(8, 0))
+        ttk.Button(btns, text="Reload from disk", command=self._reload_settings_fields).pack(
+            side=tk.LEFT
+        )
+        ttk.Button(btns, text="Save settings", command=self._save_settings).pack(side=tk.LEFT, padx=8)
+
+    def _reload_settings_fields(self) -> None:
+        values = current_setting_values()
+        for field in SETTINGS:
+            var = self._setting_vars[field.key]
+            if field.kind == "bool":
+                var.set(bool(values[field.key]))
+            else:
+                var.set(str(values[field.key]))
+        self._append_log("==> Settings reloaded from disk")
+
+    def _save_settings(self) -> None:
+        try:
+            values: dict[str, str | bool] = {}
+            for field in SETTINGS:
+                var = self._setting_vars[field.key]
+                values[field.key] = bool(var.get()) if field.kind == "bool" else str(var.get())
+            save_settings_from_gui(values)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Invalid settings", str(exc))
+            return
+        path = user_settings_path()
+        self._append_log(f"==> Settings saved to {path}")
+        messagebox.showinfo(
+            "Saved",
+            f"Settings saved to:\n{path}\n\nStop and Start the bot to apply them to a running loop.",
+        )
 
     def _build_calib_tab(self) -> None:
         ttk.Label(
             self._calib_tab,
             text="Calibration runs in a separate terminal (needs OpenCV pickers). "
-            "Open Waydroid + CoC on the right screen first.",
-            wraplength=580,
+            "Open Waydroid + CoC first.",
+            wraplength=660,
         ).pack(anchor=tk.W, pady=(0, 8))
 
         cols = ("step", "title", "status")
@@ -120,7 +217,7 @@ class BotControlApp(tk.Tk):
         self._calib_tree.heading("title", text="Title")
         self._calib_tree.heading("status", text="Status")
         self._calib_tree.column("step", width=120, stretch=False)
-        self._calib_tree.column("title", width=220)
+        self._calib_tree.column("title", width=240)
         self._calib_tree.column("status", width=100, stretch=False)
         self._calib_tree.pack(fill=tk.BOTH, expand=True)
 
@@ -130,13 +227,76 @@ class BotControlApp(tk.Tk):
         ttk.Button(row, text="Recalibrate selected", command=self._recalibrate_selected).pack(
             side=tk.LEFT, padx=(8, 0)
         )
-        ttk.Button(row, text="Recalibrate all", command=self._recalibrate_all).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(row, text="Recalibrate all", command=self._recalibrate_all).pack(
+            side=tk.LEFT, padx=(8, 0)
+        )
 
-        detail = ttk.Frame(self._calib_tab)
-        detail.pack(fill=tk.X, pady=(8, 0))
         self._calib_detail = tk.StringVar(value="")
-        ttk.Label(detail, textvariable=self._calib_detail, wraplength=580).pack(anchor=tk.W)
+        ttk.Label(self._calib_tab, textvariable=self._calib_detail, wraplength=660).pack(
+            anchor=tk.W, pady=(8, 0)
+        )
         self._calib_tree.bind("<<TreeviewSelect>>", self._on_calib_select)
+
+    def _build_debug_tab(self) -> None:
+        ttk.Label(
+            self._debug_tab,
+            text="Run one step at a time while CoC is open. Stop the bot first so tests "
+            "do not fight the main loop. Results also appear in the Bot tab log.",
+            wraplength=660,
+        ).pack(anchor=tk.W, pady=(0, 8))
+
+        canvas = tk.Canvas(self._debug_tab, highlightthickness=0)
+        scroll = ttk.Scrollbar(self._debug_tab, orient=tk.VERTICAL, command=canvas.yview)
+        inner = ttk.Frame(canvas)
+        inner.bind(
+            "<Configure>",
+            lambda _e: canvas.configure(scrollregion=canvas.bbox("all")),
+        )
+        canvas.create_window((0, 0), window=inner, anchor=tk.NW)
+        canvas.configure(yscrollcommand=scroll.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        for action_id, label, description in DEBUG_ACTIONS:
+            block = ttk.Frame(inner)
+            block.pack(fill=tk.X, pady=6)
+            ttk.Button(
+                block,
+                text=label,
+                command=lambda aid=action_id: self._run_debug(aid),
+            ).pack(anchor=tk.W)
+            ttk.Label(block, text=description, wraplength=620, foreground="#444").pack(anchor=tk.W)
+
+        self._debug_result = tk.StringVar(value="")
+        ttk.Label(self._debug_tab, textvariable=self._debug_result, wraplength=660).pack(
+            anchor=tk.W, pady=(8, 0)
+        )
+
+    def _run_debug(self, action_id: str) -> None:
+        if self._bot_running():
+            messagebox.showwarning(
+                "Bot running",
+                "Stop the bot before running debug actions so they do not conflict.",
+            )
+            return
+        if self._debug_busy:
+            return
+        self._debug_busy = True
+        self._debug_result.set(f"Running {action_id}…")
+        self._append_log(f"==> Debug: {action_id}")
+
+        def worker() -> None:
+            result = run_debug_action(action_id)
+            logger.info("Debug {}: {}", action_id, result)
+
+            def done() -> None:
+                self._debug_busy = False
+                self._debug_result.set(result)
+                self._append_log(result)
+
+            self.after(0, done)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _install_log_sink(self) -> None:
         def sink(message: str) -> None:
@@ -302,8 +462,10 @@ class BotControlApp(tk.Tk):
             messagebox.showerror("Missing script", f"Not found: {script}")
             return
         py = sys.executable
-        cmd = f"cd {shlex.quote(str(_project_root()))} && {shlex.quote(py)} {shlex.quote(str(script))} " + " ".join(
-            shlex.quote(a) for a in extra_args
+        cmd = (
+            f"cd {shlex.quote(str(_project_root()))} && {shlex.quote(py)} "
+            f"{shlex.quote(str(script))} "
+            + " ".join(shlex.quote(a) for a in extra_args)
         )
         self._append_log(f"==> Opening calibration terminal: {' '.join(extra_args)}")
         if not _open_in_terminal(cmd):
@@ -331,6 +493,10 @@ class BotControlApp(tk.Tk):
                 logger.remove(self._log_sink_id)
             except ValueError:
                 pass
+        try:
+            self.unbind_all("<MouseWheel>")
+        except tk.TclError:
+            pass
         self.destroy()
 
 

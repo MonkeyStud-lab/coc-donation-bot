@@ -13,6 +13,7 @@ data/debug/
 data/templates/
 data/icons/
 data/bot.log
+data/user_settings.yaml
 logs/
 .setup_linux_stamp
 

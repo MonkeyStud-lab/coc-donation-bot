@@ -92,6 +92,37 @@ def _load_clan_perks(root: Path) -> dict[int, DonationLimits]:
     return limits
 
 
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            _deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
+def user_settings_path(root: Path | None = None) -> Path:
+    root = root or _project_root()
+    return root / "data" / "user_settings.yaml"
+
+
+def load_user_settings(path: Path | None = None) -> dict[str, Any]:
+    path = path or user_settings_path()
+    if not path.exists():
+        return {}
+    with open(path, encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_user_settings(payload: dict[str, Any], path: Path | None = None) -> Path:
+    path = path or user_settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(payload, f, default_flow_style=False, sort_keys=False)
+    return path
+
+
 def load_config(
     default_path: Path | None = None,
     calibrated_path: Path | None = None,
@@ -103,14 +134,19 @@ def load_config(
     )
 
     with open(default_path, encoding="utf-8") as f:
-        defaults = yaml.safe_load(f)
+        defaults = yaml.safe_load(f) or {}
 
     calibrated: dict[str, Any] = {}
     if calibrated_path.exists():
         with open(calibrated_path, encoding="utf-8") as f:
             calibrated = yaml.safe_load(f) or {}
 
-    merged = {**defaults, **calibrated}
+    merged: dict[str, Any] = dict(defaults)
+    _deep_merge(merged, load_user_settings(user_settings_path(root)))
+    for key in ("frame_width", "frame_height", "rois", "tap_points", "templates", "colors", "grid"):
+        if key in calibrated:
+            merged[key] = calibrated[key]
+
     adb = merged.get("adb", {})
     vision = merged.get("vision", {})
     timing = merged.get("timing", {})
@@ -134,13 +170,13 @@ def load_config(
         break_max_seconds=runtime.get("break_max_seconds", 900),
         game_load_timeout_seconds=runtime.get("game_load_timeout_seconds", 90),
         state_watchdog_seconds=runtime.get("state_watchdog_seconds", 45),
-        frame_width=calibrated.get("frame_width", 0),
-        frame_height=calibrated.get("frame_height", 0),
-        rois=calibrated.get("rois", {}),
-        tap_points=calibrated.get("tap_points", {}),
-        templates=calibrated.get("templates", {}),
-        colors=calibrated.get("colors", {}),
-        grid=calibrated.get("grid", {}),
+        frame_width=int(merged.get("frame_width") or 0),
+        frame_height=int(merged.get("frame_height") or 0),
+        rois=merged.get("rois") or {},
+        tap_points=merged.get("tap_points") or {},
+        templates=merged.get("templates") or {},
+        colors=merged.get("colors") or {},
+        grid=merged.get("grid") or {},
         donation_order=donation.get("order", ["troop", "spell", "siege"]),
         handled_request_ttl_seconds=donation.get("handled_request_ttl_seconds", 120),
         chat_max_scroll_attempts=donation.get("chat_max_scroll_attempts", 20),

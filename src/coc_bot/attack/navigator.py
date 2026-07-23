@@ -125,9 +125,11 @@ class AttackNavigator:
                 time.sleep(0.8)
                 continue
             if screen == ScreenType.CLAN_CHAT:
-                if not self._tap_named("open_chat", frame):
-                    h, w = frame.shape[:2]
-                    self.input.tap(int(w * 0.72), int(h * 0.45), jitter=0)
+                # Orange ``<`` tab on the chat edge — NOT the same as open_chat.
+                if self.donation_nav is not None:
+                    self.donation_nav.close_clan_chat(frame)
+                else:
+                    self._close_clan_chat_fallback(frame)
                 time.sleep(0.8)
                 continue
             if screen in (
@@ -156,6 +158,16 @@ class AttackNavigator:
         h, w = frame.shape[:2]
         self.input.tap(int(w * 0.50), int(h * 0.28), jitter=2)
         time.sleep(0.35)
+
+    def _close_clan_chat_fallback(self, frame: np.ndarray) -> None:
+        """Close chat when donation Navigator is unavailable."""
+        point = self.config.tap_points.get("close_chat")
+        if point:
+            self.input.tap(int(point[0]), int(point[1]), jitter=0)
+            return
+        h, w = frame.shape[:2]
+        # Typical orange < tab on the right edge of an open chat panel.
+        self.input.tap(int(w * 0.32), int(h * 0.48), jitter=0)
 
     def find_attack_button_candidates(self, frame: np.ndarray) -> list[tuple[int, int]]:
         """Few high-confidence Attack! taps — avoid long grids that re-close the menu."""

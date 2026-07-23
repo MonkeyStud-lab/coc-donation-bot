@@ -152,6 +152,105 @@ class Navigator:
         logger.info("Fallback tap to open chat at ({}, {})", fx, fy)
         self.input.tap(fx, fy)
 
+    def find_close_chat_tab(self, frame: np.ndarray) -> tuple[int, int] | None:
+        """
+        Locate the orange ``<`` tab on the right edge of an open clan chat panel.
+
+        This is NOT the same control as open_chat (chat bubble / ``>`` on home).
+        """
+        h, w = frame.shape[:2]
+        # Prefer the right strip of the calibrated chat panel.
+        if "chat_panel" in self.config.rois:
+            from coc_bot.vision.rois import crop_roi
+
+            x, y, rw, rh = denormalize_roi(ROI(**self.config.rois["chat_panel"]), w, h)
+            # Search a band just inside/outside the panel's right edge.
+            x0 = max(0, x + int(rw * 0.88))
+            x1 = min(w, x + rw + int(w * 0.04))
+            y0 = max(0, y + int(rh * 0.25))
+            y1 = min(h, y + int(rh * 0.75))
+        else:
+            # Chat usually covers ~left third; tab sits on its right edge, mid-height.
+            x0, x1 = int(w * 0.22), int(w * 0.40)
+            y0, y1 = int(h * 0.30), int(h * 0.70)
+
+        crop = frame[y0:y1, x0:x1]
+        if crop.size == 0:
+            return None
+
+        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+        orange = cv2.inRange(hsv, (5, 100, 100), (30, 255, 255))
+        orange = cv2.morphologyEx(
+            orange, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 9))
+        )
+        contours, _ = cv2.findContours(orange, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+
+        best = None
+        best_score = -1.0
+        crop_h, crop_w = crop.shape[:2]
+        min_area = max(40.0, crop_w * crop_h * 0.002)
+        for cnt in contours:
+            area = float(cv2.contourArea(cnt))
+            if area < min_area:
+                continue
+            bx, by, bw, bh = cv2.boundingRect(cnt)
+            # Tab is a small upright chip (taller than wide, or roughly square).
+            aspect = bw / max(1, bh)
+            if aspect > 1.6 or bh < 8:
+                continue
+            cx, cy = bx + bw / 2.0, by + bh / 2.0
+            # Prefer mid-height, larger blobs.
+            score = area - abs(cy - crop_h / 2) * 0.4
+            if score > best_score:
+                best_score = score
+                best = (int(x0 + cx), int(y0 + cy))
+        return best
+
+    def close_clan_chat(self, frame: np.ndarray | None = None) -> bool:
+        """
+        Close an open clan chat panel via the orange ``<`` edge tab.
+
+        Returns True if a close control was tapped.
+        """
+        if frame is None:
+            frame = self.capture.screenshot()
+
+        point = self.config.tap_points.get("close_chat")
+        if point:
+            logger.info("Closing clan chat via tap point ({}, {})", point[0], point[1])
+            self.input.tap(int(point[0]), int(point[1]), jitter=0)
+            return True
+
+        template = self.load_template("close_chat")
+        if template is not None:
+            match = self.matcher.find(frame, template, threshold=max(0.70, self.config.template_threshold - 0.10))
+            if match:
+                cx, cy = match.center
+                logger.info("Closing clan chat via template at ({}, {})", cx, cy)
+                self.input.tap(cx, cy, jitter=0)
+                return True
+
+        tab = self.find_close_chat_tab(frame)
+        if tab is not None:
+            logger.info("Closing clan chat via orange < tab at ({}, {})", tab[0], tab[1])
+            self.input.tap(tab[0], tab[1], jitter=0)
+            return True
+
+        # Last resort: right edge of chat_panel ROI center.
+        if "chat_panel" in self.config.rois:
+            h, w = frame.shape[:2]
+            x, y, rw, rh = denormalize_roi(ROI(**self.config.rois["chat_panel"]), w, h)
+            cx = x + rw - max(8, int(rw * 0.03))
+            cy = y + rh // 2
+            logger.warning("close_chat missing — tapping chat panel right edge ({}, {})", cx, cy)
+            self.input.tap(cx, cy, jitter=0)
+            return True
+
+        logger.warning("Could not find close_chat control")
+        return False
+
     def close_donation_panel(self, frame: np.ndarray | None = None) -> None:
         """Close donation panel by tapping outside it (CoC has no X button)."""
         if frame is None:

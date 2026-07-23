@@ -53,7 +53,7 @@ STEPS: dict[str, CalibrationStep] = {
     "clan_chat": CalibrationStep(
         "clan_chat",
         "Clan chat",
-        "Chat ROIs, clan_chat anchor, top exclamation + bottom scroll-down icons",
+        "Chat ROIs, clan_chat anchor, close-chat tab, jump icons",
         ("chat_panel", "chat_requests", "clan_chat", "chat_scroll_down", "chat_request_jump"),
     ),
     "donation_request": CalibrationStep(
@@ -370,13 +370,17 @@ class CalibrationWizard:
         )
 
         print("\n--- Open chat button (must be captured from HOME screen) ---")
+        print(
+            "This is the control that OPENS chat from home (bubble / ``>`` tab).\n"
+            "Closing chat uses a different orange ``<`` tab — calibrated in the Clan chat step."
+        )
         has_open = self._has_template("open_chat") or self._has_tap("open_chat")
         if not has_open or prompt_yes_no("Update open_chat button?"):
             if prompt_yes_no("Capture open_chat button as image template?"):
-                coords, picked = self._pick_roi("Chat bubble on the LEFT of home screen", frame)
+                coords, picked = self._pick_roi("Chat bubble / open-chat control on HOME", frame)
                 self._save_template_from_frame(picked, coords, "ui/open_chat.png", "open_chat")
             else:
-                pt = self._pick_point("Tap point at CENTER of chat bubble", frame)
+                pt = self._pick_point("Tap point at CENTER of open-chat control", frame)
                 self.config.tap_points["open_chat"] = list(pt)
                 logger.info("Saved tap point open_chat")
         else:
@@ -402,6 +406,22 @@ class CalibrationWizard:
             "ui/clan_chat.png",
             frame,
         )
+
+        print(
+            "\n--- Close chat tab (orange ``<`` on the right edge of the open chat panel) ---\n"
+            "This is DIFFERENT from the open-chat bubble on home.\n"
+            "With clan chat OPEN, tap the small orange tab with the left arrow."
+        )
+        has_close = self._has_tap("close_chat") or self._has_template("close_chat")
+        if not has_close or prompt_yes_no("Update close_chat control?"):
+            if prompt_yes_no("Capture close_chat as image template?"):
+                coords, picked = self._pick_roi("Orange < close-chat tab", frame)
+                self._save_template_from_frame(picked, coords, "ui/close_chat.png", "close_chat")
+            pt = self._pick_point("Tap point at CENTER of the orange < close tab", frame)
+            self.config.tap_points["close_chat"] = list(pt)
+            logger.info("Saved tap point close_chat")
+        else:
+            _keeping("close_chat")
 
         print(
             "\n--- Scroll-down / jump icon at bottom (optional legacy template) ---\n"

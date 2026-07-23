@@ -613,7 +613,14 @@ class ScreenClassifier:
         screen (avoids scenery greens mid-fight). Pass
         ``require_no_live_chrome=False`` when leave logic needs to see the CTA
         even if red/orange scenery falsely trips the chrome heuristic.
+
+        Never matches when village home anchors are visible — home greens
+        (buttons, grass, shops) often look like Return Home.
         """
+        if self._home_attack_chip_visible(frame) or self._open_chat_icon_visible(frame):
+            return None
+        if self._clan_chat_anchor_visible(frame):
+            return None
         if require_no_live_chrome and self._live_battle_chrome_visible(frame):
             return None
         return self._find_return_home_green_cta(frame)
@@ -822,6 +829,14 @@ class ScreenClassifier:
         # Someone attacking *us* — wait it out, never farm Return Home.
         if self.looks_like_live_replay(frame):
             return ScreenType.LIVE_REPLAY
+
+        # Attack! / open-chat mean village home — reconsider before results/battle.
+        # After Return Home, home greens and red roofs otherwise look like results.
+        if self._home_blocking_popup(frame):
+            return ScreenType.POPUP
+        if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
+            return ScreenType.HOME
+
         # Live End Battle / Next wins over any false Return Home green blob.
         if self._live_battle_chrome_visible(frame):
             return ScreenType.BATTLE
@@ -837,11 +852,6 @@ class ScreenClassifier:
             return ScreenType.MATCHMAKING
         if self._looks_like_attack_menu(frame):
             return ScreenType.ATTACK_MENU
-        # Star Bonus / news on home after Return Home — before HOME chip wins.
-        if self._home_blocking_popup(frame):
-            return ScreenType.POPUP
-        if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
-            return ScreenType.HOME
         if self._is_home_screen(frame):
             return ScreenType.HOME
         if self.looks_like_blocking_popup(frame):

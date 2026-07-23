@@ -580,7 +580,7 @@ class AttackNavigator:
                         return False
                     continue
                 logger.info(
-                    "Village anchors visible (screen={}) — confirming via clan chat",
+                    "Attack! / village anchors visible (screen={}) — confirming via clan chat",
                     screen.value,
                 )
                 outcome = self._confirm_leave_via_clan_chat()
@@ -779,13 +779,26 @@ class AttackNavigator:
 
     def _village_home_anchors_visible(self, frame) -> bool:
         """True when Attack! / open-chat / clan-chat UI says we are on the village."""
-        if self.attack_button_visible(frame):
-            return True
-        if self.classifier._home_attack_chip_visible(frame):  # noqa: SLF001
+        if self._attack_chip_on_home(frame):
             return True
         if self.classifier._open_chat_icon_visible(frame):  # noqa: SLF001
             return True
         if self.classifier._clan_chat_anchor_visible(frame):  # noqa: SLF001
+            return True
+        return False
+
+    def _attack_chip_on_home(self, frame) -> bool:
+        """
+        Attack! bottom-left chip — strong proof we are on the home village.
+
+        Uses both the blob finder and the warm-color heuristic so a miss on one
+        still reconsider home.
+        """
+        if self.attack_button_visible(frame):
+            return True
+        if self.classifier._home_attack_chip_visible(frame):  # noqa: SLF001
+            return True
+        if self.classifier._template_visible(frame, "attack_button"):  # noqa: SLF001
             return True
         return False
 
@@ -802,15 +815,13 @@ class AttackNavigator:
         """
         if self.donation_nav is None:
             frame = self.capture.screenshot()
+            if self._attack_chip_on_home(frame) or self._village_home_anchors_visible(frame):
+                logger.info("Leave confirm (no donation nav) — Attack!/village anchors")
+                return "confirmed"
             if self.classifier.find_return_home_button(
                 frame, require_no_live_chrome=False
             ) is not None:
                 return "need_return_home"
-            if self.attack_button_visible(frame) or self.classifier._home_attack_chip_visible(  # noqa: SLF001
-                frame
-            ):
-                logger.info("Leave confirm (no donation nav) — Attack! chip visible")
-                return "confirmed"
             if self.classifier._live_battle_chrome_visible(frame):  # noqa: SLF001
                 return "still_battle"
             return "failed"
@@ -822,23 +833,9 @@ class AttackNavigator:
                 return "stopped"
             frame = self.capture.screenshot()
 
-            # Village / results signals first — soft "End Battle" red from scenery
-            # must not skip the chat-icon confirm the user expects.
             if self.classifier._clan_chat_anchor_visible(frame):  # noqa: SLF001
                 logger.info("Leave confirmed — clan chat is open")
                 return "confirmed"
-
-            rh = self.classifier.find_return_home_button(
-                frame, require_no_live_chrome=False
-            )
-            if rh is not None:
-                logger.info(
-                    "Leave confirm: Return Home CTA still visible — tap did not leave"
-                )
-                return "need_return_home"
-            if self.classifier._looks_like_battle_results(frame):  # noqa: SLF001
-                logger.info("Leave confirm: still on results — Return Home not confirmed")
-                return "need_return_home"
 
             screen = self.classify(frame, mode=BotMode.ATTACK)
             if screen == ScreenType.POPUP:
@@ -851,21 +848,41 @@ class AttackNavigator:
                 logger.info("Leave confirmed — clan chat is open")
                 return "confirmed"
 
-            village_like = (
-                screen in (ScreenType.HOME, ScreenType.UNKNOWN)
-                or self.attack_button_visible(frame)
-                or self.classifier._home_attack_chip_visible(frame)  # noqa: SLF001
-                or self.classifier._open_chat_icon_visible(frame)  # noqa: SLF001
-            )
-            if village_like:
-                logger.info("Leave confirm: opening clan chat to verify village")
+            # Attack! chip = home village. Prefer this over green "Return Home" blobs.
+            if self._attack_chip_on_home(frame):
+                logger.info(
+                    "Leave confirm: Attack! chip visible — treating as home village, "
+                    "opening clan chat"
+                )
                 self.donation_nav._open_clan_chat(frame)  # noqa: SLF001
                 opened_once = True
                 if self._sleep(1.1):
                     return "stopped"
                 continue
 
-            # Only after village/results checks fail: treat as still fighting.
+            if self._village_home_anchors_visible(frame) or screen == ScreenType.HOME:
+                logger.info(
+                    "Leave confirm: village anchors / home screen — opening clan chat"
+                )
+                self.donation_nav._open_clan_chat(frame)  # noqa: SLF001
+                opened_once = True
+                if self._sleep(1.1):
+                    return "stopped"
+                continue
+
+            # Only treat green CTA as results when Attack! is NOT on screen.
+            rh = self.classifier.find_return_home_button(
+                frame, require_no_live_chrome=False
+            )
+            if rh is not None:
+                logger.info(
+                    "Leave confirm: Return Home CTA still visible — tap did not leave"
+                )
+                return "need_return_home"
+            if self.classifier._looks_like_battle_results(frame):  # noqa: SLF001
+                logger.info("Leave confirm: still on results — Return Home not confirmed")
+                return "need_return_home"
+
             if self.classifier._live_battle_chrome_visible(frame):  # noqa: SLF001
                 logger.info("Leave confirm: still in live battle (End Battle/Next)")
                 return "still_battle"
@@ -886,6 +903,8 @@ class AttackNavigator:
 
         logger.warning("Leave confirm timed out — could not open clan chat")
         frame = self.capture.screenshot()
+        if self._attack_chip_on_home(frame) or self._village_home_anchors_visible(frame):
+            return "failed"
         if self.classifier.find_return_home_button(
             frame, require_no_live_chrome=False
         ) is not None:
@@ -952,8 +971,10 @@ class AttackNavigator:
                 logger.info("Reached village after Return Home (screen={})", screen.value)
                 return True
             # Still on results with green CTA — let caller re-tap.
+            # Skip if village anchors are up (home greens ≠ Return Home).
             if (
                 not saw_clouds
+                and not self._village_home_anchors_visible(frame)
                 and not self.classifier._live_battle_chrome_visible(frame)  # noqa: SLF001
                 and self.classifier.find_return_home_button(frame) is not None
             ):

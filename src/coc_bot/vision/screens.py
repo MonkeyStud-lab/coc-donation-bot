@@ -573,7 +573,14 @@ class ScreenClassifier:
         True while a live attack/scout still shows End Battle / Surrender or Next.
 
         Used to veto false \"Return Home\" / results detections mid-fight.
+        Never true when village home anchors are visible (Attack! / open chat) —
+        home scenery (red roofs, orange UI) otherwise false-triggers this.
         """
+        if self._home_attack_chip_visible(frame) or self._open_chat_icon_visible(frame):
+            return False
+        if self._clan_chat_anchor_visible(frame):
+            return False
+
         h, w = frame.shape[:2]
         # Red End Battle / Surrender chip — bottom-left above the army bar.
         end_roi = frame[int(h * 0.70) : h, 0 : int(w * 0.24)]
@@ -592,16 +599,27 @@ class ScreenClassifier:
                 return True
         return False
 
-    def find_return_home_button(self, frame: np.ndarray) -> tuple[int, int] | None:
+    def find_return_home_button(
+        self,
+        frame: np.ndarray,
+        *,
+        require_no_live_chrome: bool = True,
+    ) -> tuple[int, int] | None:
         """
         Tap target for the green Return Home button on defeat/victory.
 
         Prefers a wide green CTA in the lower center (not other green UI).
-        Never matches while live End Battle / Next chrome is still on screen.
+        By default never matches while live End Battle / Next chrome is still on
+        screen (avoids scenery greens mid-fight). Pass
+        ``require_no_live_chrome=False`` when leave logic needs to see the CTA
+        even if red/orange scenery falsely trips the chrome heuristic.
         """
-        if self._live_battle_chrome_visible(frame):
+        if require_no_live_chrome and self._live_battle_chrome_visible(frame):
             return None
+        return self._find_return_home_green_cta(frame)
 
+    def _find_return_home_green_cta(self, frame: np.ndarray) -> tuple[int, int] | None:
+        """Locate the wide green Return Home pill (no live-chrome veto)."""
         h, w = frame.shape[:2]
         # Button sits bottom-center of the results card — keep ROI tight & centered.
         x0, x1 = int(w * 0.32), int(w * 0.68)

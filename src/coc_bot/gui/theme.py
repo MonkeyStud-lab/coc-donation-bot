@@ -1,4 +1,4 @@
-"""Apple-inspired light theme helpers for the control GUI."""
+"""Steam-inspired dark theme helpers for the control GUI."""
 
 from __future__ import annotations
 
@@ -7,19 +7,27 @@ import tkinter as tk
 from tkinter import ttk
 
 
-# Soft light palette close to macOS system settings / Finder.
-BG = "#F5F5F7"
-SURFACE = "#FFFFFF"
-SURFACE_2 = "#EFEFF4"
-TEXT = "#1D1D1F"
-TEXT_SECONDARY = "#6E6E73"
-BORDER = "#D2D2D7"
-ACCENT = "#0071E3"
-ACCENT_PRESSED = "#0077ED"
-DANGER = "#FF3B30"
-SUCCESS = "#34C759"
-LOG_BG = "#1D1D1F"
-LOG_FG = "#F5F5F7"
+# Steam-adjacent dark library palette.
+BG = "#1b2838"
+SIDEBAR = "#171a21"
+SURFACE = "#2a475e"
+SURFACE_2 = "#1e2329"
+SURFACE_HOVER = "#3d5a73"
+TEXT = "#c7d5e0"
+TEXT_SECONDARY = "#8f98a0"
+BORDER = "#000000"
+ACCENT = "#66c0f4"
+ACCENT_PRESSED = "#4aa0d5"
+PLAY = "#5c7e10"
+PLAY_HOVER = "#6b8f12"
+PLAY_FG = "#beee11"
+DANGER = "#c45c5c"
+DANGER_HOVER = "#a84848"
+SUCCESS = "#5ba32b"
+LOG_BG = "#0e1419"
+LOG_FG = "#c7d5e0"
+STATUS_BAR = "#171a21"
+NAV_SELECTED = "#2a475e"
 
 
 def ui_font(size: int = 12, weight: str = "normal") -> tuple:
@@ -29,7 +37,6 @@ def ui_font(size: int = 12, weight: str = "normal") -> tuple:
     elif system == "Windows":
         family = "Segoe UI"
     else:
-        # Ubuntu / GNOME — clean sans close to Apple's weight/feel
         family = "Ubuntu"
     return (family, size, weight) if weight != "normal" else (family, size)
 
@@ -44,40 +51,91 @@ def apply_theme(root: tk.Tk) -> ttk.Style:
 
     style.configure(".", background=BG, foreground=TEXT, font=ui_font(11))
     style.configure("TFrame", background=BG)
-    style.configure("Surface.TFrame", background=SURFACE)
-    style.configure("Card.TFrame", background=SURFACE, relief="flat")
+    style.configure("Sidebar.TFrame", background=SIDEBAR)
+    style.configure("Surface.TFrame", background=SURFACE_2)
+    style.configure("Card.TFrame", background=SURFACE_2, relief="flat")
+    style.configure("StatusBar.TFrame", background=STATUS_BAR)
     style.configure("TLabel", background=BG, foreground=TEXT, font=ui_font(11))
-    style.configure("Surface.TLabel", background=SURFACE, foreground=TEXT, font=ui_font(11))
+    style.configure("Sidebar.TLabel", background=SIDEBAR, foreground=TEXT, font=ui_font(11))
+    style.configure(
+        "Brand.TLabel",
+        background=SIDEBAR,
+        foreground=TEXT,
+        font=ui_font(14, "bold"),
+    )
+    style.configure(
+        "BrandSub.TLabel",
+        background=SIDEBAR,
+        foreground=TEXT_SECONDARY,
+        font=ui_font(9),
+    )
+    style.configure("Surface.TLabel", background=SURFACE_2, foreground=TEXT, font=ui_font(11))
     style.configure("Title.TLabel", background=BG, foreground=TEXT, font=ui_font(22, "bold"))
-    style.configure("Subtitle.TLabel", background=BG, foreground=TEXT_SECONDARY, font=ui_font(11))
+    style.configure("PageTitle.TLabel", background=BG, foreground=TEXT, font=ui_font(20, "bold"))
+    style.configure(
+        "Subtitle.TLabel", background=BG, foreground=TEXT_SECONDARY, font=ui_font(11)
+    )
     style.configure("Section.TLabel", background=BG, foreground=TEXT, font=ui_font(13, "bold"))
-    style.configure("Caption.TLabel", background=SURFACE, foreground=TEXT_SECONDARY, font=ui_font(10))
-    style.configure("Status.TLabel", background=BG, foreground=TEXT_SECONDARY, font=ui_font(12))
+    style.configure(
+        "Caption.TLabel", background=SURFACE_2, foreground=TEXT_SECONDARY, font=ui_font(10)
+    )
+    style.configure(
+        "Status.TLabel", background=STATUS_BAR, foreground=TEXT_SECONDARY, font=ui_font(10)
+    )
+    style.configure(
+        "StatusAccent.TLabel", background=STATUS_BAR, foreground=ACCENT, font=ui_font(10)
+    )
 
     style.configure(
-        "TNotebook",
-        background=BG,
-        borderwidth=0,
-        tabmargins=(8, 8, 8, 0),
-    )
-    style.configure(
-        "TNotebook.Tab",
-        background=SURFACE_2,
+        "Nav.TButton",
+        background=SIDEBAR,
         foreground=TEXT_SECONDARY,
-        padding=(16, 8),
         font=ui_font(11),
+        padding=(16, 10),
         borderwidth=0,
+        focuscolor=SIDEBAR,
+        anchor="w",
     )
     style.map(
-        "TNotebook.Tab",
-        background=[("selected", SURFACE)],
-        foreground=[("selected", TEXT)],
+        "Nav.TButton",
+        background=[("active", SURFACE), ("disabled", SIDEBAR)],
+        foreground=[("active", TEXT), ("disabled", TEXT_SECONDARY)],
+    )
+    style.configure(
+        "NavSelected.TButton",
+        background=NAV_SELECTED,
+        foreground=TEXT,
+        font=ui_font(11, "bold"),
+        padding=(16, 10),
+        borderwidth=0,
+        focuscolor=NAV_SELECTED,
+        anchor="w",
+    )
+    style.map(
+        "NavSelected.TButton",
+        background=[("active", SURFACE_HOVER)],
+        foreground=[("active", TEXT)],
+    )
+
+    style.configure(
+        "Play.TButton",
+        background=PLAY,
+        foreground=PLAY_FG,
+        font=ui_font(12, "bold"),
+        padding=(22, 10),
+        borderwidth=0,
+        focuscolor=PLAY,
+    )
+    style.map(
+        "Play.TButton",
+        background=[("active", PLAY_HOVER), ("disabled", "#3a4a20")],
+        foreground=[("disabled", "#7a8a40")],
     )
 
     style.configure(
         "Accent.TButton",
         background=ACCENT,
-        foreground="#FFFFFF",
+        foreground="#1b2838",
         font=ui_font(11, "bold"),
         padding=(16, 8),
         borderwidth=0,
@@ -85,65 +143,95 @@ def apply_theme(root: tk.Tk) -> ttk.Style:
     )
     style.map(
         "Accent.TButton",
-        background=[("active", ACCENT_PRESSED), ("disabled", "#A1C9F5")],
-        foreground=[("disabled", "#FFFFFF")],
+        background=[("active", ACCENT_PRESSED), ("disabled", "#3a5a70")],
+        foreground=[("disabled", "#8f98a0")],
     )
 
     style.configure(
         "Secondary.TButton",
-        background=SURFACE_2,
+        background=SURFACE,
         foreground=TEXT,
         font=ui_font(11),
         padding=(14, 8),
         borderwidth=0,
     )
-    style.map("Secondary.TButton", background=[("active", BORDER)])
+    style.map(
+        "Secondary.TButton",
+        background=[("active", SURFACE_HOVER), ("disabled", SURFACE_2)],
+        foreground=[("disabled", TEXT_SECONDARY)],
+    )
 
     style.configure(
         "Danger.TButton",
-        background=SURFACE_2,
+        background=SURFACE,
         foreground=DANGER,
         font=ui_font(11),
         padding=(14, 8),
         borderwidth=0,
     )
-    style.map("Danger.TButton", background=[("active", "#FFE5E5")])
+    style.map(
+        "Danger.TButton",
+        background=[("active", DANGER_HOVER)],
+        foreground=[("active", TEXT)],
+    )
 
     style.configure(
         "TEntry",
-        fieldbackground=SURFACE,
+        fieldbackground=SURFACE_2,
         foreground=TEXT,
         insertcolor=TEXT,
         padding=8,
-        bordercolor=BORDER,
-        lightcolor=BORDER,
-        darkcolor=BORDER,
+        bordercolor=SURFACE,
+        lightcolor=SURFACE,
+        darkcolor=SURFACE,
+    )
+    style.map(
+        "TEntry",
+        fieldbackground=[("focus", "#16202d")],
+        bordercolor=[("focus", ACCENT)],
     )
     style.configure(
         "TCheckbutton",
-        background=SURFACE,
+        background=SURFACE_2,
         foreground=TEXT,
         font=ui_font(11),
         focuscolor=BG,
     )
+    style.map(
+        "TCheckbutton",
+        background=[("active", SURFACE_2)],
+        foreground=[("active", TEXT)],
+    )
     style.configure(
         "Treeview",
-        background=SURFACE,
-        fieldbackground=SURFACE,
+        background=SURFACE_2,
+        fieldbackground=SURFACE_2,
         foreground=TEXT,
         rowheight=28,
         font=ui_font(11),
-        bordercolor=BORDER,
+        bordercolor=SURFACE,
     )
     style.configure(
         "Treeview.Heading",
-        background=SURFACE_2,
+        background=SURFACE,
         foreground=TEXT_SECONDARY,
         font=ui_font(10, "bold"),
         relief="flat",
     )
-    style.map("Treeview", background=[("selected", "#D6E7FF")], foreground=[("selected", TEXT)])
-    style.configure("TScrollbar", background=SURFACE_2, troughcolor=BG, bordercolor=BG, arrowsize=12)
+    style.map(
+        "Treeview",
+        background=[("selected", SURFACE)],
+        foreground=[("selected", ACCENT)],
+    )
+    style.configure(
+        "TScrollbar",
+        background=SURFACE,
+        troughcolor=SURFACE_2,
+        bordercolor=SURFACE_2,
+        arrowcolor=TEXT_SECONDARY,
+        arrowsize=12,
+    )
+    style.map("TScrollbar", background=[("active", SURFACE_HOVER)])
     return style
 
 

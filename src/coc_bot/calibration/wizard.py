@@ -901,11 +901,29 @@ class CalibrationWizard:
 
 
 def main() -> None:
+    """CLI entry for calibration (used by scripts/calibrate.py and coc-bot-calibrate)."""
     setup_logging(debug=False)
-    parser = argparse.ArgumentParser(description="CoC donation bot calibration wizard")
-    parser.add_argument("--step", action="append", dest="steps", choices=STEP_IDS)
-    parser.add_argument("--all", action="store_true")
-    parser.add_argument("--list", action="store_true")
+    parser = argparse.ArgumentParser(
+        description="Calibrate CoC donation bot (full run or individual steps)",
+    )
+    parser.add_argument(
+        "--step",
+        action="append",
+        dest="steps",
+        choices=STEP_IDS,
+        metavar="STEP",
+        help=f"Run one step only (repeatable). Choices: {', '.join(STEP_IDS)}",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Run all steps in order (same as legacy full calibration)",
+    )
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="List steps and whether each appears configured",
+    )
     args = parser.parse_args()
 
     wizard = CalibrationWizard()

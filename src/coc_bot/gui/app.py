@@ -1,15 +1,13 @@
-"""Tkinter control panel for the donation bot."""
+"""Steam-inspired Tkinter control panel for the donation bot."""
 
 from __future__ import annotations
 
 import os
 import shlex
-import shutil
 import subprocess
 import sys
 import threading
 import tkinter as tk
-from pathlib import Path
 from tkinter import messagebox, scrolledtext, ttk
 
 from loguru import logger
@@ -22,15 +20,16 @@ from coc_bot.calibration.wizard import (
     part_is_configured,
 )
 from coc_bot.config import load_config, project_root, user_settings_path
-from coc_bot.gui.debug_actions import DEBUG_ACTIONS, run_debug_action
+from coc_bot.gui.debug_actions import DEBUG_ACTIONS, DebugSession, run_debug_action
 from coc_bot.gui.settings_fields import SETTINGS, current_setting_values, save_settings_from_gui
 from coc_bot.gui.theme import (
     ACCENT,
     BG,
-    BORDER,
     LOG_BG,
     LOG_FG,
+    SIDEBAR,
     SURFACE,
+    SURFACE_2,
     TEXT,
     TEXT_SECONDARY,
     apply_theme,
@@ -38,32 +37,14 @@ from coc_bot.gui.theme import (
     make_scrollable,
     ui_font,
 )
+from coc_bot.gui.util import calibrate_script, open_in_terminal
 
-
-def _calibrate_script() -> Path:
-    return project_root() / "scripts" / "calibrate.py"
-
-
-def _open_in_terminal(command: str) -> bool:
-    """Run an interactive command in a new terminal window (Linux)."""
-    wrapped = f"{command}; echo; read -r -p 'Press Enter to close…'"
-    candidates = [
-        ["gnome-terminal", "--", "bash", "-lc", wrapped],
-        ["kgx", "-e", "bash", "-lc", wrapped],
-        ["xfce4-terminal", "-e", f"bash -lc {shlex.quote(wrapped)}"],
-        ["konsole", "-e", "bash", "-lc", wrapped],
-        ["x-terminal-emulator", "-e", "bash", "-lc", wrapped],
-        ["xterm", "-e", "bash", "-lc", wrapped],
-    ]
-    for argv in candidates:
-        if shutil.which(argv[0]) is None:
-            continue
-        try:
-            subprocess.Popen(argv, cwd=str(project_root()))  # noqa: S603
-            return True
-        except OSError:
-            continue
-    return False
+PAGES = (
+    ("home", "Home", "Start the bot, farm, and watch activity"),
+    ("settings", "Settings", "Timing, donations, farm, and breaks"),
+    ("setup", "Setup", "Teach the bot where buttons are on your screen"),
+    ("tools", "Tools", "One-shot tests when something looks wrong"),
+)
 
 
 class BotControlApp(tk.Tk):
@@ -75,9 +56,9 @@ class BotControlApp(tk.Tk):
         debug: bool = False,
     ) -> None:
         super().__init__()
-        self.title("Donation Bot")
-        self.geometry("780x620")
-        self.minsize(640, 500)
+        self.title("CoC Donation Bot")
+        self.geometry("960x680")
+        self.minsize(820, 560)
         apply_theme(self)
 
         self._dry_run = dry_run
@@ -88,85 +69,165 @@ class BotControlApp(tk.Tk):
         self._log_sink_id: int | None = None
         self._setting_vars: dict[str, tk.Variable] = {}
         self._debug_busy = False
-
-        self._status = tk.StringVar(value="Ready — open Waydroid and Clash of Clans, then press Start")
-
-        header = ttk.Frame(self, padding=(20, 16, 20, 8))
-        header.pack(fill=tk.X)
-        ttk.Label(header, text="Donation Bot", style="Title.TLabel").pack(anchor=tk.W)
-        ttk.Label(
-            header,
-            text="Clan donations for Waydroid · Clash of Clans",
-            style="Subtitle.TLabel",
-        ).pack(anchor=tk.W, pady=(2, 0))
-        ttk.Label(header, textvariable=self._status, style="Status.TLabel").pack(
-            anchor=tk.W, pady=(10, 0)
+        self._page = "home"
+        self._nav_buttons: dict[str, ttk.Button] = {}
+        self._pages: dict[str, ttk.Frame] = {}
+        self._page_title = tk.StringVar(value="Home")
+        self._page_subtitle = tk.StringVar(value=PAGES[0][2])
+        self._status = tk.StringVar(
+            value="Ready — open Waydroid and Clash of Clans, then press Start"
         )
 
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill=tk.BOTH, expand=True, padx=16, pady=(4, 16))
+        shell = ttk.Frame(self)
+        shell.pack(fill=tk.BOTH, expand=True)
 
-        self._control_tab = ttk.Frame(notebook, padding=12)
-        self._settings_tab = ttk.Frame(notebook, padding=4)
-        self._calib_tab = ttk.Frame(notebook, padding=12)
-        self._debug_tab = ttk.Frame(notebook, padding=4)
-        notebook.add(self._control_tab, text="  Bot  ")
-        notebook.add(self._settings_tab, text="  Settings  ")
-        notebook.add(self._calib_tab, text="  Calibration  ")
-        notebook.add(self._debug_tab, text="  Debugging  ")
+        self._build_sidebar(shell)
+        right = ttk.Frame(shell)
+        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        self._build_control_tab()
-        self._build_settings_tab()
-        self._build_calib_tab()
-        self._build_debug_tab()
+        header = ttk.Frame(right, padding=(24, 18, 24, 8))
+        header.pack(fill=tk.X)
+        ttk.Label(header, textvariable=self._page_title, style="PageTitle.TLabel").pack(
+            anchor=tk.W
+        )
+        ttk.Label(header, textvariable=self._page_subtitle, style="Subtitle.TLabel").pack(
+            anchor=tk.W, pady=(4, 0)
+        )
+
+        self._content = ttk.Frame(right, padding=(16, 4, 16, 8))
+        self._content.pack(fill=tk.BOTH, expand=True)
+
+        for page_id, _label, _subtitle in PAGES:
+            page = ttk.Frame(self._content)
+            self._pages[page_id] = page
+
+        self._build_home_page()
+        self._build_settings_page()
+        self._build_setup_page()
+        self._build_tools_page()
+
+        status = ttk.Frame(right, style="StatusBar.TFrame", padding=(16, 8))
+        status.pack(fill=tk.X, side=tk.BOTTOM)
+        ttk.Label(status, textvariable=self._status, style="Status.TLabel").pack(anchor=tk.W)
+
+        self._show_page("home")
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(400, self._refresh_calib_status)
         self.after(1000, self._refresh_farm_status)
         self._install_log_sink()
 
-    def _card(self, parent: ttk.Frame, **pack_opts) -> ttk.Frame:
-        outer = tk.Frame(parent, bg=BORDER, bd=0, highlightthickness=0)
-        outer.pack(fill=tk.X, **pack_opts)
-        inner = tk.Frame(outer, bg=SURFACE, bd=0, highlightthickness=0)
+    def _build_sidebar(self, parent: ttk.Frame) -> None:
+        side = tk.Frame(parent, bg=SIDEBAR, width=200)
+        side.pack(side=tk.LEFT, fill=tk.Y)
+        side.pack_propagate(False)
+
+        brand = tk.Frame(side, bg=SIDEBAR)
+        brand.pack(fill=tk.X, padx=16, pady=(20, 24))
+        tk.Label(
+            brand,
+            text="DONATION BOT",
+            bg=SIDEBAR,
+            fg=TEXT,
+            font=ui_font(13, "bold"),
+            anchor="w",
+        ).pack(fill=tk.X)
+        tk.Label(
+            brand,
+            text="Clash of Clans · Waydroid",
+            bg=SIDEBAR,
+            fg=TEXT_SECONDARY,
+            font=ui_font(9),
+            anchor="w",
+        ).pack(fill=tk.X, pady=(4, 0))
+
+        tk.Label(
+            side,
+            text="LIBRARY",
+            bg=SIDEBAR,
+            fg=TEXT_SECONDARY,
+            font=ui_font(8, "bold"),
+            anchor="w",
+        ).pack(fill=tk.X, padx=16, pady=(0, 6))
+
+        for page_id, label, _subtitle in PAGES:
+            btn = ttk.Button(
+                side,
+                text=label,
+                style="Nav.TButton",
+                command=lambda pid=page_id: self._show_page(pid),
+            )
+            btn.pack(fill=tk.X, padx=8, pady=1)
+            self._nav_buttons[page_id] = btn
+
+    def _show_page(self, page_id: str) -> None:
+        self._page = page_id
+        for pid, frame in self._pages.items():
+            if pid == page_id:
+                frame.pack(fill=tk.BOTH, expand=True)
+            else:
+                frame.pack_forget()
+        for pid, btn in self._nav_buttons.items():
+            btn.configure(style="NavSelected.TButton" if pid == page_id else "Nav.TButton")
+        for pid, label, subtitle in PAGES:
+            if pid == page_id:
+                self._page_title.set(label)
+                self._page_subtitle.set(subtitle)
+                break
+
+    def _card(self, parent: tk.Misc, **pack_opts) -> tk.Frame:
+        outer = tk.Frame(parent, bg=SURFACE, bd=0, highlightthickness=0)
+        fill = pack_opts.pop("fill", tk.X)
+        outer.pack(fill=fill, **pack_opts)
+        inner = tk.Frame(outer, bg=SURFACE_2, bd=0, highlightthickness=0)
         inner.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
         return inner
 
-    def _build_control_tab(self) -> None:
-        actions = self._card(self._control_tab, pady=(0, 12))
-        pad = tk.Frame(actions, bg=SURFACE)
+    def _build_home_page(self) -> None:
+        page = self._pages["home"]
+        actions = self._card(page, pady=(0, 12))
+        pad = tk.Frame(actions, bg=SURFACE_2)
         pad.pack(fill=tk.X, padx=16, pady=14)
 
         tk.Label(
             pad,
-            text="Controls",
-            bg=SURFACE,
+            text="Play",
+            bg=SURFACE_2,
             fg=TEXT,
             font=ui_font(13, "bold"),
             anchor="w",
         ).pack(fill=tk.X)
 
-        btns = tk.Frame(pad, bg=SURFACE)
-        btns.pack(fill=tk.X, pady=(12, 0))
-        self._start_btn = ttk.Button(btns, text="Start", style="Accent.TButton", command=self.start_bot)
+        primary = tk.Frame(pad, bg=SURFACE_2)
+        primary.pack(fill=tk.X, pady=(12, 0))
+        self._start_btn = ttk.Button(
+            primary, text="▶  Start", style="Play.TButton", command=self.start_bot
+        )
         self._start_btn.pack(side=tk.LEFT)
         self._stop_btn = ttk.Button(
-            btns, text="Stop", style="Secondary.TButton", command=self.stop_bot, state=tk.DISABLED
+            primary,
+            text="Stop",
+            style="Secondary.TButton",
+            command=self.stop_bot,
+            state=tk.DISABLED,
         )
-        self._stop_btn.pack(side=tk.LEFT, padx=(8, 0))
+        self._stop_btn.pack(side=tk.LEFT, padx=(10, 0))
+
+        secondary = tk.Frame(pad, bg=SURFACE_2)
+        secondary.pack(fill=tk.X, pady=(12, 0))
         ttk.Button(
-            btns,
+            secondary,
             text="View screenshot",
             style="Secondary.TButton",
             command=self.view_bot_screenshot,
-        ).pack(side=tk.LEFT, padx=(8, 0))
+        ).pack(side=tk.LEFT)
         ttk.Button(
-            btns,
+            secondary,
             text="Farm attack now",
             style="Secondary.TButton",
             command=self.request_farm_attack,
         ).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(
-            btns,
+            secondary,
             text="Close Waydroid + Clash",
             style="Danger.TButton",
             command=self.close_waydroid_and_coc,
@@ -176,26 +237,26 @@ class BotControlApp(tk.Tk):
         tk.Label(
             pad,
             textvariable=self._farm_status,
-            bg=SURFACE,
+            bg=SURFACE_2,
             fg=TEXT_SECONDARY,
             font=ui_font(10),
             anchor="w",
-        ).pack(fill=tk.X, pady=(10, 0))
+        ).pack(fill=tk.X, pady=(12, 0))
 
-        log_card = self._card(self._control_tab)
-        log_pad = tk.Frame(log_card, bg=SURFACE)
+        log_card = self._card(page, fill=tk.BOTH, expand=True)
+        log_pad = tk.Frame(log_card, bg=SURFACE_2)
         log_pad.pack(fill=tk.BOTH, expand=True, padx=16, pady=14)
         tk.Label(
             log_pad,
             text="Activity",
-            bg=SURFACE,
+            bg=SURFACE_2,
             fg=TEXT,
             font=ui_font(13, "bold"),
             anchor="w",
         ).pack(fill=tk.X)
         self._log = scrolledtext.ScrolledText(
             log_pad,
-            height=16,
+            height=18,
             state=tk.DISABLED,
             wrap=tk.WORD,
             font=ui_font(10),
@@ -210,30 +271,23 @@ class BotControlApp(tk.Tk):
         )
         self._log.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
 
-    def _build_settings_tab(self) -> None:
-        canvas, inner = make_scrollable(self._settings_tab)
+    def _build_settings_page(self) -> None:
+        page = self._pages["settings"]
+        canvas, inner = make_scrollable(page)
 
         intro = tk.Frame(inner, bg=BG)
-        intro.pack(fill=tk.X, padx=8, pady=(8, 4))
+        intro.pack(fill=tk.X, padx=8, pady=(4, 4))
         tk.Label(
             intro,
-            text="Settings",
-            bg=BG,
-            fg=TEXT,
-            font=ui_font(13, "bold"),
-            anchor="w",
-        ).pack(fill=tk.X)
-        tk.Label(
-            intro,
-            text="Saved to data/user_settings.yaml. Stop and Start the bot after saving "
-            "so a running loop picks up changes.",
+            text="Changes are saved to data/user_settings.yaml. Stop and Start the bot "
+            "after saving so a running loop picks them up.",
             bg=BG,
             fg=TEXT_SECONDARY,
             font=ui_font(10),
             wraplength=700,
             justify=tk.LEFT,
             anchor="w",
-        ).pack(fill=tk.X, pady=(4, 8))
+        ).pack(fill=tk.X, pady=(0, 8))
 
         values = current_setting_values()
         current_section = None
@@ -242,21 +296,21 @@ class BotControlApp(tk.Tk):
                 current_section = field.section
                 tk.Label(
                     inner,
-                    text=current_section,
+                    text=current_section.upper(),
                     bg=BG,
-                    fg=TEXT,
-                    font=ui_font(12, "bold"),
+                    fg=ACCENT,
+                    font=ui_font(10, "bold"),
                     anchor="w",
-                ).pack(fill=tk.X, padx=8, pady=(16, 6))
+                ).pack(fill=tk.X, padx=8, pady=(18, 8))
 
-            card = self._card(inner, padx=8, pady=4)
-            block = tk.Frame(card, bg=SURFACE)
+            card = self._card(inner, padx=8, pady=5)
+            block = tk.Frame(card, bg=SURFACE_2)
             block.pack(fill=tk.X, padx=14, pady=12)
 
             tk.Label(
                 block,
                 text=field.label,
-                bg=SURFACE,
+                bg=SURFACE_2,
                 fg=TEXT,
                 font=ui_font(11, "bold"),
                 anchor="w",
@@ -264,7 +318,7 @@ class BotControlApp(tk.Tk):
             tk.Label(
                 block,
                 text=field.description,
-                bg=SURFACE,
+                bg=SURFACE_2,
                 fg=TEXT_SECONDARY,
                 font=ui_font(10),
                 wraplength=680,
@@ -319,21 +373,23 @@ class BotControlApp(tk.Tk):
             f"Settings saved to:\n{path}\n\nStop and Start the bot to apply them to a running loop.",
         )
 
-    def _build_calib_tab(self) -> None:
+    def _build_setup_page(self) -> None:
+        page = self._pages["setup"]
         tk.Label(
-            self._calib_tab,
-            text="Calibration runs in a separate terminal (OpenCV pickers). "
-            "Open Waydroid and Clash first.",
+            page,
+            text="Calibration teaches the bot where buttons and bars are on your screen. "
+            "It opens in a separate terminal with click-to-pick tools. "
+            "Open Waydroid and Clash of Clans first.",
             bg=BG,
             fg=TEXT_SECONDARY,
             font=ui_font(10),
-            wraplength=700,
+            wraplength=720,
             justify=tk.LEFT,
             anchor="w",
-        ).pack(fill=tk.X, pady=(0, 10))
+        ).pack(fill=tk.X, pady=(0, 12))
 
-        card = self._card(self._calib_tab, pady=(0, 10))
-        tree_wrap = tk.Frame(card, bg=SURFACE)
+        card = self._card(page, pady=(0, 10))
+        tree_wrap = tk.Frame(card, bg=SURFACE_2)
         tree_wrap.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
         cols = ("item", "status")
@@ -355,7 +411,7 @@ class BotControlApp(tk.Tk):
         self._calib_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
-        row = tk.Frame(self._calib_tab, bg=BG)
+        row = tk.Frame(page, bg=BG)
         row.pack(fill=tk.X, pady=(4, 0))
         ttk.Button(
             row, text="Refresh", style="Secondary.TButton", command=self._refresh_calib_status
@@ -372,45 +428,38 @@ class BotControlApp(tk.Tk):
 
         self._calib_detail = tk.StringVar(value="")
         tk.Label(
-            self._calib_tab,
+            page,
             textvariable=self._calib_detail,
             bg=BG,
             fg=TEXT_SECONDARY,
             font=ui_font(10),
-            wraplength=700,
+            wraplength=720,
             justify=tk.LEFT,
             anchor="w",
         ).pack(fill=tk.X, pady=(12, 0))
         self._calib_tree.bind("<<TreeviewSelect>>", self._on_calib_select)
 
-    def _build_debug_tab(self) -> None:
-        canvas, inner = make_scrollable(self._debug_tab)
+    def _build_tools_page(self) -> None:
+        page = self._pages["tools"]
+        canvas, inner = make_scrollable(page)
 
         intro = tk.Frame(inner, bg=BG)
-        intro.pack(fill=tk.X, padx=8, pady=(8, 4))
+        intro.pack(fill=tk.X, padx=8, pady=(4, 4))
         tk.Label(
             intro,
-            text="Debugging",
-            bg=BG,
-            fg=TEXT,
-            font=ui_font(13, "bold"),
-            anchor="w",
-        ).pack(fill=tk.X)
-        tk.Label(
-            intro,
-            text="Run one step at a time. Stop the bot first so tests do not conflict. "
-            "Results also appear in the Bot tab log.",
+            text="Run one test at a time. Stop the bot first so tests do not conflict. "
+            "Results also appear in the Home activity log.",
             bg=BG,
             fg=TEXT_SECONDARY,
             font=ui_font(10),
             wraplength=700,
             justify=tk.LEFT,
             anchor="w",
-        ).pack(fill=tk.X, pady=(4, 8))
+        ).pack(fill=tk.X, pady=(0, 8))
 
         for action_id, label, description in DEBUG_ACTIONS:
-            card = self._card(inner, padx=8, pady=4)
-            block = tk.Frame(card, bg=SURFACE)
+            card = self._card(inner, padx=8, pady=5)
+            block = tk.Frame(card, bg=SURFACE_2)
             block.pack(fill=tk.X, padx=14, pady=12)
             ttk.Button(
                 block,
@@ -421,7 +470,7 @@ class BotControlApp(tk.Tk):
             tk.Label(
                 block,
                 text=description,
-                bg=SURFACE,
+                bg=SURFACE_2,
                 fg=TEXT_SECONDARY,
                 font=ui_font(10),
                 wraplength=680,
@@ -447,18 +496,18 @@ class BotControlApp(tk.Tk):
         if self._bot_running():
             messagebox.showwarning(
                 "Bot running",
-                "Stop the bot before running debug actions so they do not conflict.",
+                "Stop the bot before running tools so they do not conflict.",
             )
             return
         if self._debug_busy:
             return
         self._debug_busy = True
         self._debug_result.set(f"Running {action_id}…")
-        self._append_log(f"==> Debug: {action_id}")
+        self._append_log(f"==> Tool: {action_id}")
 
         def worker() -> None:
             result = run_debug_action(action_id)
-            logger.info("Debug {}: {}", action_id, result)
+            logger.info("Tool {}: {}", action_id, result)
 
             def done() -> None:
                 self._debug_busy = False
@@ -491,8 +540,9 @@ class BotControlApp(tk.Tk):
         if not config.calibrated:
             messagebox.showerror(
                 "Not calibrated",
-                "Calibration is incomplete. Open the Calibration tab and run the missing steps.",
+                "Setup is incomplete. Open Setup in the sidebar and run the missing steps.",
             )
+            self._show_page("setup")
             self._refresh_calib_status()
             return
 
@@ -538,9 +588,10 @@ class BotControlApp(tk.Tk):
         if not config.farm_calibrated:
             messagebox.showerror(
                 "Farm not calibrated",
-                "Open Calibration → Farm and set attack_button, unranked Battle, and Return Home.\n"
+                "Open Setup → Farm and set attack_button, unranked Battle, and Return Home.\n"
                 "Leave electro dragons as the active army preset.",
             )
+            self._show_page("setup")
             return
 
         bot = self._bot
@@ -563,44 +614,16 @@ class BotControlApp(tk.Tk):
 
         def worker() -> None:
             try:
-                from coc_bot.attack.farmer import AttackFarmer
-                from coc_bot.adb.capture import ScreenCapture
-                from coc_bot.adb.client import AdbClient
-                from coc_bot.adb.input import InputController
-                from coc_bot.donation.navigator import Navigator
-                from coc_bot.vision.matcher import TemplateMatcher
-
-                cfg = load_config()
-                client = AdbClient(device=cfg.adb_device)
-                client.health_check()
-                capture = ScreenCapture(client)
-                inp = InputController(
-                    client,
-                    jitter_px=cfg.tap_jitter_px,
-                    delay_ms=cfg.action_delay_ms,
-                    dry_run=False,
-                )
-                capture.bind_input(inp)
-                matcher = TemplateMatcher(
-                    threshold=cfg.template_threshold,
-                    scale_range=cfg.scale_range,
-                )
-                nav = Navigator(cfg, capture, inp, matcher)
-                result = AttackFarmer(cfg, capture, inp, matcher, nav).run_one_attack()
-                if result.success:
-                    from coc_bot.runtime.tracker import RuntimeTracker
-
-                    RuntimeTracker(cfg).mark_farm_success()
-                msg = f"Farm one-shot: success={result.success} ({result.reason})"
+                success, msg = DebugSession().farm_one_shot()
                 logger.info(msg)
 
                 def done() -> None:
                     self._append_log(msg)
                     self._refresh_farm_status()
-                    if result.success:
+                    if success:
                         messagebox.showinfo("Farm", "Farm attack finished.")
                     else:
-                        messagebox.showwarning("Farm", f"Farm failed: {result.reason}")
+                        messagebox.showwarning("Farm", msg)
 
                 self.after(0, done)
             except Exception as exc:  # noqa: BLE001
@@ -620,7 +643,7 @@ class BotControlApp(tk.Tk):
                 if not config.farm_enabled:
                     self._farm_status.set("Farm: disabled (enable in Settings)")
                 elif not config.farm_calibrated:
-                    self._farm_status.set("Farm: needs calibration")
+                    self._farm_status.set("Farm: needs calibration (Setup → Farm)")
                 else:
                     from coc_bot.runtime.tracker import RuntimeTracker
 
@@ -652,7 +675,7 @@ class BotControlApp(tk.Tk):
                 from PIL import Image, ImageTk
 
                 from coc_bot.adb.capture import ScreenCapture
-                from coc_bot.adb.client import AdbClient, AdbError
+                from coc_bot.adb.client import AdbClient
 
                 config = load_config()
                 client = AdbClient(device=config.adb_device)
@@ -660,7 +683,6 @@ class BotControlApp(tk.Tk):
                 frame = ScreenCapture(client).screenshot()
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 image = Image.fromarray(rgb)
-                # Fit in a readable preview without huge windows.
                 image.thumbnail((960, 540), Image.Resampling.LANCZOS)
                 h, w = frame.shape[:2]
 
@@ -669,7 +691,6 @@ class BotControlApp(tk.Tk):
                     win.title(f"Bot view — {w}×{h}")
                     win.configure(bg=BG)
                     photo = ImageTk.PhotoImage(image)
-                    # Keep a reference so Tk does not garbage-collect the image.
                     win._photo = photo  # type: ignore[attr-defined]
                     tk.Label(
                         win,
@@ -816,7 +837,7 @@ class BotControlApp(tk.Tk):
     def _recalibrate_selected(self) -> None:
         sel = self._calib_tree.selection()
         if not sel:
-            messagebox.showinfo("Select a step", "Select a calibration step or part in the list first.")
+            messagebox.showinfo("Select a step", "Select a setup step or part in the list first.")
             return
         step_id = parent_step_id(sel[0])
         self._launch_calibrate(["--step", step_id])
@@ -824,13 +845,13 @@ class BotControlApp(tk.Tk):
     def _recalibrate_all(self) -> None:
         if not messagebox.askyesno(
             "Recalibrate all",
-            "Run the full calibration wizard in a new terminal? Existing values can be kept per prompt.",
+            "Run the full setup wizard in a new terminal? Existing values can be kept per prompt.",
         ):
             return
         self._launch_calibrate(["--all"])
 
     def _launch_calibrate(self, extra_args: list[str]) -> None:
-        script = _calibrate_script()
+        script = calibrate_script()
         if not script.exists():
             messagebox.showerror("Missing script", f"Not found: {script}")
             return
@@ -840,8 +861,8 @@ class BotControlApp(tk.Tk):
             f"{shlex.quote(str(script))} "
             + " ".join(shlex.quote(a) for a in extra_args)
         )
-        self._append_log(f"==> Opening calibration terminal: {' '.join(extra_args)}")
-        if not _open_in_terminal(cmd):
+        self._append_log(f"==> Opening setup terminal: {' '.join(extra_args)}")
+        if not open_in_terminal(cmd):
             messagebox.showerror(
                 "No terminal",
                 "Could not open a terminal emulator.\n"
@@ -849,9 +870,9 @@ class BotControlApp(tk.Tk):
             )
             return
         messagebox.showinfo(
-            "Calibration started",
+            "Setup started",
             "A terminal opened for calibration.\n"
-            "When finished, click Refresh on the Calibration tab.",
+            "When finished, click Refresh on the Setup page.",
         )
 
     def _on_close(self) -> None:

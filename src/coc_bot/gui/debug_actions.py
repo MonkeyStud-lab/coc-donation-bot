@@ -236,6 +236,20 @@ class DebugSession:
             f"Full ladder has {len(points)} points."
         )
 
+    def farm_one_shot(self) -> tuple[bool, str]:
+        """Run a full unranked farm attack once (leave chat → deploy → return home)."""
+        from coc_bot.attack.farmer import AttackFarmer
+        from coc_bot.runtime.tracker import RuntimeTracker
+
+        self.client.health_check()
+        result = AttackFarmer(
+            self.config, self.capture, self.input, self.matcher, self.navigator
+        ).run_one_attack()
+        if result.success:
+            RuntimeTracker(self.config).mark_farm_success()
+        msg = f"Farm one-shot: success={result.success} ({result.reason})"
+        return result.success, msg
+
 DEBUG_ACTIONS: list[tuple[str, str, str]] = [
     # id, label, description
     (

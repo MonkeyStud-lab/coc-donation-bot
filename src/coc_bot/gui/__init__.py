@@ -1,1 +1,1 @@
-"""GUI package for the donation bot control panel."""
+"""Steam-inspired control panel for the donation bot."""

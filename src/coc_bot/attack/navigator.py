@@ -13,7 +13,7 @@ from coc_bot.config import BotConfig
 from coc_bot.donation.navigator import Navigator
 from coc_bot.stop import interrupted_sleep
 from coc_bot.vision.matcher import TemplateMatcher
-from coc_bot.vision.screens import ScreenClassifier, ScreenType
+from coc_bot.vision.screens import BotMode, ScreenClassifier, ScreenType
 
 
 class AttackNavigator:
@@ -33,11 +33,16 @@ class AttackNavigator:
         self.matcher = matcher or TemplateMatcher(threshold=config.template_threshold)
         self.classifier = ScreenClassifier(config, self.matcher)
         self.donation_nav = donation_navigator
+        self.mode = BotMode.ATTACK
         self._template_cache: dict[str, np.ndarray] = {}
         self.stop_check: Callable[[], bool] | None = None
 
     def _stopping(self) -> bool:
         return bool(self.stop_check and self.stop_check())
+
+    def classify(self, frame: np.ndarray, mode: BotMode | None = None) -> ScreenType:
+        """Classify using the attack navigator's current mode (or an override)."""
+        return self.classifier.classify(frame, mode=mode if mode is not None else self.mode)
 
     def _sleep(self, seconds: float) -> bool:
         return interrupted_sleep(seconds, self.stop_check)
@@ -110,66 +115,71 @@ class AttackNavigator:
     def leave_chat_for_home(self, timeout: float = 15.0) -> bool:
         """Close donation panel / clan chat so Attack is reachable on home."""
         deadline = time.time() + timeout
-        while time.time() < deadline:
-            if self._stopping():
-                logger.info("leave_chat_for_home: stop requested — aborting")
-                return False
-            frame = self.capture.screenshot()
-            # Ground truth for farm: Attack! visible ⇒ ready (ignore false clan_chat).
-            if self.attack_button_visible(frame):
-                logger.info("Home ready — Attack! chip visible")
-                return True
-            if self._attack_menu_open(frame):
-                return True
-
-            screen = self.classifier.classify(frame)
-            if screen == ScreenType.HOME:
-                self._nudge_clear_home_overlays(frame)
-                if self.attack_button_visible(self.capture.screenshot()):
+        prev_mode = self.mode
+        self.mode = BotMode.ANY
+        try:
+            while time.time() < deadline:
+                if self._stopping():
+                    logger.info("leave_chat_for_home: stop requested — aborting")
+                    return False
+                frame = self.capture.screenshot()
+                # Ground truth for farm: Attack! visible ⇒ ready (ignore false clan_chat).
+                if self.attack_button_visible(frame):
+                    logger.info("Home ready — Attack! chip visible")
                     return True
-                return True
-            if screen == ScreenType.DONATION_PANEL and self.donation_nav is not None:
-                self.donation_nav.close_donation_panel(frame)
-                if self._sleep(0.6):
+                if self._attack_menu_open(frame):
+                    return True
+
+                screen = self.classify(frame, mode=BotMode.ANY)
+                if screen == ScreenType.HOME:
+                    self._nudge_clear_home_overlays(frame)
+                    if self.attack_button_visible(self.capture.screenshot()):
+                        return True
+                    return True
+                if screen == ScreenType.DONATION_PANEL and self.donation_nav is not None:
+                    self.donation_nav.close_donation_panel(frame)
+                    if self._sleep(0.6):
+                        return False
+                    continue
+                if screen == ScreenType.POPUP and self.donation_nav is not None:
+                    self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
+                    if self._sleep(0.8):
+                        return False
+                    continue
+                if screen == ScreenType.CLAN_CHAT:
+                    # Orange ``<`` tab on the chat edge — NOT the same as open_chat.
+                    if self.donation_nav is not None:
+                        self.donation_nav.close_clan_chat(frame)
+                    else:
+                        self._close_clan_chat_fallback(frame)
+                    if self._sleep(0.8):
+                        return False
+                    continue
+                if screen in (
+                    ScreenType.ATTACK_MENU,
+                    ScreenType.MATCHMAKING,
+                    ScreenType.BATTLE,
+                    ScreenType.BATTLE_RESULTS,
+                ):
+                    self.return_home_from_attack()
+                    if self._sleep(1.0):
+                        return False
+                    continue
+                if screen == ScreenType.LOADING:
+                    if self._sleep(1.5):
+                        return False
+                    continue
+                # Unknown — do not blindly toggle chat (that can open it over Attack!).
+                self._nudge_clear_home_overlays(frame)
+                if self._sleep(0.5):
                     return False
-                continue
-            if screen == ScreenType.POPUP and self.donation_nav is not None:
-                self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
-                if self._sleep(0.8):
-                    return False
-                continue
-            if screen == ScreenType.CLAN_CHAT:
-                # Orange ``<`` tab on the chat edge — NOT the same as open_chat.
-                if self.donation_nav is not None:
-                    self.donation_nav.close_clan_chat(frame)
-                else:
-                    self._close_clan_chat_fallback(frame)
-                if self._sleep(0.8):
-                    return False
-                continue
-            if screen in (
-                ScreenType.ATTACK_MENU,
-                ScreenType.MATCHMAKING,
-                ScreenType.BATTLE,
-                ScreenType.BATTLE_RESULTS,
-            ):
-                self.return_home_from_attack()
-                if self._sleep(1.0):
-                    return False
-                continue
-            if screen == ScreenType.LOADING:
-                if self._sleep(1.5):
-                    return False
-                continue
-            # Unknown — do not blindly toggle chat (that can open it over Attack!).
-            self._nudge_clear_home_overlays(frame)
-            if self._sleep(0.5):
-                return False
-        logger.warning("Could not reach home before attack")
-        frame = self.capture.screenshot()
-        return self.attack_button_visible(frame) or (
-            self.classifier.classify(frame) == ScreenType.HOME
-        )
+            logger.warning("Could not reach home before attack")
+            frame = self.capture.screenshot()
+            return self.attack_button_visible(frame) or (
+                self.classify(frame, mode=BotMode.HOME) == ScreenType.HOME
+            )
+        finally:
+            self.mode = BotMode.ATTACK if prev_mode == BotMode.ANY else prev_mode
 
     def _nudge_clear_home_overlays(self, frame: np.ndarray) -> None:
         """Tap empty village space so shop/info cards do not cover the Attack button."""
@@ -277,7 +287,7 @@ class AttackNavigator:
         return self._find_attack_button_blob(frame) is not None
 
     def _attack_menu_open(self, frame: np.ndarray, *, had_attack_chip: bool = False) -> bool:
-        screen = self.classifier.classify(frame)
+        screen = self.classify(frame, mode=BotMode.ATTACK)
         if screen in (ScreenType.ATTACK_MENU, ScreenType.MATCHMAKING):
             return True
         if self.classifier._looks_like_attack_menu(frame):  # noqa: SLF001
@@ -351,7 +361,7 @@ class AttackNavigator:
                 "Attack! chip state unclear after tap at ({}, {}) screen={}",
                 x,
                 y,
-                self.classifier.classify(check).value,
+                self.classify(check, mode=BotMode.ATTACK).value,
             )
             break
 
@@ -379,7 +389,7 @@ class AttackNavigator:
                 logger.info("wait_for_battle: stop requested — aborting")
                 return False
             frame = self.capture.screenshot()
-            screen = self.classifier.classify(frame)
+            screen = self.classify(frame, mode=BotMode.ATTACK)
             last_screen = screen.value
             if screen == ScreenType.BATTLE or self.classifier._looks_like_battle(frame):  # noqa: SLF001
                 logger.info("Battle field ready (screen={})", screen.value)
@@ -402,7 +412,7 @@ class AttackNavigator:
         logger.warning("Matchmaking timed out after {}s (last_screen={})", timeout, last_screen)
         # Final peek — opponent may have loaded on the last tick.
         frame = self.capture.screenshot()
-        if self.classifier._looks_like_battle(frame) or self.classifier.classify(frame) == ScreenType.BATTLE:  # noqa: SLF001
+        if self.classifier._looks_like_battle(frame) or self.classify(frame, mode=BotMode.ATTACK) == ScreenType.BATTLE:  # noqa: SLF001
             logger.info("Battle field ready on final check")
             return True
         return False
@@ -416,7 +426,7 @@ class AttackNavigator:
                 logger.info("wait_for_battle_end: stop requested — aborting")
                 return ScreenType.UNKNOWN
             frame = self.capture.screenshot()
-            screen = self.classifier.classify(frame)
+            screen = self.classify(frame, mode=BotMode.ATTACK)
             if screen == ScreenType.BATTLE_RESULTS or self.classifier._looks_like_battle_results(  # noqa: SLF001
                 frame
             ):
@@ -437,7 +447,7 @@ class AttackNavigator:
         frame = self.capture.screenshot()
         if self.classifier._looks_like_battle_results(frame):  # noqa: SLF001
             return ScreenType.BATTLE_RESULTS
-        return self.classifier.classify(frame)
+        return self.classify(frame, mode=BotMode.ATTACK)
 
     def _tap_return_home(self, frame: np.ndarray) -> bool:
         """Tap calibrated Return Home, green button blob, or lower-center fallback."""
@@ -473,7 +483,7 @@ class AttackNavigator:
                 logger.info("return_home_from_attack: stop requested — aborting")
                 return False
             frame = self.capture.screenshot()
-            screen = self.classifier.classify(frame)
+            screen = self.classify(frame, mode=BotMode.ATTACK)
             if screen in (ScreenType.HOME, ScreenType.CLAN_CHAT):
                 return True
 
@@ -511,7 +521,7 @@ class AttackNavigator:
             self._tap_return_home(frame)
             if self._sleep(1.2):
                 return False
-            if self.classifier.classify(self.capture.screenshot()) in (
+            if self.classify(self.capture.screenshot(), mode=BotMode.ATTACK) in (
                 ScreenType.HOME,
                 ScreenType.CLAN_CHAT,
             ):
@@ -519,7 +529,7 @@ class AttackNavigator:
             self.input.back()
             if self._sleep(0.8):
                 return False
-        return self.classifier.classify(self.capture.screenshot()) in (
+        return self.classify(self.capture.screenshot(), mode=BotMode.ATTACK) in (
             ScreenType.HOME,
             ScreenType.CLAN_CHAT,
         )

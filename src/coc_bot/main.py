@@ -24,7 +24,7 @@ from coc_bot.logging_utils import setup_logging
 from coc_bot.runtime.breaks import BreakManager
 from coc_bot.runtime.tracker import RuntimeTracker
 from coc_bot.vision.matcher import TemplateMatcher
-from coc_bot.vision.screens import ScreenClassifier, ScreenType
+from coc_bot.vision.screens import BotMode, ScreenClassifier, ScreenType, MODE_LABELS
 
 
 class DonationBot:
@@ -93,6 +93,11 @@ class DonationBot:
         self._farm_requested = False
         self._farm_fail_cooldown_until = 0.0
         self.last_screen: str = "unknown"
+        self.mode = BotMode.DONATE
+        self._unknown_streak = 0
+        self.navigator.mode = BotMode.DONATE
+        self.farmer.attack_nav.mode = BotMode.ATTACK
+        self.farmer._on_mode = self.set_mode
 
         # Stop button interrupts long waits (chat nav, farm, donation panel, breaks).
         stop = self.should_stop
@@ -101,6 +106,23 @@ class DonationBot:
         self.farmer.attack_nav.stop_check = stop
         self.executor.stop_check = stop
         self.break_manager.stop_check = stop
+
+    def set_mode(self, mode: BotMode) -> None:
+        """Switch flow context so classify() only considers relevant screens."""
+        if mode != self.mode:
+            logger.info(
+                "Bot mode: {} → {}",
+                MODE_LABELS.get(self.mode.value, self.mode.value),
+                MODE_LABELS.get(mode.value, mode.value),
+            )
+        self.mode = mode
+        self.navigator.mode = mode
+        # Attack navigator stays ATTACK during farm; leave_chat overrides locally.
+        if mode in (BotMode.ATTACK, BotMode.HOME, BotMode.ANY):
+            self.farmer.attack_nav.mode = mode
+        elif mode == BotMode.DONATE:
+            self.farmer.attack_nav.mode = BotMode.ATTACK
+        self._unknown_streak = 0
 
     def should_stop(self) -> bool:
         return self._stop_requested
@@ -154,6 +176,7 @@ class DonationBot:
         self.break_manager.resume_pending_break()
         self.tracker.start_loop_timing()
 
+        self.set_mode(BotMode.DONATE)
         if not self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request):
             if self._stop_requested:
                 logger.info("Bot stopped")
@@ -161,6 +184,7 @@ class DonationBot:
             logger.error("Could not reach clan chat on startup")
             raise RuntimeError("Could not reach clan chat on startup")
 
+        self.set_mode(BotMode.DONATE)
         self._set_state("scan_chat")
         self._last_anti_idle = time.monotonic()
 
@@ -263,8 +287,10 @@ class DonationBot:
 
         logger.info("Pausing donations for farm attack (manual={})", manual)
         self._set_state("farm")
+        self.set_mode(BotMode.HOME)
         result = self.farmer.run_one_attack()
         if self._stop_requested:
+            self.set_mode(BotMode.DONATE)
             self._set_state("scan_chat")
             return True
         if result.success:
@@ -278,6 +304,7 @@ class DonationBot:
                 result.reason,
                 cooldown,
             )
+        self.set_mode(BotMode.DONATE)
         if not self._stop_requested:
             self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request)
         self._set_state("scan_chat")
@@ -330,15 +357,28 @@ class DonationBot:
         """
         if frame is None:
             frame = self.capture.screenshot()
-        screen = ScreenClassifier(self.config, self.matcher).classify(frame)
+        screen = self.navigator.classify(frame, mode=BotMode.DONATE)
         self.last_screen = screen.value
         if screen in (ScreenType.CLAN_CHAT, ScreenType.DONATION_PANEL):
+            self._unknown_streak = 0
             return True
         if screen == ScreenType.LOADING:
             return False
+        if screen == ScreenType.UNKNOWN:
+            self._unknown_streak += 1
+            if self._unknown_streak >= 3:
+                logger.warning(
+                    "Donate mode saw UNKNOWN x{} — full recovery",
+                    self._unknown_streak,
+                )
+                self._recover()
+                return False
+        else:
+            self._unknown_streak = 0
 
         logger.info("Chat not open (screen={}) — reopening clan chat", screen.value)
         ok = self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request)
+        self.set_mode(BotMode.DONATE)
         if not ok:
             logger.warning("Could not reopen clan chat")
         return ok
@@ -483,11 +523,31 @@ class DonationBot:
         self._set_state("scan_chat")
 
     def _recover(self) -> None:
-        logger.info("Running recovery sequence")
+        """Desync recovery: BACK, full screen scan, then reopen clan chat."""
+        logger.info("Running recovery sequence (full classify)")
+        self.set_mode(BotMode.ANY)
         self.nav_input.back()
         time.sleep(0.5)
+        frame = self.capture.screenshot()
+        screen = self.navigator.classify(frame, mode=BotMode.ANY)
+        self.last_screen = screen.value
+        logger.info("Recovery saw screen={}", screen.value)
+        if screen in (
+            ScreenType.ATTACK_MENU,
+            ScreenType.MATCHMAKING,
+            ScreenType.BATTLE,
+            ScreenType.BATTLE_RESULTS,
+        ):
+            try:
+                self.farmer.attack_nav.return_home_from_attack()
+            except Exception:  # noqa: BLE001
+                logger.exception("return_home during recovery failed")
+                self.nav_input.back()
+                time.sleep(0.5)
+        self.set_mode(BotMode.DONATE)
         self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request)
         self._set_state("scan_chat")
+        self._unknown_streak = 0
 
     def _check_watchdog(self) -> None:
         # Farm battles routinely exceed state_watchdog_seconds.

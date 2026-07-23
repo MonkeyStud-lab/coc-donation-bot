@@ -12,7 +12,7 @@ from coc_bot.adb.capture import ScreenCapture
 from coc_bot.config import BotConfig
 from coc_bot.vision.matcher import MatchResult, TemplateMatcher
 from coc_bot.vision.rois import ROI, roi_center, denormalize_roi
-from coc_bot.vision.screens import ScreenClassifier, ScreenType
+from coc_bot.vision.screens import BotMode, ScreenClassifier, ScreenType
 
 
 class Navigator:
@@ -30,12 +30,17 @@ class Navigator:
         self.input = input_ctrl
         self.matcher = matcher or TemplateMatcher(threshold=config.template_threshold)
         self.classifier = ScreenClassifier(config, self.matcher)
+        self.mode = BotMode.DONATE
         self._template_cache: dict[str, np.ndarray] = {}
         self._last_jump_at = 0.0
         self.stop_check: Callable[[], bool] | None = None
 
     def _stopping(self) -> bool:
         return bool(self.stop_check and self.stop_check())
+
+    def classify(self, frame: np.ndarray, mode: BotMode | None = None) -> ScreenType:
+        """Classify using the navigator's current mode (or an override)."""
+        return self.classifier.classify(frame, mode=mode if mode is not None else self.mode)
 
     def load_template(self, key: str) -> np.ndarray | None:
         if key in self._template_cache:
@@ -60,79 +65,87 @@ class Navigator:
         deadline = time.time() + timeout
 
         close_streak = 0
+        # Full classify: may be recovering from farm / boot / desync.
+        prev_mode = self.mode
+        self.mode = BotMode.ANY
 
-        while time.time() < deadline:
-            if self._stopping():
-                logger.info("ensure_clan_chat: stop requested — aborting")
-                return False
-            frame = self.capture.screenshot()
-            screen = self.classifier.classify(frame)
-            logger.debug("ensure_clan_chat: detected screen={}", screen.value)
+        try:
+            while time.time() < deadline:
+                if self._stopping():
+                    logger.info("ensure_clan_chat: stop requested — aborting")
+                    return False
+                frame = self.capture.screenshot()
+                screen = self.classify(frame, mode=BotMode.ANY)
+                logger.debug("ensure_clan_chat: detected screen={}", screen.value)
 
-            if screen == ScreenType.DONATION_PANEL:
-                before = screen
-                self.close_donation_panel(frame)
-                after = self.classifier.classify(self.capture.screenshot())
-                if after == before:
-                    close_streak += 1
-                else:
-                    close_streak = 0
-                if close_streak >= 3:
-                    logger.warning("Stuck in donation-panel close loop — opening clan chat instead")
-                    self._open_clan_chat(self.capture.screenshot())
-                    close_streak = 0
+                if screen == ScreenType.DONATION_PANEL:
+                    before = screen
+                    self.close_donation_panel(frame)
+                    after = self.classify(self.capture.screenshot(), mode=BotMode.ANY)
+                    if after == before:
+                        close_streak += 1
+                    else:
+                        close_streak = 0
+                    if close_streak >= 3:
+                        logger.warning(
+                            "Stuck in donation-panel close loop — opening clan chat instead"
+                        )
+                        self._open_clan_chat(self.capture.screenshot())
+                        close_streak = 0
+                        if self._sleep(1.0):
+                            return False
+                    continue
+
+                close_streak = 0
+
+                if screen == ScreenType.POPUP:
+                    self._dismiss_popup(frame)
                     if self._sleep(1.0):
                         return False
-                continue
+                    continue
 
-            close_streak = 0
+                if screen == ScreenType.CLAN_CHAT:
+                    self.navigate_to_donation_requests(frame, has_donate_request)
+                    return True
 
-            if screen == ScreenType.POPUP:
-                self._dismiss_popup(frame)
-                if self._sleep(1.0):
-                    return False
-                continue
+                if screen == ScreenType.HOME or screen == ScreenType.UNKNOWN:
+                    logger.info("Not in clan chat (screen={}) — opening chat", screen.value)
+                    self._open_clan_chat(frame)
+                    if self._sleep(1.0):
+                        return False
+                    continue
 
-            if screen == ScreenType.CLAN_CHAT:
-                self.navigate_to_donation_requests(frame, has_donate_request)
-                return True
+                if screen == ScreenType.LOADING:
+                    if self._sleep(2.0):
+                        return False
+                    continue
 
-            if screen == ScreenType.HOME or screen == ScreenType.UNKNOWN:
-                logger.info("Not in clan chat (screen={}) — opening chat", screen.value)
-                self._open_clan_chat(frame)
-                if self._sleep(1.0):
-                    return False
-                continue
-
-            if screen == ScreenType.LOADING:
-                if self._sleep(2.0):
-                    return False
-                continue
-
-            if screen in (
-                ScreenType.ATTACK_MENU,
-                ScreenType.MATCHMAKING,
-                ScreenType.BATTLE,
-                ScreenType.BATTLE_RESULTS,
-            ):
-                logger.info(
-                    "ensure_clan_chat: leaving attack UI (screen={})",
-                    screen.value,
-                )
-                if screen == ScreenType.BATTLE_RESULTS:
-                    point = self.config.tap_points.get("return_home")
-                    if point:
-                        self.input.tap(int(point[0]), int(point[1]))
+                if screen in (
+                    ScreenType.ATTACK_MENU,
+                    ScreenType.MATCHMAKING,
+                    ScreenType.BATTLE,
+                    ScreenType.BATTLE_RESULTS,
+                ):
+                    logger.info(
+                        "ensure_clan_chat: leaving attack UI (screen={})",
+                        screen.value,
+                    )
+                    if screen == ScreenType.BATTLE_RESULTS:
+                        point = self.config.tap_points.get("return_home")
+                        if point:
+                            self.input.tap(int(point[0]), int(point[1]))
+                        else:
+                            self.input.back()
                     else:
                         self.input.back()
-                else:
-                    self.input.back()
-                if self._sleep(1.2):
-                    return False
-                continue
+                    if self._sleep(1.2):
+                        return False
+                    continue
 
-        logger.warning("Failed to reach clan chat within timeout")
-        return False
+            logger.warning("Failed to reach clan chat within timeout")
+            return False
+        finally:
+            self.mode = BotMode.DONATE if prev_mode == BotMode.ANY else prev_mode
 
     def _sleep(self, seconds: float) -> bool:
         from coc_bot.stop import interrupted_sleep
@@ -276,7 +289,7 @@ class Navigator:
         if not self.classifier.is_donation_panel(frame):
             logger.debug(
                 "Skip close tap — donation panel not detected (screen={})",
-                self.classifier.classify(frame).value,
+                self.classify(frame, mode=BotMode.DONATE).value,
             )
             return
 

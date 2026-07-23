@@ -13,7 +13,7 @@ from coc_bot.donation.inventory import InventoryParser, InventorySlot
 from coc_bot.donation.request_parser import RequestKind
 from coc_bot.stop import interrupted_sleep
 from coc_bot.vision.matcher import TemplateMatcher
-from coc_bot.vision.screens import ScreenClassifier
+from coc_bot.vision.screens import BotMode, ScreenClassifier
 
 
 class DonationExecutor:
@@ -55,7 +55,7 @@ class DonationExecutor:
         if not self.classifier.is_donation_panel(frame):
             logger.warning(
                 "Not on donation panel, detected screen: {}",
-                self.classifier.classify(frame).value,
+                self.classifier.classify(frame, mode=BotMode.DONATE).value,
             )
             self._close_panel()
             return False

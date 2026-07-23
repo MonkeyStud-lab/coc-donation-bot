@@ -22,6 +22,22 @@ class ScreenType(str, Enum):
     UNKNOWN = "unknown"
 
 
+class BotMode(str, Enum):
+    """
+    High-level flow context — restricts which screens classify() will return.
+
+    HOME:   village only → open chat or open Attack
+    DONATE: clan chat / donation only
+    ATTACK: attack menu → battle → results
+    ANY:    full unrestricted classify (boot / recovery)
+    """
+
+    HOME = "home"
+    DONATE = "donate"
+    ATTACK = "attack"
+    ANY = "any"
+
+
 # Short labels for the control panel “what screen is this?” line.
 SCREEN_LABELS: dict[str, str] = {
     ScreenType.HOME.value: "Home (village)",
@@ -34,6 +50,13 @@ SCREEN_LABELS: dict[str, str] = {
     ScreenType.BATTLE.value: "Battle / scout",
     ScreenType.BATTLE_RESULTS.value: "Battle results",
     ScreenType.UNKNOWN.value: "Unknown",
+}
+
+MODE_LABELS: dict[str, str] = {
+    BotMode.HOME.value: "Home",
+    BotMode.DONATE.value: "Donate",
+    BotMode.ATTACK.value: "Attack",
+    BotMode.ANY.value: "Any",
 }
 
 
@@ -495,10 +518,82 @@ class ScreenClassifier:
             return True
         return False
 
-    def classify(self, frame: np.ndarray) -> ScreenType:
+    def classify(self, frame: np.ndarray, mode: BotMode | None = None) -> ScreenType:
+        """
+        Classify the current frame.
+
+        When ``mode`` is set, only screens that belong to that flow are considered
+        (plus loading). Pass ``BotMode.ANY`` or ``None`` for a full scan
+        (boot / recovery / debug). Popup is checked late so Attack menu
+        green buttons are not mistaken for a blocking modal.
+        """
         if self._template_visible(frame, "loading"):
             return ScreenType.LOADING
 
+        effective = mode if mode is not None else BotMode.ANY
+        if effective == BotMode.HOME:
+            return self._classify_home(frame)
+        if effective == BotMode.DONATE:
+            return self._classify_donate(frame)
+        if effective == BotMode.ATTACK:
+            return self._classify_attack(frame)
+        return self._classify_any(frame)
+
+    def _classify_home(self, frame: np.ndarray) -> ScreenType:
+        """Village only: home or Attack menu — never battle results / donation."""
+        if self._looks_like_attack_menu(frame):
+            return ScreenType.ATTACK_MENU
+        if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
+            return ScreenType.HOME
+        if self._is_home_screen(frame):
+            return ScreenType.HOME
+        if self.looks_like_blocking_popup(frame):
+            return ScreenType.POPUP
+        return ScreenType.UNKNOWN
+
+    def _classify_donate(self, frame: np.ndarray) -> ScreenType:
+        """Clan chat / donation only — never battle results or live battle."""
+        if self._donation_panel_heuristic(frame):
+            return ScreenType.DONATION_PANEL
+        if self._clan_chat_anchor_visible(frame):
+            return ScreenType.CLAN_CHAT
+        if self._template_visible(frame, "donate_button"):
+            return ScreenType.CLAN_CHAT
+        if self._in_clan_chat_context(frame):
+            return ScreenType.CLAN_CHAT
+        # Drifted to village — allow opening chat again.
+        if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
+            return ScreenType.HOME
+        if self._is_home_screen(frame):
+            return ScreenType.HOME
+        if self.looks_like_blocking_popup(frame):
+            return ScreenType.POPUP
+        return ScreenType.UNKNOWN
+
+    def _classify_attack(self, frame: np.ndarray) -> ScreenType:
+        """Attack flow only — never donation panel / donate-button chat heuristics."""
+        if self._looks_like_battle_results(frame):
+            return ScreenType.BATTLE_RESULTS
+        if self._template_visible(frame, "return_home") or self._template_visible(
+            frame, "battle_end"
+        ):
+            return ScreenType.BATTLE_RESULTS
+        if self._looks_like_battle(frame):
+            return ScreenType.BATTLE
+        if self._looks_like_matchmaking(frame):
+            return ScreenType.MATCHMAKING
+        if self._looks_like_attack_menu(frame):
+            return ScreenType.ATTACK_MENU
+        if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
+            return ScreenType.HOME
+        if self._is_home_screen(frame):
+            return ScreenType.HOME
+        if self.looks_like_blocking_popup(frame):
+            return ScreenType.POPUP
+        return ScreenType.UNKNOWN
+
+    def _classify_any(self, frame: np.ndarray) -> ScreenType:
+        """Full unrestricted classify (boot / recovery)."""
         # Village home first.
         if self._open_chat_icon_visible(frame):
             return ScreenType.HOME
@@ -508,19 +603,16 @@ class ScreenClassifier:
                 return ScreenType.ATTACK_MENU
             return ScreenType.HOME
 
-        # Donation popup before clan_chat anchor — the anchor can still match under/near
-        # the popup on some calibrations, which blocked donating.
+        # Donation popup before clan_chat anchor.
         if self._donation_panel_heuristic(frame):
             return ScreenType.DONATION_PANEL
 
-        # Strong chat anchors (not soft ROI heuristics).
         if self._clan_chat_anchor_visible(frame):
             return ScreenType.CLAN_CHAT
 
         if self._template_visible(frame, "donate_button"):
             return ScreenType.CLAN_CHAT
 
-        # Attack results: large green Return Home — before soft chat ROI matches.
         if self._looks_like_battle_results(frame):
             return ScreenType.BATTLE_RESULTS
 
@@ -584,6 +676,6 @@ class ScreenClassifier:
                 "Donation panel wait timed out (troop_std={}, spell_std={}, screen={})",
                 f"{troop:.1f}" if troop is not None else "n/a",
                 f"{spell:.1f}" if spell is not None else "n/a",
-                self.classify(last_frame).value,
+                self.classify(last_frame, mode=BotMode.DONATE).value,
             )
         return False

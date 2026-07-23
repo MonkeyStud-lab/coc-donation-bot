@@ -12,7 +12,7 @@ from coc_bot.attack.navigator import AttackNavigator
 from coc_bot.config import BotConfig
 from coc_bot.donation.navigator import Navigator
 from coc_bot.vision.matcher import TemplateMatcher
-from coc_bot.vision.screens import ScreenType
+from coc_bot.vision.screens import BotMode, ScreenType
 
 
 @dataclass(frozen=True)
@@ -42,9 +42,17 @@ class AttackFarmer:
         )
         self.deployer = EdgeDeployer(config, input_ctrl)
         self.stop_check: Callable[[], bool] | None = None
+        self._on_mode: Callable[[BotMode], None] | None = None
 
     def _stopping(self) -> bool:
         return bool(self.stop_check and self.stop_check())
+
+    def _set_mode(self, mode: BotMode) -> None:
+        self.attack_nav.mode = mode
+        if self.donation_nav is not None:
+            self.donation_nav.mode = mode
+        if self._on_mode is not None:
+            self._on_mode(mode)
 
     def run_one_attack(self) -> FarmResult:
         if not self.config.farm_calibrated:
@@ -58,6 +66,8 @@ class AttackFarmer:
         if self._stopping():
             return FarmResult(False, "stopped")
 
+        # Leave chat with full classify, then lock to attack screens.
+        self._set_mode(BotMode.HOME)
         if not self.attack_nav.leave_chat_for_home():
             if self._stopping():
                 return FarmResult(False, "stopped")
@@ -66,6 +76,8 @@ class AttackFarmer:
 
         if self._stopping():
             return FarmResult(False, "stopped")
+
+        self._set_mode(BotMode.ATTACK)
 
         if self.donation_nav is not None:
             frame = self.capture.screenshot()
@@ -96,7 +108,7 @@ class AttackFarmer:
             frame = self.capture.screenshot()
             # Opponent may already be loaded even if wait_for_battle mis-timed.
             if (
-                self.attack_nav.classifier.classify(frame) == ScreenType.BATTLE
+                self.attack_nav.classify(frame, mode=BotMode.ATTACK) == ScreenType.BATTLE
                 or self.attack_nav.classifier._looks_like_battle(frame)  # noqa: SLF001
             ):
                 logger.warning(
@@ -142,6 +154,7 @@ class AttackFarmer:
         if self._stopping():
             return FarmResult(False, "stopped")
 
+        self._set_mode(BotMode.DONATE)
         if self.donation_nav is not None:
             ok = self.donation_nav.ensure_clan_chat()
             if self._stopping():
@@ -159,6 +172,7 @@ class AttackFarmer:
             self.attack_nav.return_home_from_attack()
         except Exception:  # noqa: BLE001
             logger.exception("return_home during farm abort failed")
+        self._set_mode(BotMode.DONATE)
         if self.donation_nav is not None and not self._stopping():
             try:
                 self.donation_nav.ensure_clan_chat()

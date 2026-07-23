@@ -53,3 +53,6 @@ farm:
   hero_count: 4                   # heroes to select + place after e-drags
   deploy_siege: true              # select + drop siege machine after e-drags
   activate_hero_abilities: true   # re-tap each hero icon after placing to fire ability
+  deploy_rage: true               # drop rage spells after troops/heroes
+  rage_count: 3                   # how many rage drops (spread along the edge)
+  rage_inward_frac: 0.08          # how far toward the base from the troop line (screen fraction)

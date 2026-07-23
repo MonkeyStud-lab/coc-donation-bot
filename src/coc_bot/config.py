@@ -71,6 +71,9 @@ class BotConfig:
     farm_hero_count: int = 4
     farm_deploy_siege: bool = True
     farm_activate_hero_abilities: bool = True
+    farm_deploy_rage: bool = True
+    farm_rage_count: int = 3
+    farm_rage_inward_frac: float = 0.08
     data_dir: Path = field(default_factory=lambda: _project_root() / "data")
     templates_dir: Path = field(default_factory=lambda: _project_root() / "data" / "templates")
 
@@ -229,6 +232,9 @@ def load_config(
         farm_hero_count=max(0, min(4, int(farm.get("hero_count", 4)))),
         farm_deploy_siege=bool(farm.get("deploy_siege", True)),
         farm_activate_hero_abilities=bool(farm.get("activate_hero_abilities", True)),
+        farm_deploy_rage=bool(farm.get("deploy_rage", True)),
+        farm_rage_count=max(0, min(20, int(farm.get("rage_count", 3)))),
+        farm_rage_inward_frac=max(0.0, min(0.25, float(farm.get("rage_inward_frac", 0.08)))),
         data_dir=root / "data",
         templates_dir=root / "data" / "templates",
     )

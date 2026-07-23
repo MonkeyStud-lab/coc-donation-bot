@@ -138,6 +138,81 @@ class EdgeDeployer:
         time.sleep(0.30)
         return True
 
+    def select_rage_slot(self, frame: np.ndarray) -> bool:
+        """Tap the rage spell card on the bottom army bar. Returns False if disabled."""
+        if not self.config.farm_deploy_rage:
+            return False
+        count = max(0, int(self.config.farm_rage_count))
+        if count <= 0:
+            return False
+        point = self.config.tap_points.get("rage_slot") or self.config.tap_points.get("spell_slot")
+        if point:
+            self.input.tap(int(point[0]), int(point[1]), jitter=0)
+        else:
+            # Spells sit toward the right of the army bar after siege/heroes.
+            x, y = self._army_bar_point(frame, 0.82)
+            logger.info("Selecting rage slot at fallback ({}, {})", x, y)
+            self.input.tap(x, y, jitter=0)
+        time.sleep(0.30)
+        return True
+
+    def rage_drop_points(
+        self,
+        frame: np.ndarray,
+        troop_points: list[tuple[int, int]],
+        *,
+        side: str | None = None,
+    ) -> list[tuple[int, int]]:
+        """
+        Spread rage drops slightly toward the base from the troop column.
+
+        Rage covers a wide area — fewer, spaced taps beat stacking on the troop line.
+        For a left-edge deploy that means a bit to the right of the troops.
+        """
+        if not troop_points:
+            return []
+        count = max(0, int(self.config.farm_rage_count))
+        if count <= 0:
+            return []
+
+        h, w = frame.shape[:2]
+        side = self._resolve_side(side)
+        troop_x = troop_points[0][0]
+        inward = int(w * float(self.config.farm_rage_inward_frac))
+        # Toward the village from the deploy edge (rightward when deploying left).
+        rx = troop_x + inward if side == "left" else troop_x - inward
+        rx = max(int(w * 0.06), min(int(w * 0.94), rx))
+
+        y0 = min(p[1] for p in troop_points)
+        y1 = max(p[1] for p in troop_points)
+        if y1 <= y0:
+            y0, y1 = int(h * 0.20), int(h * 0.65)
+
+        if count == 1:
+            points = [(rx, (y0 + y1) // 2)]
+        else:
+            # Keep drops away from the extreme ends so AoE sits on the push path.
+            margin = 0.12
+            points = [
+                (
+                    rx,
+                    int(y0 + (y1 - y0) * (margin + (1.0 - 2 * margin) * i / (count - 1))),
+                )
+                for i in range(count)
+            ]
+
+        logger.info(
+            "Rage drop line side={} x={} (troop_x={} inward={}) y={}-{} count={}",
+            side,
+            rx,
+            troop_x,
+            inward,
+            y0,
+            y1,
+            count,
+        )
+        return points
+
     def hero_slot_points(self, frame: np.ndarray) -> list[tuple[int, int]]:
         """Return up to 4 hero card centers on the bottom army bar."""
         count = max(0, min(4, int(self.config.farm_hero_count)))
@@ -164,7 +239,7 @@ class EdgeDeployer:
         tap_pause: float = 0.10,
     ) -> int:
         """
-        Pan to the deploy edge, dump e-drags, siege, then heroes (+ ability re-taps).
+        Pan to the deploy edge, dump e-drags, siege, heroes (+ abilities), then rage.
 
         Returns total map taps (not including army-bar selection taps).
         """
@@ -229,11 +304,22 @@ class EdgeDeployer:
                 self.input.tap(hx, hy, jitter=0)
                 time.sleep(0.35)
 
+        rage_dropped = 0
+        if self.select_rage_slot(frame):
+            rage_points = self.rage_drop_points(frame, points, side=side)
+            for i, (rx, ry) in enumerate(rage_points):
+                logger.info("Deploying rage {}/{} at ({}, {})", i + 1, len(rage_points), rx, ry)
+                self.input.tap(rx, ry)
+                total += 1
+                rage_dropped += 1
+                time.sleep(0.22)
+
         logger.info(
-            "Army dump complete — {} map taps, {} heroes (abilities={}), siege={}",
+            "Army dump complete — {} map taps, {} heroes (abilities={}), siege={}, rage={}",
             total,
             len(heroes),
             activate,
             self.config.farm_deploy_siege,
+            rage_dropped,
         )
         return total

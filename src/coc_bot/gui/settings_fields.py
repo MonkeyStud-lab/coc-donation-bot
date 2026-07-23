@@ -240,6 +240,34 @@ SETTINGS: list[SettingField] = [
         ("farm", "activate_hero_abilities"),
     ),
     SettingField(
+        "farm_deploy_rage",
+        "Deploy rage spells",
+        "After troops/heroes, select rage and drop them slightly toward the base from the troop line.",
+        "bool",
+        lambda c: c.farm_deploy_rage,
+        "Farm",
+        ("farm", "deploy_rage"),
+    ),
+    SettingField(
+        "farm_rage_count",
+        "Rage spell drops",
+        "How many rage spells to place (spread vertically — they cover a wide area).",
+        "int",
+        lambda c: c.farm_rage_count,
+        "Farm",
+        ("farm", "rage_count"),
+    ),
+    SettingField(
+        "farm_rage_inward_frac",
+        "Rage inward offset",
+        "How far toward the village from the troop column (screen fraction, e.g. 0.08). "
+        "On a left deploy this is slightly to the right of the troops.",
+        "float",
+        lambda c: c.farm_rage_inward_frac,
+        "Farm",
+        ("farm", "rage_inward_frac"),
+    ),
+    SettingField(
         "adb_device",
         "ADB device address",
         "Waydroid ADB target, e.g. 192.168.240.112:5555 or 127.0.0.1:5555. "
@@ -336,10 +364,14 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
                 raise ValueError("Heroes to deploy must be between 0 and 4")
             if field.key == "farm_edrag_deploy_taps" and parsed < 1:
                 raise ValueError("E-drag map taps must be at least 1")
+            if field.key == "farm_rage_count" and (parsed < 0 or parsed > 20):
+                raise ValueError("Rage spell drops must be between 0 and 20")
         elif field.kind == "float":
             parsed = float(str(raw).strip())
             if field.key == "farm_pan_swipes" and parsed < 0:
                 raise ValueError("Camera pan swipes cannot be negative")
+            if field.key == "farm_rage_inward_frac" and (parsed < 0 or parsed > 0.25):
+                raise ValueError("Rage inward offset must be between 0 and 0.25")
         elif field.kind == "int_pair":
             parsed = parse_int_pair(str(raw))
         else:

@@ -202,6 +202,13 @@ STEPS: dict[str, CalibrationStep] = {
                 description="Siege card on the bottom battle bar",
             ),
             CalibrationPart(
+                "rage_slot",
+                "Rage spell slot",
+                "tap",
+                optional=True,
+                description="Rage spell card on the bottom battle bar",
+            ),
+            CalibrationPart(
                 "hero_1",
                 "Hero 1 slot",
                 "tap",
@@ -878,10 +885,11 @@ class CalibrationWizard:
             "On a BATTLE / scout screen with your army visible in the bottom bar:\n"
             "  • e-drag / first troop card\n"
             "  • siege machine card\n"
+            "  • rage spell card\n"
             "  • each of the 4 hero cards (left → right)\n"
             "Skip to use built-in default positions."
         )
-        if prompt_yes_no("Calibrate army-bar taps (e-drag, siege, heroes) now?"):
+        if prompt_yes_no("Calibrate army-bar taps (e-drag, siege, rage, heroes) now?"):
             print("Open any battle so the army bar is visible, then press Enter.")
             _press_enter()
             frame = self.capture.screenshot()
@@ -893,6 +901,11 @@ class CalibrationWizard:
                 pt = self._pick_point("CENTER of the siege machine card", frame)
                 self.config.tap_points["siege_slot"] = list(pt)
                 logger.info("Saved tap point siege_slot")
+            if prompt_yes_no("Calibrate rage_slot?"):
+                frame = self.capture.screenshot()
+                pt = self._pick_point("CENTER of the rage spell card", frame)
+                self.config.tap_points["rage_slot"] = list(pt)
+                logger.info("Saved tap point rage_slot")
             for i in range(1, 5):
                 if not prompt_yes_no(f"Calibrate hero_{i}?"):
                     break
@@ -901,13 +914,13 @@ class CalibrationWizard:
                 self.config.tap_points[f"hero_{i}"] = list(pt)
                 logger.info("Saved tap point hero_{}", i)
         else:
-            for key in ("edrag_slot", "siege_slot", "hero_1", "hero_2", "hero_3", "hero_4"):
+            for key in ("edrag_slot", "siege_slot", "rage_slot", "hero_1", "hero_2", "hero_3", "hero_4"):
                 if key in self.config.tap_points:
                     _keeping(key)
 
         print(
             "\nFarm calibration saved. Enable farm in Settings after verifying.\n"
-            "Keep electro dragons as the active army preset (11 e-drags + 4 heroes)."
+            "Keep electro dragons as the active army preset (e-drags + heroes + rage)."
         )
 
     def step_optional(self) -> None:

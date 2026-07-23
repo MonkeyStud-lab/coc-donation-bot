@@ -46,6 +46,10 @@ def main() -> int:
     assert all(p[0] < frame.shape[1] * 0.2 for p in left)
     assert all(p[0] > frame.shape[1] * 0.8 for p in right)
 
+    rage = deployer.rage_drop_points(frame, left, side="left")
+    assert len(rage) == config.farm_rage_count
+    assert all(r[0] > left[0][0] for r in rage), "rage should sit right of left-edge troops"
+
     print("verify_farm_offline: OK")
     print(f"  farm_enabled={config.farm_enabled} farm_calibrated={config.farm_calibrated}")
     print(f"  deploy points left={len(left)} right={len(right)}")

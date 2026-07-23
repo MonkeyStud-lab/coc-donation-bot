@@ -14,7 +14,13 @@ from tkinter import messagebox, scrolledtext, ttk
 
 from loguru import logger
 
-from coc_bot.calibration.wizard import STEP_IDS, STEPS, CalibrationWizard
+from coc_bot.calibration.wizard import (
+    STEP_IDS,
+    STEPS,
+    CalibrationWizard,
+    parent_step_id,
+    part_is_configured,
+)
 from coc_bot.config import load_config, project_root, user_settings_path
 from coc_bot.gui.debug_actions import DEBUG_ACTIONS, run_debug_action
 from coc_bot.gui.settings_fields import SETTINGS, current_setting_values, save_settings_from_gui
@@ -330,17 +336,24 @@ class BotControlApp(tk.Tk):
         tree_wrap = tk.Frame(card, bg=SURFACE)
         tree_wrap.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
-        cols = ("step", "title", "status")
+        cols = ("item", "status")
         self._calib_tree = ttk.Treeview(
-            tree_wrap, columns=cols, show="headings", height=9, selectmode="browse"
+            tree_wrap,
+            columns=cols,
+            show="tree headings",
+            height=14,
+            selectmode="browse",
         )
-        self._calib_tree.heading("step", text="Step")
-        self._calib_tree.heading("title", text="Title")
+        self._calib_tree.heading("#0", text="Step / part")
+        self._calib_tree.heading("item", text="Key")
         self._calib_tree.heading("status", text="Status")
-        self._calib_tree.column("step", width=130, stretch=False)
-        self._calib_tree.column("title", width=280)
-        self._calib_tree.column("status", width=100, stretch=False)
-        self._calib_tree.pack(fill=tk.BOTH, expand=True)
+        self._calib_tree.column("#0", width=320, stretch=True)
+        self._calib_tree.column("item", width=160, stretch=False)
+        self._calib_tree.column("status", width=110, stretch=False)
+        scroll = ttk.Scrollbar(tree_wrap, orient=tk.VERTICAL, command=self._calib_tree.yview)
+        self._calib_tree.configure(yscrollcommand=scroll.set)
+        self._calib_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
         row = tk.Frame(self._calib_tab, bg=BG)
         row.pack(fill=tk.X, pady=(4, 0))
@@ -726,10 +739,12 @@ class BotControlApp(tk.Tk):
         for item in self._calib_tree.get_children():
             self._calib_tree.delete(item)
         try:
-            wizard = CalibrationWizard(load_config())
+            config = load_config()
+            wizard = CalibrationWizard(config)
             status = wizard.step_status()
         except Exception as exc:  # noqa: BLE001
             logger.warning("Could not load calibration status: {}", exc)
+            config = load_config()
             status = {sid: False for sid in STEP_IDS}
 
         done = 0
@@ -738,30 +753,73 @@ class BotControlApp(tk.Tk):
             ok = bool(status.get(step_id))
             if ok:
                 done += 1
-            self._calib_tree.insert(
+            parent = self._calib_tree.insert(
                 "",
                 tk.END,
                 iid=step_id,
-                values=(step_id, step.title, "Done" if ok else "Missing"),
+                text=step.title,
+                values=(step_id, "Done" if ok else "Missing"),
+                open=True,
             )
+            for part in step.parts:
+                part_ok = part_is_configured(config, part)
+                if part.optional and not part_ok:
+                    part_status = "Optional"
+                elif part_ok:
+                    part_status = "Done"
+                else:
+                    part_status = "Missing"
+                label = part.label
+                if part.optional:
+                    label = f"{label} (optional)"
+                self._calib_tree.insert(
+                    parent,
+                    tk.END,
+                    iid=f"{step_id}::{part.key}",
+                    text=f"  · {label}",
+                    values=(part.key, part_status),
+                )
         total = len(STEP_IDS)
-        self._calib_detail.set(f"{done}/{total} steps configured. Select a step for details.")
+        self._calib_detail.set(
+            f"{done}/{total} steps configured. Expand a step to see each part; "
+            "Recalibrate Selected runs that whole step."
+        )
 
     def _on_calib_select(self, _event=None) -> None:
         sel = self._calib_tree.selection()
         if not sel:
             return
-        step_id = sel[0]
+        iid = sel[0]
+        step_id = parent_step_id(iid)
         step = STEPS[step_id]
-        status = self._calib_tree.set(step_id, "status")
-        self._calib_detail.set(f"{step.title} — {status}\n{step.summary}")
+        if "::" in iid:
+            part_key = iid.split("::", 1)[1]
+            part = next((p for p in step.parts if p.key == part_key), None)
+            if part is None:
+                self._calib_detail.set(step.summary)
+                return
+            status = self._calib_tree.set(iid, "status")
+            extra = f"\n{part.description}" if part.description else ""
+            opt = " (optional)" if part.optional else ""
+            self._calib_detail.set(
+                f"{step.title} → {part.label}{opt}\n"
+                f"Status: {status} · key: {part.key} · type: {part.kind}{extra}\n\n"
+                f"Recalibrate Selected runs the full “{step.title}” wizard step."
+            )
+            return
+        status = self._calib_tree.set(iid, "status")
+        parts_line = ", ".join(p.label for p in step.parts) if step.parts else step.summary
+        self._calib_detail.set(
+            f"{step.title} — {status}\n{step.summary}\nParts: {parts_line}"
+        )
 
     def _recalibrate_selected(self) -> None:
         sel = self._calib_tree.selection()
         if not sel:
-            messagebox.showinfo("Select a step", "Select a calibration step in the list first.")
+            messagebox.showinfo("Select a step", "Select a calibration step or part in the list first.")
             return
-        self._launch_calibrate(["--step", sel[0]])
+        step_id = parent_step_id(sel[0])
+        self._launch_calibrate(["--step", step_id])
 
     def _recalibrate_all(self) -> None:
         if not messagebox.askyesno(

@@ -36,11 +36,23 @@ STEP_IDS = (
 
 
 @dataclass(frozen=True)
+class CalibrationPart:
+    """One tangible item inside a calibration step (shown as a subsection in the GUI)."""
+
+    key: str
+    label: str
+    kind: str  # tap | template | roi | color | grid | meta
+    optional: bool = False
+    description: str = ""
+
+
+@dataclass(frozen=True)
 class CalibrationStep:
     step_id: str
     title: str
     summary: str
     status_keys: tuple[str, ...]
+    parts: tuple[CalibrationPart, ...] = ()
 
 
 STEPS: dict[str, CalibrationStep] = {
@@ -49,50 +61,205 @@ STEPS: dict[str, CalibrationStep] = {
         "Home screen",
         "Frame size, optional home anchor, open-chat button/tap point",
         ("frame_width", "open_chat"),
+        (
+            CalibrationPart("frame_width", "Screen size", "meta", description="Captured from ADB screenshot"),
+            CalibrationPart("home", "Home anchor", "template", optional=True, description="Optional village/home template"),
+            CalibrationPart(
+                "open_chat",
+                "Open chat",
+                "tap",
+                description="Chat bubble / > tab on home (opens clan chat)",
+            ),
+        ),
     ),
     "clan_chat": CalibrationStep(
         "clan_chat",
         "Clan chat",
         "Chat ROIs, clan_chat anchor, close-chat tab, jump icons",
         ("chat_panel", "chat_requests", "clan_chat", "chat_scroll_down", "chat_request_jump"),
+        (
+            CalibrationPart("chat_panel", "Chat panel ROI", "roi"),
+            CalibrationPart("chat_requests", "Chat requests ROI", "roi"),
+            CalibrationPart("clan_chat", "Clan chat anchor", "template"),
+            CalibrationPart(
+                "close_chat",
+                "Close chat tab",
+                "tap",
+                optional=True,
+                description="Orange < tab on the right edge of open chat",
+            ),
+            CalibrationPart(
+                "chat_request_jump",
+                "Request jump icon",
+                "template",
+                optional=True,
+                description="Exclamation at top or bottom of chat",
+            ),
+            CalibrationPart(
+                "chat_scroll_down",
+                "Scroll-down icon",
+                "template",
+                optional=True,
+                description="Legacy bottom jump icon",
+            ),
+        ),
     ),
     "donation_request": CalibrationStep(
         "donation_request",
         "Donation request",
         "Donate button template in clan chat",
         ("donate_button",),
+        (CalibrationPart("donate_button", "Donate button", "template"),),
     ),
     "donation_panel": CalibrationStep(
         "donation_panel",
         "Donation panel",
         "Troop+siege bar, spell bar, tap-outside-to-close point",
         ("donation_troop_bar", "donation_spell_bar", "tap_outside_donation"),
+        (
+            CalibrationPart("donation_troop_bar", "Troop + siege bar ROI", "roi"),
+            CalibrationPart("donation_spell_bar", "Spell bar ROI", "roi"),
+            CalibrationPart(
+                "tap_outside_donation",
+                "Tap outside to close",
+                "tap",
+                description="Safe empty spot to dismiss the donation panel",
+            ),
+        ),
     ),
     "slot_colors": CalibrationStep(
         "slot_colors",
         "Slot colors",
         "Colored vs grey troop/spell slot samples in the donation panel bars",
         ("donatable_troop", "disabled_troop", "donatable_spell", "disabled_spell"),
+        (
+            CalibrationPart("donatable_troop", "Donatable troop color", "color"),
+            CalibrationPart("disabled_troop", "Grey troop color", "color"),
+            CalibrationPart("donatable_spell", "Donatable spell color", "color"),
+            CalibrationPart("disabled_spell", "Grey spell color", "color"),
+        ),
     ),
     "grid": CalibrationStep(
         "grid",
         "Grid layout",
         "Draw visible troop/spell slot grid (pick_grid.py) or enter rows/cols",
         ("grid",),
+        (
+            CalibrationPart("troop_bar", "Troop + siege grid", "grid"),
+            CalibrationPart("spell_bar", "Spell grid", "grid"),
+        ),
     ),
     "farm": CalibrationStep(
         "farm",
         "Farm / unranked attack",
         "Attack button, unranked Battle, Find a Match, Return Home, optional hero slots",
         ("attack_button", "unranked_battle", "return_home"),
+        (
+            CalibrationPart(
+                "attack_button",
+                "Attack! button",
+                "tap",
+                description="Bottom-left Attack! on home village",
+            ),
+            CalibrationPart(
+                "unranked_battle",
+                "Unranked Battle",
+                "tap",
+                description="Battle (not Ranked) in the Attack menu",
+            ),
+            CalibrationPart(
+                "find_match",
+                "Find a Match / start search",
+                "tap",
+                optional=True,
+                description="Commence opponent search if separate from Battle",
+            ),
+            CalibrationPart(
+                "return_home",
+                "Return Home",
+                "tap",
+                description="End-of-battle Return Home / OK",
+            ),
+            CalibrationPart(
+                "edrag_slot",
+                "E-drag army slot",
+                "tap",
+                optional=True,
+                description="First troop card on the bottom battle bar",
+            ),
+            CalibrationPart(
+                "hero_1",
+                "Hero 1 slot",
+                "tap",
+                optional=True,
+            ),
+            CalibrationPart(
+                "hero_2",
+                "Hero 2 slot",
+                "tap",
+                optional=True,
+            ),
+            CalibrationPart(
+                "hero_3",
+                "Hero 3 slot",
+                "tap",
+                optional=True,
+            ),
+            CalibrationPart(
+                "hero_4",
+                "Hero 4 slot",
+                "tap",
+                optional=True,
+            ),
+        ),
     ),
     "optional": CalibrationStep(
         "optional",
         "Optional UI",
         "Loading screen and popup dismiss templates",
         ("loading",),
+        (
+            CalibrationPart("loading", "Loading screen", "template", optional=True),
+            CalibrationPart("popup_dismiss", "Popup dismiss", "template", optional=True),
+            CalibrationPart("popup", "Popup anchor", "template", optional=True),
+        ),
     ),
 }
+
+
+def part_is_configured(config: BotConfig, part: CalibrationPart) -> bool:
+    """Whether a subsection item is present in the current calibration."""
+    key = part.key
+    if part.kind == "meta":
+        if key == "frame_width":
+            return int(config.frame_width or 0) > 0 and int(config.frame_height or 0) > 0
+        return False
+    if part.kind == "tap":
+        if key == "tap_outside_donation":
+            return bool(
+                config.tap_points.get("tap_outside_donation")
+                or config.tap_points.get("close_donation")
+            )
+        return bool(config.tap_points.get(key)) or bool(config.templates.get(key))
+    if part.kind == "template":
+        return bool(config.templates.get(key))
+    if part.kind == "roi":
+        return key in config.rois
+    if part.kind == "color":
+        return bool(config.colors.get(key))
+    if part.kind == "grid":
+        grid = config.grid or {}
+        if key in ("troop_bar", "spell_bar"):
+            return bool(grid.get(key))
+        return bool(grid)
+    return False
+
+
+def parent_step_id(tree_iid: str) -> str:
+    """Map a tree selection iid (step or step::part) to the wizard --step id."""
+    if "::" in tree_iid:
+        return tree_iid.split("::", 1)[0]
+    return tree_iid
 
 
 def _roi_list(coords: tuple[int, int, int, int], w: int, h: int) -> list[float]:
@@ -116,6 +283,9 @@ def print_step_menu(status: dict[str, bool]) -> None:
         mark = "[x]" if status.get(step_id) else "[ ]"
         print(f"  {mark} {step_id:18} — {step.title}")
         print(f"      {step.summary}")
+        for part in step.parts:
+            opt = " (optional)" if part.optional else ""
+            print(f"        · {part.label}{opt} [{part.key}]")
     print("-" * 60)
     print("Run:  python scripts/calibrate.py --step clan_chat")
     print("      python scripts/calibrate.py --all")

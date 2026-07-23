@@ -194,12 +194,23 @@ class ScreenClassifier:
         frac = float((blue | white).mean()) / 255.0
         return frac > 0.45 and not self._is_home_screen(frame)
 
+    def _home_attack_chip_visible(self, frame: np.ndarray) -> bool:
+        """Orange/gold Attack! button bottom-left on the village — not End Battle."""
+        h, w = frame.shape[:2]
+        bl = frame[int(h * 0.78) : h, 0 : int(w * 0.14)]
+        if bl.size == 0:
+            return False
+        hsv = cv2.cvtColor(bl, cv2.COLOR_BGR2HSV)
+        warm = cv2.inRange(hsv, (5, 70, 70), (35, 255, 255))
+        return float(warm.mean()) / 255.0 > 0.08
+
     def _looks_like_battle(self, frame: np.ndarray) -> bool:
         """
         True on opponent scout / live attack (army tray at bottom).
 
         Scout UI (before first deploy) shows: bottom troop cards, red End Battle
-        (bottom-left), orange Next (right). Do NOT treat End Battle as home Attack!.
+        (bottom-left), orange Next (right). Do NOT treat village home as battle —
+        home has Attack! (orange) and a busy bottom bar that looks like an army tray.
         """
         if self._template_visible(frame, "battle"):
             return True
@@ -208,27 +219,38 @@ class ScreenClassifier:
         # Victory/defeat summary can show a troop icon — never treat as live battle.
         if self._looks_like_battle_results(frame):
             return False
+        # Village home anchors / quiet chat panel — never battle.
+        if self._is_home_screen(frame):
+            return False
 
         h, w = frame.shape[:2]
 
+        has_next = False
         # Orange "Next" (skip base) on the right — only on scout/battle, not home.
         next_roi = frame[int(h * 0.52) : int(h * 0.92), int(w * 0.80) : w]
         if next_roi.size:
             hsv_n = cv2.cvtColor(next_roi, cv2.COLOR_BGR2HSV)
             next_orange = cv2.inRange(hsv_n, (5, 90, 90), (28, 255, 255))
-            if float(next_orange.mean()) / 255.0 > 0.06:
-                return True
+            has_next = float(next_orange.mean()) / 255.0 > 0.06
 
+        has_end_battle = False
         # Red "End Battle" chip bottom-left — scout/battle only (not home Attack!).
         end_roi = frame[int(h * 0.78) : h, 0 : int(w * 0.20)]
         if end_roi.size:
             hsv_e = cv2.cvtColor(end_roi, cv2.COLOR_BGR2HSV)
             red1 = cv2.inRange(hsv_e, (0, 100, 80), (8, 255, 255))
             red2 = cv2.inRange(hsv_e, (170, 100, 80), (180, 255, 255))
-            if float(cv2.bitwise_or(red1, red2).mean()) / 255.0 > 0.04:
-                return True
+            has_end_battle = float(cv2.bitwise_or(red1, red2).mean()) / 255.0 > 0.04
 
-        # Army tray along the bottom (cards / wood chrome).
+        # Clear scout/battle chrome wins immediately.
+        if has_next or has_end_battle:
+            return True
+
+        # Village Attack! chip without Next/End Battle → home (or shop), not battle.
+        if self._home_attack_chip_visible(frame):
+            return False
+
+        # Army tray along the bottom (cards / wood chrome) — only when Attack! is gone.
         bar = frame[int(h * 0.78) : h, int(w * 0.02) : int(w * 0.98)]
         if bar.size == 0:
             return False
@@ -240,17 +262,8 @@ class ScreenClassifier:
         gray = cv2.cvtColor(bar, cv2.COLOR_BGR2GRAY)
         edge_frac = float(cv2.Canny(gray, 30, 100).mean()) / 255.0
 
-        bl = frame[int(h * 0.82) : h, 0 : int(w * 0.12)]
-        gold_chip = False
-        if bl.size:
-            hsv_bl = cv2.cvtColor(bl, cv2.COLOR_BGR2HSV)
-            gold = cv2.inRange(hsv_bl, (12, 80, 90), (35, 255, 255))
-            gold_chip = float(gold.mean()) / 255.0 > 0.12
-
         structured = edge_frac > 0.04 and (dark_frac > 0.10 or brown_frac > 0.06)
         dark_tray = dark_frac > 0.25
-        if gold_chip and not structured and not dark_tray:
-            return False
         return structured or dark_tray
 
     def find_return_home_button(self, frame: np.ndarray) -> tuple[int, int] | None:
@@ -344,24 +357,12 @@ class ScreenClassifier:
         if self._looks_like_battle_results(frame):
             return ScreenType.BATTLE_RESULTS
 
-        # Live battle / scout (army tray, Next, End Battle).
-        if self._looks_like_battle(frame):
-            return ScreenType.BATTLE
-
         if self._template_visible(frame, "return_home") or self._template_visible(
             frame, "battle_end"
         ):
             return ScreenType.BATTLE_RESULTS
 
-        # Attack picker also dims the village + shows a green Battle button — detect
-        # it before the generic popup heuristic so we do not "dismiss" Attack.
-        if self._looks_like_attack_menu(frame):
-            return ScreenType.ATTACK_MENU
-
-        if self.looks_like_blocking_popup(frame):
-            return ScreenType.POPUP
-
-        # Prefer chat/donation before matchmaking — donation bars look like army bars.
+        # Prefer chat/donation before battle/home heuristics — donation bars look busy.
         if self._clan_chat_anchor_visible(frame):
             return ScreenType.CLAN_CHAT
 
@@ -371,11 +372,29 @@ class ScreenClassifier:
         if self._in_clan_chat_context(frame):
             return ScreenType.CLAN_CHAT
 
+        # Village home before loose battle-tray heuristics (bottom chrome false-matches).
+        if self._is_home_screen(frame) or self._home_attack_chip_visible(frame):
+            # Attack picker / battle still win when their chrome is present.
+            if self._looks_like_attack_menu(frame):
+                return ScreenType.ATTACK_MENU
+            if self._looks_like_battle(frame):
+                return ScreenType.BATTLE
+            return ScreenType.HOME
+
+        # Live battle / scout (Next, End Battle, or army tray without Attack!).
+        if self._looks_like_battle(frame):
+            return ScreenType.BATTLE
+
+        # Attack picker also dims the village + shows a green Battle button — detect
+        # it before the generic popup heuristic so we do not "dismiss" Attack.
+        if self._looks_like_attack_menu(frame):
+            return ScreenType.ATTACK_MENU
+
+        if self.looks_like_blocking_popup(frame):
+            return ScreenType.POPUP
+
         if self._looks_like_matchmaking(frame):
             return ScreenType.MATCHMAKING
-
-        if self._is_home_screen(frame):
-            return ScreenType.HOME
 
         return ScreenType.UNKNOWN
 

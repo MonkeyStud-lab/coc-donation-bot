@@ -352,7 +352,18 @@ class ScreenClassifier:
         End-of-attack screen with a large green Return Home / OK button.
 
         Distinct from live scout/battle: no Next, no End Battle, big green CTA.
+        Must NOT match donation panel green Donate buttons or clan-chat chrome.
         """
+        # Chat / donate UI often has green buttons — never treat as Return Home.
+        if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
+            return False
+        if self._clan_chat_anchor_visible(frame):
+            return False
+        if self._template_visible(frame, "donate_button"):
+            return False
+        if self._donation_panel_heuristic(frame):
+            return False
+
         if self._template_visible(frame, "return_home") or self._template_visible(
             frame, "battle_end"
         ):
@@ -380,17 +391,8 @@ class ScreenClassifier:
         if self._template_visible(frame, "loading"):
             return ScreenType.LOADING
 
-        # Results before live-battle — green Return Home must win over tray heuristics.
-        if self._looks_like_battle_results(frame):
-            return ScreenType.BATTLE_RESULTS
-
-        if self._template_visible(frame, "return_home") or self._template_visible(
-            frame, "battle_end"
-        ):
-            return ScreenType.BATTLE_RESULTS
-
-        # Chat bubble / Attack! on village ⇒ home BEFORE donation/chat ROI heuristics
-        # (those ROIs false-match busy village scenery).
+        # Chat bubble / Attack! on village ⇒ home BEFORE green-button heuristics
+        # (donate greens were being mistaken for Return Home).
         if self._open_chat_icon_visible(frame):
             return ScreenType.HOME
 
@@ -399,8 +401,14 @@ class ScreenClassifier:
                 return ScreenType.ATTACK_MENU
             return ScreenType.HOME
 
-        # Prefer chat/donation — donation bars only after home is ruled out.
+        # Clan chat / donation before battle_results — green Donate ≠ Return Home.
         if self._clan_chat_anchor_visible(frame):
+            return ScreenType.CLAN_CHAT
+
+        if self._template_visible(frame, "donate_button"):
+            # Donate button in chat means we are in clan chat (panel may be closed).
+            if self._donation_panel_heuristic(frame):
+                return ScreenType.DONATION_PANEL
             return ScreenType.CLAN_CHAT
 
         if self._in_clan_chat_context(frame) and self._donation_panel_heuristic(frame):
@@ -408,6 +416,15 @@ class ScreenClassifier:
 
         if self._in_clan_chat_context(frame):
             return ScreenType.CLAN_CHAT
+
+        # Results before live-battle — green Return Home must win over tray heuristics.
+        if self._looks_like_battle_results(frame):
+            return ScreenType.BATTLE_RESULTS
+
+        if self._template_visible(frame, "return_home") or self._template_visible(
+            frame, "battle_end"
+        ):
+            return ScreenType.BATTLE_RESULTS
 
         if self._is_home_screen(frame):
             return ScreenType.HOME

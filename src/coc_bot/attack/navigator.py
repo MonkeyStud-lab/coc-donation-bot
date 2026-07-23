@@ -434,7 +434,7 @@ class AttackNavigator:
                 self.input.tap(cx, cy, jitter=0)
                 return True
         h, w = frame.shape[:2]
-        fx, fy = int(w * 0.50), int(h * 0.85)
+        fx, fy = int(w * 0.50), int(h * 0.88)
         logger.info("return_home fallback tap ({}, {})", fx, fy)
         self.input.tap(fx, fy, jitter=0)
         return True

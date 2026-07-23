@@ -254,26 +254,58 @@ class ScreenClassifier:
         return structured or dark_tray
 
     def find_return_home_button(self, frame: np.ndarray) -> tuple[int, int] | None:
-        """Center of the green Return Home button on the defeat/victory screen."""
+        """
+        Tap target for the green Return Home button on defeat/victory.
+
+        Prefers a wide green CTA in the lower center (not other green UI), and
+        biases slightly down-right so we don't miss high/left of the pill.
+        """
         h, w = frame.shape[:2]
-        x0, x1 = int(w * 0.20), int(w * 0.80)
-        y0, y1 = int(h * 0.68), int(h * 0.96)
+        # Button sits bottom-center of the results card — keep ROI tight.
+        x0, x1 = int(w * 0.28), int(w * 0.72)
+        y0, y1 = int(h * 0.78), int(h * 0.96)
         crop = frame[y0:y1, x0:x1]
         if crop.size == 0:
             return None
         hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
         green = cv2.inRange(hsv, (35, 70, 70), (95, 255, 255))
         green = cv2.morphologyEx(
-            green, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (15, 9))
+            green, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (11, 7))
         )
         contours, _ = cv2.findContours(green, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
             return None
-        best = max(contours, key=cv2.contourArea)
-        if cv2.contourArea(best) < (crop.shape[0] * crop.shape[1] * 0.02):
+        min_area = crop.shape[0] * crop.shape[1] * 0.015
+        crop_cx = crop.shape[1] / 2.0
+
+        def _score(c: np.ndarray) -> float:
+            area = float(cv2.contourArea(c))
+            if area < min_area:
+                return -1.0
+            bx, by, bw, bh = cv2.boundingRect(c)
+            if bh < 8 or bw < 40:
+                return -1.0
+            aspect = bw / float(bh)
+            if aspect < 1.4:
+                return -1.0
+            # Prefer wide pills near horizontal center of the ROI.
+            cx = bx + bw / 2.0
+            center_pen = 1.0 - min(1.0, abs(cx - crop_cx) / (crop.shape[1] * 0.5))
+            return area * aspect * (0.55 + 0.45 * center_pen)
+
+        best = max(contours, key=_score)
+        if _score(best) < 0:
             return None
-        bx, by, bw, bh = cv2.boundingRect(best)
-        return int(x0 + bx + bw / 2), int(y0 + by + bh / 2)
+        m = cv2.moments(best)
+        if m["m00"] > 1e-3:
+            cx = x0 + m["m10"] / m["m00"]
+            cy = y0 + m["m01"] / m["m00"]
+        else:
+            bx, by, bw, bh = cv2.boundingRect(best)
+            cx = x0 + bx + bw / 2.0
+            cy = y0 + by + bh / 2.0
+        # Slight down-right bias — blob center reads a bit high/left of the label.
+        return int(cx + w * 0.018), int(cy + h * 0.022)
 
     def _looks_like_battle_results(self, frame: np.ndarray) -> bool:
         """

@@ -11,6 +11,17 @@ It works by looking at the game screen through ADB (Android Debug Bridge) and ta
 
 ---
 
+## Documentation for builders
+
+| Doc | Who it’s for |
+|-----|----------------|
+| [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) | How the bot thinks: architecture, donation + farm flows, vision modes, leave safeguards |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Where to change code to add screens, farm behavior, donation rules, settings |
+
+The rest of this README is the **install and use** guide for Ubuntu + Waydroid.
+
+---
+
 ## What you need before starting
 
 - A computer running **Ubuntu** (or similar Debian Linux)
@@ -277,6 +288,9 @@ src/coc_bot/
 scripts/
   setup_linux.sh   # First-time install on Ubuntu
   calibrate.py     # Setup wizard from the terminal
+docs/
+  HOW_IT_WORKS.md  # Architecture (read this to extend the bot)
+  CONTRIBUTING.md  # Extension recipes
 ```
 
 ---

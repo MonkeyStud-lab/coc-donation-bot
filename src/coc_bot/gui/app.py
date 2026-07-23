@@ -66,6 +66,8 @@ class BotControlApp(tk.Tk):
         self._debug = debug
         self._bot = None
         self._bot_thread: threading.Thread | None = None
+        self._farm_oneshot_thread: threading.Thread | None = None
+        self._farm_oneshot_stop = threading.Event()
         self._log_sink_id: int | None = None
         self._setting_vars: dict[str, tk.Variable] = {}
         self._debug_busy = False
@@ -533,8 +535,17 @@ class BotControlApp(tk.Tk):
     def _bot_running(self) -> bool:
         return self._bot_thread is not None and self._bot_thread.is_alive()
 
+    def _farm_oneshot_running(self) -> bool:
+        return self._farm_oneshot_thread is not None and self._farm_oneshot_thread.is_alive()
+
     def start_bot(self) -> None:
         if self._bot_running():
+            return
+        if self._farm_oneshot_running():
+            messagebox.showinfo(
+                "Farm in progress",
+                "A one-shot farm attack is running. Press Stop first, or wait for it to finish.",
+            )
             return
         config = load_config()
         if not config.calibrated:
@@ -573,14 +584,20 @@ class BotControlApp(tk.Tk):
         self._bot_thread.start()
 
     def stop_bot(self) -> None:
-        if not self._bot_running():
-            self._on_bot_stopped()
-            return
-        self._status.set("Stopping…")
-        self._append_log("==> Stop requested (Clash stays open)")
+        stopped_something = False
+        if self._farm_oneshot_running():
+            self._farm_oneshot_stop.set()
+            self._status.set("Stopping farm…")
+            self._append_log("==> Stop requested (farm one-shot — Clash stays open)")
+            stopped_something = True
         bot = self._bot
-        if bot is not None:
+        if self._bot_running() and bot is not None:
+            self._status.set("Stopping…")
+            self._append_log("==> Stop requested (Clash stays open)")
             bot.request_stop()
+            stopped_something = True
+        if not stopped_something:
+            self._on_bot_stopped()
 
     def request_farm_attack(self) -> None:
         """Queue a farm attack on the running bot, or run a one-shot if stopped."""
@@ -601,26 +618,43 @@ class BotControlApp(tk.Tk):
             self._farm_status.set(bot.farm_status_line())
             return
 
+        if self._farm_oneshot_running():
+            messagebox.showinfo(
+                "Farm in progress",
+                "A farm attack is already running. Press Stop to cancel it.",
+            )
+            return
+
         if not messagebox.askyesno(
             "Farm attack now",
             "Bot is not running. Run one unranked farm attack now?\n\n"
             "This will leave chat, Attack → Battle, deploy along the edge, "
-            "and wait for the timer to end.",
+            "and wait for the timer to end.\n\n"
+            "You can press Stop to cancel.",
         ):
             return
 
+        self._farm_oneshot_stop.clear()
+        self._start_btn.configure(state=tk.DISABLED)
+        self._stop_btn.configure(state=tk.NORMAL)
+        self._status.set("Farm one-shot running…")
         self._append_log("==> Running one-shot farm attack…")
         self._farm_status.set("Farm: running one-shot…")
 
         def worker() -> None:
             try:
-                success, msg = DebugSession().farm_one_shot()
+                success, msg = DebugSession().farm_one_shot(
+                    should_stop=self._farm_oneshot_stop.is_set
+                )
                 logger.info(msg)
 
                 def done() -> None:
                     self._append_log(msg)
-                    self._refresh_farm_status()
-                    if success:
+                    was_stopped = self._farm_oneshot_stop.is_set()
+                    self._on_farm_oneshot_done()
+                    if was_stopped:
+                        messagebox.showinfo("Farm", "Farm attack stopped.")
+                    elif success:
                         messagebox.showinfo("Farm", "Farm attack finished.")
                     else:
                         messagebox.showwarning("Farm", msg)
@@ -628,10 +662,24 @@ class BotControlApp(tk.Tk):
                 self.after(0, done)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Farm one-shot failed")
-                self.after(0, lambda: messagebox.showerror("Farm error", str(exc)))
-                self.after(0, self._refresh_farm_status)
 
-        threading.Thread(target=worker, daemon=True).start()
+                def fail() -> None:
+                    messagebox.showerror("Farm error", str(exc))
+                    self._on_farm_oneshot_done()
+
+                self.after(0, fail)
+
+        self._farm_oneshot_thread = threading.Thread(
+            target=worker, name="farm-oneshot", daemon=True
+        )
+        self._farm_oneshot_thread.start()
+
+    def _on_farm_oneshot_done(self) -> None:
+        self._farm_oneshot_thread = None
+        self._farm_oneshot_stop.clear()
+        if not self._bot_running():
+            self._on_bot_stopped()
+        self._refresh_farm_status()
 
     def _refresh_farm_status(self) -> None:
         try:
@@ -876,12 +924,14 @@ class BotControlApp(tk.Tk):
         )
 
     def _on_close(self) -> None:
-        if self._bot_running():
+        if self._bot_running() or self._farm_oneshot_running():
             if not messagebox.askyesno("Quit", "Bot is running. Stop it and quit?"):
                 return
             self.stop_bot()
             if self._bot_thread is not None:
                 self._bot_thread.join(timeout=3.0)
+            if self._farm_oneshot_thread is not None:
+                self._farm_oneshot_thread.join(timeout=3.0)
         if self._log_sink_id is not None:
             try:
                 logger.remove(self._log_sink_id)

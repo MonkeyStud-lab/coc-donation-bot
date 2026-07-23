@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import random
 import time
+from collections.abc import Callable
 
 import numpy as np
 from loguru import logger
 
 from coc_bot.adb.input import InputController
 from coc_bot.config import BotConfig
+from coc_bot.stop import interrupted_sleep
 
 
 class EdgeDeployer:
@@ -21,6 +24,13 @@ class EdgeDeployer:
     def __init__(self, config: BotConfig, input_ctrl: InputController) -> None:
         self.config = config
         self.input = input_ctrl
+        self.stop_check: Callable[[], bool] | None = None
+
+    def _stopping(self) -> bool:
+        return bool(self.stop_check and self.stop_check())
+
+    def _sleep(self, seconds: float) -> bool:
+        return interrupted_sleep(seconds, self.stop_check)
 
     def _resolve_side(self, side: str | None) -> str:
         side = (side or self.config.farm_deploy_side).strip().lower()
@@ -72,16 +82,22 @@ class EdgeDeployer:
             y,
         )
         for i in range(full):
+            if self._stopping():
+                return
             self.input.swipe(x1, y, x2, y, duration_ms=duration_ms)
-            time.sleep(settle)
+            if self._sleep(settle):
+                return
             logger.debug("Pan swipe {}/{} done", i + 1, total)
 
         if frac >= 0.05:
+            if self._stopping():
+                return
             # Partial swipe: same start, shorter travel = less camera movement.
             x2_frac = int(round(x1 + (x2 - x1) * frac))
             dur = max(120, int(duration_ms * frac))
             self.input.swipe(x1, y, x2_frac, y, duration_ms=dur)
-            time.sleep(settle)
+            if self._sleep(settle):
+                return
             logger.debug("Pan fractional swipe {:.2f} done ({},{}) -> ({},{})", frac, x1, y, x2_frac, y)
 
     def deploy_points(self, frame: np.ndarray, side: str | None = None) -> list[tuple[int, int]]:
@@ -166,9 +182,8 @@ class EdgeDeployer:
         """
         Spread rage drops deep into the base, well past the troop column.
 
-        Rage covers a wide area — place them far apart vertically so AoEs
-        barely overlap. For a left-edge deploy that means well to the right
-        of the troops.
+        Positions are jittered each attack so drops are not a perfect grid.
+        For a left-edge deploy that means well to the right of the troops.
         """
         if not troop_points:
             return []
@@ -179,31 +194,54 @@ class EdgeDeployer:
         h, w = frame.shape[:2]
         side = self._resolve_side(side)
         troop_x = troop_points[0][0]
-        inward = int(w * float(self.config.farm_rage_inward_frac))
-        # Toward the village from the deploy edge (rightward when deploying left).
-        rx = troop_x + inward if side == "left" else troop_x - inward
-        rx = max(int(w * 0.08), min(int(w * 0.92), rx))
+        # Base inward depth + small random offset (still toward the village).
+        inward_frac = float(self.config.farm_rage_inward_frac)
+        inward_frac += random.uniform(-0.03, 0.04)
+        inward_frac = max(0.08, min(0.40, inward_frac))
+        inward = int(w * inward_frac)
+        rx_base = troop_x + inward if side == "left" else troop_x - inward
+        rx_base = max(int(w * 0.08), min(int(w * 0.92), rx_base))
 
-        # Use most of the playfield height so drops sit far apart.
-        y0, y1 = int(h * 0.12), int(h * 0.74)
+        # Vertical span with slight random margins.
+        y0 = int(h * random.uniform(0.10, 0.16))
+        y1 = int(h * random.uniform(0.70, 0.78))
+        if y1 <= y0 + 40:
+            y0, y1 = int(h * 0.12), int(h * 0.74)
 
-        if count == 1:
-            points = [(rx, (y0 + y1) // 2)]
-        else:
-            points = [
-                (rx, int(y0 + (y1 - y0) * i / (count - 1)))
-                for i in range(count)
-            ]
+        # Jitter scales with resolution — keep drops on the playfield.
+        x_jitter = max(12, int(w * 0.035))
+        y_jitter = max(10, int(h * 0.025))
+
+        points: list[tuple[int, int]] = []
+        for i in range(count):
+            if count == 1:
+                y = (y0 + y1) // 2
+            else:
+                y = int(y0 + (y1 - y0) * i / (count - 1))
+            x = rx_base + random.randint(-x_jitter, x_jitter)
+            y = y + random.randint(-y_jitter, y_jitter)
+            x = max(int(w * 0.06), min(int(w * 0.94), x))
+            y = max(int(h * 0.08), min(int(h * 0.80), y))
+            points.append((x, y))
+
+        # Don't always drop top→bottom in the same order.
+        if count > 1 and random.random() < 0.45:
+            points.reverse()
+        elif count > 2 and random.random() < 0.25:
+            random.shuffle(points)
 
         logger.info(
-            "Rage drop line side={} x={} (troop_x={} inward={}) y={}-{} count={}",
+            "Rage drop points side={} base_x={} (troop_x={} inward={}) "
+            "y={}-{} count={} jitter=±{}/±{}",
             side,
-            rx,
+            rx_base,
             troop_x,
             inward,
             y0,
             y1,
             count,
+            x_jitter,
+            y_jitter,
         )
         return points
 
@@ -239,12 +277,16 @@ class EdgeDeployer:
         """
         side = self._resolve_side(side)
         self.pan_to_deploy_side(frame, side=side)
+        if self._stopping():
+            return 0
         points = self.deploy_points(frame, side=side)
         if not points:
             logger.warning("No deploy points — skipping dump")
             return 0
 
         self.select_edrag_slot(frame)
+        if self._stopping():
+            return 0
 
         edrag_taps = max(len(points), int(self.config.farm_edrag_deploy_taps))
         total = 0
@@ -252,48 +294,57 @@ class EdgeDeployer:
         for pass_i in range(passes):
             ordered = points if pass_i % 2 == 0 else list(reversed(points))
             for x, y in ordered:
+                if self._stopping():
+                    return total
                 self.input.tap(x, y)
                 total += 1
-                if tap_pause > 0:
-                    time.sleep(tap_pause)
+                if tap_pause > 0 and self._sleep(tap_pause):
+                    return total
                 if total >= edrag_taps and pass_i > 0:
                     break
             if total >= edrag_taps:
                 break
 
         while total < edrag_taps:
+            if self._stopping():
+                return total
             x, y = points[total % len(points)]
             self.input.tap(x, y)
             total += 1
-            if tap_pause > 0:
-                time.sleep(tap_pause)
+            if tap_pause > 0 and self._sleep(tap_pause):
+                return total
 
         logger.info("Deployed e-drags along {} — {} map taps", side, total)
 
         # Rage right after dragons so the push is already on the map.
         rage_dropped = 0
-        if self.select_rage_slot(frame):
+        if not self._stopping() and self.select_rage_slot(frame):
             # One select arms all remaining rages — keep tapping the map.
-            time.sleep(0.35)
+            if self._sleep(0.35):
+                return total
             rage_points = self.rage_drop_points(frame, points, side=side)
             logger.info(
                 "Dropping {} rage spell(s) on the base (single slot select)",
                 len(rage_points),
             )
             for i, (rx, ry) in enumerate(rage_points):
+                if self._stopping():
+                    return total
                 logger.info("Deploying rage {}/{} at ({}, {})", i + 1, len(rage_points), rx, ry)
                 self.input.tap(rx, ry)
                 total += 1
                 rage_dropped += 1
-                time.sleep(0.18)
+                if self._sleep(random.uniform(0.12, 0.28)):
+                    return total
 
         # Siege: select card, drop once near mid-edge.
-        if self.select_siege_slot(frame):
+        if not self._stopping() and self.select_siege_slot(frame):
             sx, sy = points[len(points) // 2]
             logger.info("Deploying siege at ({}, {})", sx, sy)
             self.input.tap(sx, sy)
             total += 1
-            time.sleep(0.35)
+            if self._sleep(0.35):
+                return total
 
         heroes = self.hero_slot_points(frame)
         place_idxs = [
@@ -302,18 +353,23 @@ class EdgeDeployer:
         ]
         activate = bool(self.config.farm_activate_hero_abilities)
         for hero_i, (hx, hy) in enumerate(heroes):
+            if self._stopping():
+                return total
             logger.info("Deploying hero {} via slot ({}, {})", hero_i + 1, hx, hy)
             self.input.tap(hx, hy, jitter=0)
-            time.sleep(0.30)
+            if self._sleep(0.30):
+                return total
             px, py = points[place_idxs[hero_i]]
             self.input.tap(px, py)
             total += 1
-            time.sleep(0.40)
+            if self._sleep(0.40):
+                return total
             # Ability: tap the same hero icon again after they are on the map.
             if activate:
                 logger.info("Activating hero {} ability (re-tap slot)", hero_i + 1)
                 self.input.tap(hx, hy, jitter=0)
-                time.sleep(0.35)
+                if self._sleep(0.35):
+                    return total
 
         logger.info(
             "Army dump complete — {} map taps, {} heroes (abilities={}), siege={}, rage={}",

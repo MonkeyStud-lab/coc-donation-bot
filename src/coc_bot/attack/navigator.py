@@ -347,7 +347,8 @@ class AttackNavigator:
 
             logger.info("Trying Attack! at ({}, {})", x, y)
             self.input.tap(x, y, jitter=0)
-            time.sleep(1.6)
+            if self._sleep(1.6):
+                return False
             check = self.capture.screenshot()
             cv2.imwrite(str(debug_dir / "attack_post_tap.png"), check)
 
@@ -375,14 +376,18 @@ class AttackNavigator:
 
     def start_unranked_battle(self) -> bool:
         """Tap unranked Battle, then Find a Match if calibrated."""
+        if self._stopping():
+            return False
         frame = self.capture.screenshot()
         if not self._tap_named("unranked_battle", frame):
             return False
-        time.sleep(1.0)
+        if self._sleep(1.0):
+            return False
         if self.config.tap_points.get("find_match") or self.config.templates.get("find_match"):
             frame = self.capture.screenshot()
             self._tap_named("find_match", frame)
-            time.sleep(1.0)
+            if self._sleep(1.0):
+                return False
         return True
 
     def wait_for_battle(self, timeout: float | None = None) -> bool:

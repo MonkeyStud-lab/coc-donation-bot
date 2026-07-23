@@ -239,17 +239,29 @@ class DebugSession:
             f"Full ladder has {len(points)} points."
         )
 
-    def farm_one_shot(self) -> tuple[bool, str]:
+    def farm_one_shot(self, should_stop=None) -> tuple[bool, str]:
         """Run a full unranked farm attack once (leave chat → deploy → return home)."""
+        from collections.abc import Callable
+
         from coc_bot.attack.farmer import AttackFarmer
         from coc_bot.runtime.tracker import RuntimeTracker
 
+        stop: Callable[[], bool] | None = should_stop
         self.client.health_check()
-        result = AttackFarmer(
+        farmer = AttackFarmer(
             self.config, self.capture, self.input, self.matcher, self.navigator
-        ).run_one_attack()
+        )
+        if stop is not None:
+            farmer.stop_check = stop
+            farmer.attack_nav.stop_check = stop
+            farmer.deployer.stop_check = stop
+            self.navigator.stop_check = stop
+        result = farmer.run_one_attack()
         if result.success:
             RuntimeTracker(self.config).mark_farm_success()
+        if stop is not None and stop():
+            msg = f"Farm one-shot: stopped ({result.reason})"
+            return False, msg
         msg = f"Farm one-shot: success={result.success} ({result.reason})"
         return result.success, msg
 

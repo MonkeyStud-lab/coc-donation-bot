@@ -104,6 +104,7 @@ class DonationBot:
         self.navigator.stop_check = stop
         self.farmer.stop_check = stop
         self.farmer.attack_nav.stop_check = stop
+        self.farmer.deployer.stop_check = stop
         self.executor.stop_check = stop
         self.break_manager.stop_check = stop
 

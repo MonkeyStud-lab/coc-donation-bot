@@ -54,7 +54,7 @@ Prefer small, focused changes. Match existing naming and logging style (`loguru`
 
 Keep the simple post-deploy timer in `wait_for_battle_end` (wait N seconds from first
 deploy, tap Return Home coords, then confirm home). Leave confirmation should stay
-failsafe-heavy (Attack! chip, leave clouds, clan-chat confirm).
+failsafe-heavy (Attack! chip, clan-chat confirm).
 
 ### 3. Change donation behavior
 
@@ -89,7 +89,7 @@ Any new long wait must honor `stop_check` / `interrupted_sleep` so the GUI **Sto
 Manual checks beat unit tests for this project:
 
 1. **Donation:** open request + specific request; panel opens and closes cleanly.
-2. **Farm:** Attack → Battle → deploy → wait → Return Home → leave clouds → clan chat opens.
+2. **Farm:** Attack → Battle → deploy → wait timer → Return Home → clan chat opens.
 3. **False leave:** mid-fight green scenery should not eject you (End Battle still visible).
 4. **Stop:** during matchmaking wait and during donation scroll.
 5. **Break (optional):** shorten `session_limit_seconds` in settings for a dry test, then restore.

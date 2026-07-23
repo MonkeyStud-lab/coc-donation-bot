@@ -404,20 +404,16 @@ class AttackNavigator:
             if screen == ScreenType.BATTLE or self.classifier._looks_like_battle(frame):  # noqa: SLF001
                 logger.info("Battle field ready (screen={})", screen.value)
                 return True
-            # Search clouds — keep waiting (never treat as results/home).
-            if (
-                screen == ScreenType.MATCHMAKING
-                or self.classifier.looks_like_white_clouds(frame)
-            ):
-                logger.debug("wait_for_battle: still searching (clouds / matchmaking)")
+            if screen == ScreenType.MATCHMAKING:
+                logger.debug("wait_for_battle: still searching (matchmaking)")
                 if self._sleep(0.6):
                     return False
                 continue
             if screen == ScreenType.BATTLE_RESULTS or self.classifier._looks_like_battle_results(  # noqa: SLF001
                 frame
             ):
-                # Matchmaking / load screens often false-trigger results. Only abort
-                # when side silhouettes + Return Home look real and we are not searching.
+                # Load screens often false-trigger results. Only abort when side
+                # silhouettes look like a real finished fight.
                 if self.classifier._looks_like_battle(frame):  # noqa: SLF001
                     logger.info("Battle field ready (overrode false results)")
                     return True
@@ -524,9 +520,6 @@ class AttackNavigator:
 
     def return_home_from_attack(self) -> bool:
         """Tap Return Home / dismiss attack UI until home or chat — never mid-deploy battle."""
-        tapped_return_home = False
-        saw_leave_clouds = False
-
         for _ in range(16):
             if self._stopping():
                 logger.info("return_home_from_attack: stop requested — aborting")
@@ -562,9 +555,11 @@ class AttackNavigator:
                     return False
                 continue
 
-            # Actually home (Attack! / chat bubble) even if classify still says battle —
-            # red roofs / orange UI on the village often fake End Battle chrome.
-            if self._village_home_anchors_visible(frame):
+            # Home village (Attack! / chat) — confirm by opening clan chat.
+            if self._village_home_anchors_visible(frame) or screen in (
+                ScreenType.HOME,
+                ScreenType.CLAN_CHAT,
+            ):
                 if (
                     self.donation_nav is not None
                     and self.classifier.looks_like_blocking_popup(frame)
@@ -575,7 +570,7 @@ class AttackNavigator:
                         return False
                     continue
                 logger.info(
-                    "Attack! / village anchors visible (screen={}) — confirming via clan chat",
+                    "Village visible (screen={}) — confirming via clan chat",
                     screen.value,
                 )
                 outcome = self._confirm_leave_via_clan_chat()
@@ -583,115 +578,18 @@ class AttackNavigator:
                     return True
                 if outcome == "stopped":
                     return False
-                if outcome == "need_return_home":
-                    tapped_return_home = False
-                    saw_leave_clouds = False
                 if self._sleep(0.8):
                     return False
                 continue
 
-            if screen in (ScreenType.HOME, ScreenType.CLAN_CHAT):
-                # Safety: Attack! can show through a modal that classify missed.
-                if (
-                    self.donation_nav is not None
-                    and self.classifier.looks_like_blocking_popup(frame)
-                ):
-                    logger.info("Home under a blocking popup — dismissing")
-                    self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
-                    if self._sleep(0.9):
-                        return False
-                    continue
-                outcome = self._confirm_leave_via_clan_chat()
-                if outcome == "confirmed":
-                    return True
-                if outcome == "stopped":
-                    return False
-                # Still fighting, or Return Home never landed — reset leave state.
-                logger.info(
-                    "Clan-chat confirm failed ({}) — not treating as home yet",
-                    outcome,
-                )
-                tapped_return_home = False
-                saw_leave_clouds = False
-                if self._sleep(0.8):
-                    return False
-                continue
-
-            # After a real Return Home, white clouds confirm leave — wait for village,
-            # never BACK. If scenery faked the green CTA, we won't see clouds and
-            # live battle chrome clears this path (see _await_return_home_clouds).
-            if tapped_return_home and (
-                saw_leave_clouds
-                or self.classifier.looks_like_white_clouds(frame)
-                or screen == ScreenType.MATCHMAKING
-            ):
-                # Mid-fight false tap: End Battle chrome is back — drop leave state.
-                # Do not clear if village anchors are up (home false-positive chrome).
-                if (
-                    not saw_leave_clouds
-                    and not self.classifier.looks_like_white_clouds(frame)
-                    and self.classifier._live_battle_chrome_visible(frame)  # noqa: SLF001
-                    and not self._village_home_anchors_visible(frame)
-                ):
-                    logger.info(
-                        "Clearing Return Home leave state — still in live battle"
-                    )
-                    tapped_return_home = False
-                    continue
-                if self.classifier.looks_like_white_clouds(frame) and not saw_leave_clouds:
-                    saw_leave_clouds = True
-                    logger.info("Return Home confirmed — transition clouds (waiting for village)")
-                if self._wait_through_leave_clouds():
-                    outcome = self._confirm_leave_via_clan_chat()
-                    if outcome == "confirmed":
-                        return True
-                    if outcome == "stopped":
-                        return False
-                    logger.info(
-                        "Post-cloud clan-chat confirm failed ({}) — retry leave",
-                        outcome,
-                    )
-                    tapped_return_home = False
-                    saw_leave_clouds = False
-                # Still not home — loop and reassess (maybe re-tap results CTA).
-                continue
-
-            # Defeat/victory card — prefer strong green Return Home even if red
-            # scenery falsely trips the End Battle chrome heuristic.
+            # Defeat/victory / results — tap Return Home, then confirm village.
             rh_btn = self.classifier.find_return_home_button(
                 frame, require_no_live_chrome=False
             )
-            if rh_btn is not None and (
-                not self.classifier._live_battle_chrome_visible(frame)  # noqa: SLF001
-                or self.classifier._looks_like_battle_results(frame)  # noqa: SLF001
-            ):
-                logger.info(
-                    "Return Home button visible (screen={}) — tapping to leave",
-                    screen.value,
-                )
-                self._tap_return_home(frame)
-                tapped_return_home = True
-                if self._await_return_home_clouds():
-                    outcome = self._confirm_leave_via_clan_chat()
-                    if outcome == "confirmed":
-                        return True
-                    if outcome == "stopped":
-                        return False
-                    logger.info(
-                        "Clan-chat confirm failed after Return Home ({}) — retry",
-                        outcome,
-                    )
-                    tapped_return_home = False
-                    saw_leave_clouds = False
-                continue
-
             results = (
                 screen == ScreenType.BATTLE_RESULTS
                 or self.classifier._looks_like_battle_results(frame)  # noqa: SLF001
-                or (
-                    rh_btn is not None
-                    and not self.classifier._looks_like_battle(frame)  # noqa: SLF001
-                )
+                or rh_btn is not None
             )
             in_battle = (not results) and (not self._village_home_anchors_visible(frame)) and (
                 screen == ScreenType.BATTLE
@@ -707,19 +605,13 @@ class AttackNavigator:
             if results or screen == ScreenType.UNKNOWN:
                 logger.info("Tapping Return Home (screen={})", screen.value)
                 self._tap_return_home(frame)
-                tapped_return_home = True
-                if self._await_return_home_clouds():
-                    outcome = self._confirm_leave_via_clan_chat()
-                    if outcome == "confirmed":
-                        return True
-                    if outcome == "stopped":
-                        return False
-                    logger.info(
-                        "Clan-chat confirm failed after Return Home ({}) — retry",
-                        outcome,
-                    )
-                    tapped_return_home = False
-                    saw_leave_clouds = False
+                if self._sleep(1.4):
+                    return False
+                outcome = self._confirm_leave_via_clan_chat()
+                if outcome == "confirmed":
+                    return True
+                if outcome == "stopped":
+                    return False
                 continue
 
             if screen == ScreenType.ATTACK_MENU:
@@ -728,9 +620,8 @@ class AttackNavigator:
                     return False
                 continue
 
-            # True cancel-search only if we never tapped Return Home this leave.
-            if screen == ScreenType.MATCHMAKING and not tapped_return_home:
-                logger.info("return_home_from_attack: matchmaking without Return Home — BACK to cancel")
+            if screen == ScreenType.MATCHMAKING:
+                logger.info("return_home_from_attack: matchmaking — BACK to cancel search")
                 self.input.back()
                 if self._sleep(1.0):
                     return False
@@ -738,36 +629,12 @@ class AttackNavigator:
 
             # Odd UI — try Return Home; do not BACK if battle chrome is still up.
             self._tap_return_home(frame)
-            tapped_return_home = True
-            if self._await_return_home_clouds():
-                outcome = self._confirm_leave_via_clan_chat()
-                if outcome == "confirmed":
-                    return True
-                if outcome == "stopped":
-                    return False
-                tapped_return_home = False
-                saw_leave_clouds = False
-            check = self.capture.screenshot()
-            if self.classify(check, mode=BotMode.ATTACK) in (
-                ScreenType.HOME,
-                ScreenType.CLAN_CHAT,
-            ):
-                outcome = self._confirm_leave_via_clan_chat()
-                if outcome == "confirmed":
-                    return True
-                if outcome == "stopped":
-                    return False
-                tapped_return_home = False
-                saw_leave_clouds = False
-                continue
-            if self.classifier._looks_like_battle(check):  # noqa: SLF001
-                logger.info("Still looks like battle after Return Home tap — waiting")
-                tapped_return_home = False
-                if self._sleep(1.5):
-                    return False
-                continue
-            # Avoid BACK after a Return Home tap (clouds / load can look odd).
-            if self._sleep(0.8):
+            if self._sleep(1.2):
+                return False
+            outcome = self._confirm_leave_via_clan_chat()
+            if outcome == "confirmed":
+                return True
+            if outcome == "stopped":
                 return False
         outcome = self._confirm_leave_via_clan_chat()
         return outcome == "confirmed"
@@ -907,113 +774,3 @@ class AttackNavigator:
         if self.classifier._live_battle_chrome_visible(frame):  # noqa: SLF001
             return "still_battle"
         return "failed"
-
-    def _await_return_home_clouds(self, timeout: float = 8.0) -> bool:
-        """
-        Failsafe after tapping Return Home: white clouds mean the leave worked.
-
-        Scenery can look like a green Return Home CTA. If we tapped a false
-        green blob, we will not see leave-clouds and live battle chrome stays —
-        abort so the caller keeps waiting in battle instead of pressing BACK.
-        """
-        deadline = time.time() + timeout
-        saw_clouds = False
-        while time.time() < deadline:
-            if self._stopping():
-                return False
-            frame = self.capture.screenshot()
-            if self.classifier.looks_like_white_clouds(frame):
-                if not saw_clouds:
-                    saw_clouds = True
-                    logger.info("Return Home confirmed — transition clouds")
-                if self._sleep(0.5):
-                    return False
-                continue
-            # False scenery tap: still in a live fight — do not wait for leave fog.
-            # If village anchors are already up, Return Home landed (home false chrome).
-            if (
-                not saw_clouds
-                and self.classifier._live_battle_chrome_visible(frame)  # noqa: SLF001
-            ):
-                if self._village_home_anchors_visible(frame):
-                    logger.info(
-                        "Village anchors after Return Home tap — treating as home "
-                        "(ignoring false End Battle chrome)"
-                    )
-                    return True
-                logger.info(
-                    "No leave clouds and End Battle/Next still visible — "
-                    "treating Return Home tap as false scenery match"
-                )
-                return False
-            screen = self.classify(frame, mode=BotMode.ATTACK)
-            if screen == ScreenType.POPUP and self.donation_nav is not None:
-                self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
-                if self._sleep(0.9):
-                    return False
-                continue
-            if screen in (ScreenType.HOME, ScreenType.CLAN_CHAT) or self._village_home_anchors_visible(
-                frame
-            ):
-                if (
-                    self.donation_nav is not None
-                    and self.classifier.looks_like_blocking_popup(frame)
-                ):
-                    self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
-                    if self._sleep(0.9):
-                        return False
-                    continue
-                logger.info("Reached village after Return Home (screen={})", screen.value)
-                return True
-            # Still on results with green CTA — let caller re-tap.
-            # Skip if village anchors are up (home greens ≠ Return Home).
-            if (
-                not saw_clouds
-                and not self._village_home_anchors_visible(frame)
-                and not self.classifier._live_battle_chrome_visible(frame)  # noqa: SLF001
-                and self.classifier.find_return_home_button(frame) is not None
-            ):
-                logger.info("Return Home CTA still visible — will re-tap")
-                return False
-            if self._sleep(0.5):
-                return False
-        if saw_clouds:
-            # Clouds appeared but village not confirmed yet — keep waiting a bit more.
-            return self._wait_through_leave_clouds(timeout=10.0)
-        return False
-
-    def _wait_through_leave_clouds(self, timeout: float = 12.0) -> bool:
-        """Wait until leave fog clears to home/chat (never BACK)."""
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            if self._stopping():
-                return False
-            frame = self.capture.screenshot()
-            if self.classifier.looks_like_white_clouds(frame):
-                if self._sleep(0.5):
-                    return False
-                continue
-            screen = self.classify(frame, mode=BotMode.ATTACK)
-            if screen == ScreenType.POPUP and self.donation_nav is not None:
-                self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
-                if self._sleep(0.9):
-                    return False
-                continue
-            if screen in (ScreenType.HOME, ScreenType.CLAN_CHAT):
-                if (
-                    self.donation_nav is not None
-                    and self.classifier.looks_like_blocking_popup(frame)
-                ):
-                    self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
-                    if self._sleep(0.9):
-                        return False
-                    continue
-                return True
-            if self.attack_button_visible(frame) or self.classifier._home_attack_chip_visible(  # noqa: SLF001
-                frame
-            ):
-                return True
-            if self._sleep(0.6):
-                return False
-        logger.warning("Leave clouds timed out — village not confirmed")
-        return False

@@ -93,11 +93,9 @@ Many Clash screens share colors (green buttons, white cards, sky). A donation pa
 Important heuristics (simplified):
 
 - **Live battle chrome** (red End Battle / orange Next) vetoes false “Return Home” green blobs mid-fight.
-- **White clouds** appear both when **searching for an opponent** and when **loading home after Return Home**. The bot does **not** treat clouds as a unique screen type; it uses **flow phase**:
-  - During `wait_for_battle` → clouds mean “still searching”
-  - After tapping Return Home → clouds mean “leave worked”; wait for the village; **never** press Android BACK
-- **Matchmaking** soft detect prefers upper-half **blue** sky so pure white leave-fog is less likely to be labeled matchmaking.
-- **Live Replay** (someone attacking *you*) is only considered when armed after a Clash relaunch, so normal farm results are not mistaken for defense spectator UI.
+- **Battle-results side silhouettes** (black character cutouts) mark Defeat/Victory and beat donation-panel false positives.
+- **Matchmaking** uses templates / upper sky heuristics while waiting for the battlefield; leave no longer depends on white loading clouds.
+- **Live Replay** (someone attacking *you*) is only considered when armed after a Clash relaunch.
 
 Templates and tap points from calibration back these heuristics when present.
 
@@ -135,10 +133,10 @@ Farm is only started when the bot is **not** mid `open_donation` / `donate`.
 Orchestrator: [`src/coc_bot/attack/farmer.py`](../src/coc_bot/attack/farmer.py).
 
 ```text
-leave clan chat → Attack! → unranked Battle → (clouds) → battlefield
+leave clan chat → Attack! → unranked Battle → battlefield
     → pan + dump e-drags → rage → siege → heroes
     → wait 3m30s from first deploy (configurable), then tap Return Home coords
-    → confirm home (Attack! / leave clouds / clan chat) — no early surrender
+    → confirm home (Attack! / clan chat) — no early surrender
     → reopen clan chat
 ```
 
@@ -154,10 +152,10 @@ Leaving after a fight used to rely heavily on vision mid-battle; that was flaky.
 
 1. **Timer** from first troop deploy (`farm.battle_timeout_seconds`, default **210** = 3m30s)
 2. Tap calibrated **Return Home** coordinates (green CTA if seen)
-3. Confirm village with existing rules (Attack! chip, leave clouds, open clan chat)
+3. Confirm village with existing rules (Attack! chip, open clan chat)
 4. Never press Android **BACK** mid-battle (opens Surrender). On the Surrender dialog, tap **Cancel**
 
-Matchmaking clouds during `wait_for_battle` are intentionally **not** treated as “we’re home,” and false “battle results” during search are ignored unless real side silhouettes appear.
+False “battle results” during search are ignored unless real side silhouettes appear.
 
 ---
 
@@ -214,10 +212,10 @@ Re-run calibration when resolution or UI layout changes. Same resolution on anot
 
 1. **Wrong taps** → usually bad calibration (tap points / templates) or resolution scale
 2. **Wrong screen label** → mode mismatch or heuristic clash; check `BotMode` and activity log screen names
-3. **Stuck in battle leave** → look for leave-cloud / clan-chat confirm logs; scenery false greens should clear when End Battle is still visible
+3. **Stuck in battle leave** → look for Attack! / clan-chat confirm logs; scenery false greens should clear when End Battle is still visible
 4. **Stuck in chat** → donation panel close loop, popup, or ADB lag; Tools → classify / screenshot help
 
-Prefer fixing vision with **mode-scoped rules** and **phase-scoped** signals (like clouds) over adding more global color thresholds.
+Prefer fixing vision with **mode-scoped rules** and strong UI anchors (Attack!, silhouettes) over more global color thresholds.
 
 ---
 

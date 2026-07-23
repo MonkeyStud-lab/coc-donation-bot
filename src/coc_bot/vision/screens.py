@@ -516,33 +516,10 @@ class ScreenClassifier:
             return True
         return False
 
-    def looks_like_white_clouds(self, frame: np.ndarray) -> bool:
-        """
-        Near-full-screen white fog wash.
-
-        Appears both when loading home after Return Home and during dense
-        matchmaking — callers must disambiguate by flow phase, not this alone.
-        """
-        h, w = frame.shape[:2]
-        # Ignore thin HUD strips; fog covers the playfield.
-        crop = frame[int(h * 0.08) : int(h * 0.92), int(w * 0.05) : int(w * 0.95)]
-        if crop.size == 0:
-            return False
-        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-        # Bright, low-saturation (white / pale fog), not saturated sky blue alone.
-        white = cv2.inRange(hsv, (0, 0, 195), (180, 55, 255))
-        white_frac = float(white.mean()) / 255.0
-        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        bright_frac = float((gray > 200).mean())
-        return white_frac > 0.55 or (white_frac > 0.40 and bright_frac > 0.55)
-
     def _looks_like_matchmaking(self, frame: np.ndarray) -> bool:
-        """Opponent-search clouds — template or upper-half blue sky, not full white wash alone."""
+        """Opponent-search screen — template or upper-half blue sky heuristic."""
         if self._template_visible(frame, "matchmaking") or self._template_visible(frame, "find_match"):
             return True
-        # Full-screen leave fog must not be labeled matchmaking by itself.
-        if self.looks_like_white_clouds(frame) and not self._matchmaking_sky_band(frame):
-            return False
         if self._home_attack_chip_visible(frame) or self._open_chat_icon_visible(frame):
             return False
         if self._is_home_screen(frame):
@@ -550,7 +527,7 @@ class ScreenClassifier:
         return self._matchmaking_sky_band(frame)
 
     def _matchmaking_sky_band(self, frame: np.ndarray) -> bool:
-        """Upper-half blue + white typical of Find a Match / searching clouds."""
+        """Upper-half blue + white typical of Find a Match / searching."""
         h, w = frame.shape[:2]
         crop = frame[0 : int(h * 0.45), int(w * 0.15) : int(w * 0.85)]
         if crop.size == 0:
@@ -560,7 +537,6 @@ class ScreenClassifier:
         white = cv2.inRange(hsv, (0, 0, 200), (180, 60, 255))
         blue_frac = float(blue.mean()) / 255.0
         sky_frac = float((blue | white).mean()) / 255.0
-        # Prefer some blue so pure white leave-fog is less likely to match.
         return sky_frac > 0.45 and blue_frac > 0.08
 
     def _home_attack_chip_visible(self, frame: np.ndarray) -> bool:

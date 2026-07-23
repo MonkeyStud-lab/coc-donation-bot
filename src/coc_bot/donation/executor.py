@@ -95,6 +95,8 @@ class DonationExecutor:
         """Tap every colored slot, scrolling each bar a limited number of times."""
         made = False
         for bar_key in self.BAR_KEYS:
+            if self._stopping():
+                return made
             if bar_key not in self.config.rois:
                 continue
             if self._donate_colored_bar(bar_key):

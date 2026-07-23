@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import random
 import time
 
@@ -26,9 +27,16 @@ class InputController:
         self._frame_size: tuple[int, int] | None = None
         self._touch_size: tuple[int, int] | None = None
         self._touch_size_checked = False
+        # Opt-in: COC_BOT_SCALE_TAPS=1 when screencap pixels truly differ from wm size.
+        # Default off — Waydroid often reports a wrong wm size and scaling misses taps.
+        self._scale_taps = os.environ.get("COC_BOT_SCALE_TAPS", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
 
     def set_frame_size(self, width: int, height: int) -> None:
-        """Tell the input layer the current screencap resolution for tap scaling."""
+        """Tell the input layer the current screencap resolution for optional tap scaling."""
         self._frame_size = (int(width), int(height))
 
     def _ensure_touch_size(self) -> None:
@@ -36,9 +44,22 @@ class InputController:
             return
         self._touch_size_checked = True
         self._touch_size = self.client.wm_size()
-        if self._touch_size and self._frame_size and self._touch_size != self._frame_size:
+        if (
+            self._scale_taps
+            and self._touch_size
+            and self._frame_size
+            and self._touch_size != self._frame_size
+        ):
             logger.warning(
-                "Scaling taps: screencap {}x{} → touch {}x{}",
+                "Scaling taps: screencap {}x{} → touch {}x{} (COC_BOT_SCALE_TAPS=1)",
+                self._frame_size[0],
+                self._frame_size[1],
+                self._touch_size[0],
+                self._touch_size[1],
+            )
+        elif self._touch_size and self._frame_size and self._touch_size != self._frame_size:
+            logger.warning(
+                "screencap {}x{} != wm size {}x{} — using screencap coords (set COC_BOT_SCALE_TAPS=1 to scale)",
                 self._frame_size[0],
                 self._frame_size[1],
                 self._touch_size[0],
@@ -46,8 +67,10 @@ class InputController:
             )
 
     def _to_touch(self, x: int, y: int) -> tuple[int, int]:
-        """Map screencap pixel coords to ``input tap`` coords when sizes differ."""
+        """Optionally map screencap pixels to wm size (disabled by default)."""
         self._ensure_touch_size()
+        if not self._scale_taps:
+            return x, y
         if not self._frame_size or not self._touch_size:
             return x, y
         fw, fh = self._frame_size

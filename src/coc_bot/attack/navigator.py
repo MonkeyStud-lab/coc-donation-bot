@@ -78,7 +78,7 @@ class AttackNavigator:
         point = self._scaled_point(key, frame)
         if point:
             logger.info("Tap {} at ({}, {})", key, point[0], point[1])
-            self.input.tap(point[0], point[1])
+            self.input.tap(point[0], point[1], jitter=0 if key == "attack_button" else None)
             return True
         template = self.load_template(key)
         if template is not None:
@@ -103,10 +103,18 @@ class AttackNavigator:
         deadline = time.time() + timeout
         while time.time() < deadline:
             frame = self.capture.screenshot()
+            # Ground truth for farm: Attack! visible ⇒ ready (ignore false clan_chat).
+            if self.attack_button_visible(frame):
+                logger.info("Home ready — Attack! chip visible")
+                return True
+            if self._attack_menu_open(frame):
+                return True
+
             screen = self.classifier.classify(frame)
             if screen == ScreenType.HOME:
-                # Dismiss any open building/shop sheet that can cover Attack.
                 self._nudge_clear_home_overlays(frame)
+                if self.attack_button_visible(self.capture.screenshot()):
+                    return True
                 return True
             if screen == ScreenType.DONATION_PANEL and self.donation_nav is not None:
                 self.donation_nav.close_donation_panel(frame)
@@ -117,7 +125,6 @@ class AttackNavigator:
                 time.sleep(0.8)
                 continue
             if screen == ScreenType.CLAN_CHAT:
-                # Toggle chat closed via the same open_chat control.
                 if not self._tap_named("open_chat", frame):
                     h, w = frame.shape[:2]
                     self.input.tap(int(w * 0.72), int(h * 0.45), jitter=0)
@@ -135,37 +142,41 @@ class AttackNavigator:
             if screen == ScreenType.LOADING:
                 time.sleep(1.5)
                 continue
-            # Unknown — try tapping open_chat toggle / village.
-            h, w = frame.shape[:2]
-            self.input.tap(int(w * 0.72), int(h * 0.45), jitter=0)
-            time.sleep(0.8)
+            # Unknown — do not blindly toggle chat (that can open it over Attack!).
+            self._nudge_clear_home_overlays(frame)
+            time.sleep(0.5)
         logger.warning("Could not reach home before attack")
-        return self.classifier.classify(self.capture.screenshot()) == ScreenType.HOME
+        frame = self.capture.screenshot()
+        return self.attack_button_visible(frame) or (
+            self.classifier.classify(frame) == ScreenType.HOME
+        )
 
     def _nudge_clear_home_overlays(self, frame: np.ndarray) -> None:
         """Tap empty village space so shop/info cards do not cover the Attack button."""
         h, w = frame.shape[:2]
-        # Upper-center is usually empty sky / map, not the bottom UI bar.
         self.input.tap(int(w * 0.50), int(h * 0.28), jitter=2)
         time.sleep(0.35)
 
     def find_attack_button_candidates(self, frame: np.ndarray) -> list[tuple[int, int]]:
-        """
-        Ordered tap points for the home Attack! control (map icon, bottom-left).
-
-        Vision-first: modern CoC uses a large orange rectangle, not a sword badge.
-        Calibration is tried after vision so a bad calib point cannot burn the
-        success detection (opening Attack then tapping again closes it).
-        """
+        """Few high-confidence Attack! taps — avoid long grids that re-close the menu."""
         h, w = frame.shape[:2]
         candidates: list[tuple[int, int]] = []
 
         blob = self._find_attack_button_blob(frame)
         if blob is not None:
             candidates.append(blob)
-            bx, by = blob
-            for dx, dy in ((0, -12), (0, 12), (-10, 0), (10, 0)):
-                candidates.append((bx + dx, by + dy))
+
+        scaled = self._scaled_point("attack_button", frame)
+        if scaled:
+            ax, ay = scaled
+            if ax < w * 0.22 and ay > h * 0.75:
+                candidates.append((ax, ay))
+            else:
+                logger.warning(
+                    "Ignoring attack_button calib ({}, {}) — outside bottom-left Attack zone",
+                    ax,
+                    ay,
+                )
 
         template = self.load_template("attack_button")
         if template is not None:
@@ -177,35 +188,15 @@ class AttackNavigator:
             if match:
                 candidates.append(match.center)
 
-        # Modern default from live home UI (~nx=0.065, ny=0.90).
-        for nx, ny in (
-            (0.065, 0.90),
-            (0.075, 0.88),
-            (0.055, 0.92),
-            (0.090, 0.90),
-            (0.080, 0.85),
-        ):
+        for nx, ny in ((0.065, 0.90), (0.080, 0.88), (0.050, 0.92)):
             candidates.append((int(w * nx), int(h * ny)))
-
-        scaled = self._scaled_point("attack_button", frame)
-        if scaled:
-            ax, ay = scaled
-            # Only keep calib if it sits in the Attack corner (ignore bad picks).
-            if ax < w * 0.22 and ay > h * 0.75:
-                candidates.append((ax, ay))
-            else:
-                logger.warning(
-                    "Ignoring attack_button calib ({}, {}) — outside bottom-left Attack zone",
-                    ax,
-                    ay,
-                )
 
         cleaned: list[tuple[int, int]] = []
         seen: set[tuple[int, int]] = set()
         for x, y in candidates:
             x = int(max(4, min(w - 4, x)))
             y = int(max(4, min(h - 4, y)))
-            key = (x // 12, y // 12)
+            key = (x // 14, y // 14)
             if key in seen:
                 continue
             seen.add(key)
@@ -213,14 +204,10 @@ class AttackNavigator:
         return cleaned
 
     def _find_attack_button_blob(self, frame: np.ndarray) -> tuple[int, int] | None:
-        """
-        Find the large orange Attack! rectangle (map icon) in the bottom-left.
-
-        Current CoC home UI — not the old circular sword badge.
-        """
+        """Find the large orange Attack! rectangle (map icon) in the bottom-left."""
         h, w = frame.shape[:2]
-        x0, x1 = 0, int(w * 0.16)
-        y0, y1 = int(h * 0.76), h
+        x0, x1 = 0, int(w * 0.15)
+        y0, y1 = int(h * 0.78), h
         crop = frame[y0:y1, x0:x1]
         if crop.size == 0:
             return None
@@ -240,18 +227,16 @@ class AttackNavigator:
         best = None
         best_score = -1.0
         crop_h, crop_w = crop.shape[:2]
-        min_area = crop_w * crop_h * 0.04
+        min_area = crop_w * crop_h * 0.05
         for cnt in contours:
             area = float(cv2.contourArea(cnt))
             if area < min_area:
                 continue
             bx, by, bw, bh = cv2.boundingRect(cnt)
             aspect = bw / max(1, bh)
-            # Rectangular Attack! chip — allow wider than the old round sword.
             if aspect < 0.45 or aspect > 2.8:
                 continue
             cx, cy = bx + bw / 2.0, by + bh / 2.0
-            # Prefer larger blobs lower in the strip (button under the star bar).
             score = area + cy * 2.0 - cx * 0.5
             if score > best_score:
                 best_score = score
@@ -267,22 +252,13 @@ class AttackNavigator:
             return True
         if self.classifier._looks_like_attack_menu(frame):  # noqa: SLF001
             return True
-        # If we saw Attack! before the tap and it vanished, treat as success —
-        # avoids re-tapping (which closes the picker) when heuristics are weak.
+        # Chip vanished after a tap — stop. Re-tapping closes the picker.
         if had_attack_chip and not self.attack_button_visible(frame):
-            if screen not in (ScreenType.CLAN_CHAT, ScreenType.DONATION_PANEL, ScreenType.HOME):
-                return True
-            # HOME classifier can lag; chip gone is still a strong signal.
-            if screen == ScreenType.HOME and self.classifier._looks_like_attack_menu(frame):  # noqa: SLF001
-                return True
-            if screen == ScreenType.HOME and not self.attack_button_visible(frame):
-                # Bright center card without bottom-left Attack chip.
-                h, w = frame.shape[:2]
-                center = frame[int(h * 0.20) : int(h * 0.75), int(w * 0.20) : int(w * 0.80)]
-                if center.size:
-                    bright = float(cv2.cvtColor(center, cv2.COLOR_BGR2GRAY).mean())
-                    if bright > 140:
-                        return True
+            logger.info(
+                "Attack! chip gone after tap (screen={}) — treating as menu open",
+                screen.value,
+            )
+            return True
         return False
 
     def open_attack_menu(self) -> bool:
@@ -290,39 +266,66 @@ class AttackNavigator:
         if self._attack_menu_open(frame):
             return True
 
-        screen = self.classifier.classify(frame)
-        if screen not in (ScreenType.HOME, ScreenType.UNKNOWN):
-            if not self.leave_chat_for_home(timeout=10.0):
-                logger.warning("open_attack_menu: not on home (screen={})", screen.value)
+        if not self.attack_button_visible(frame):
+            logger.info("Attack! not visible yet — clearing chat/overlays")
+            self.leave_chat_for_home(timeout=12.0)
             frame = self.capture.screenshot()
             if self._attack_menu_open(frame):
                 return True
 
         had_chip = self.attack_button_visible(frame)
         candidates = self.find_attack_button_candidates(frame)
+        touch = None
+        try:
+            touch = self.input.client.wm_size()
+        except Exception:  # noqa: BLE001
+            pass
         logger.info(
-            "Trying {} Attack! candidate(s) (chip_visible={}, frame={}x{})",
+            "Trying {} Attack! candidate(s) (chip_visible={}, frame={}x{}, wm={})",
             len(candidates),
             had_chip,
             frame.shape[1],
             frame.shape[0],
+            touch,
         )
 
-        for x, y in candidates:
+        debug_dir = self.config.data_dir / "debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+
+        for i, (x, y) in enumerate(candidates):
+            if i == 0:
+                marked = frame.copy()
+                cv2.circle(marked, (x, y), 18, (0, 255, 255), 3)
+                path = debug_dir / "attack_pre_tap.png"
+                cv2.imwrite(str(path), marked)
+                logger.info("Saved {}", path)
+
             logger.info("Trying Attack! at ({}, {})", x, y)
             self.input.tap(x, y, jitter=0)
-            time.sleep(1.35)
+            time.sleep(1.6)
             check = self.capture.screenshot()
+            cv2.imwrite(str(debug_dir / "attack_post_tap.png"), check)
+
             if self._attack_menu_open(check, had_attack_chip=had_chip):
                 logger.info("Attack menu opened after tap at ({}, {})", x, y)
                 self.config.tap_points["attack_button"] = [x, y]
                 return True
-            # Wrong tap opened a building card — dismiss, continue.
-            if self.classifier.classify(check) == ScreenType.HOME:
-                self._nudge_clear_home_overlays(check)
-                had_chip = self.attack_button_visible(self.capture.screenshot())
 
-        logger.warning("Could not open Attack menu after {} taps", len(candidates))
+            if self.attack_button_visible(check):
+                self._nudge_clear_home_overlays(check)
+                frame = self.capture.screenshot()
+                had_chip = self.attack_button_visible(frame)
+                continue
+
+            logger.warning(
+                "Attack! chip state unclear after tap at ({}, {}) screen={}",
+                x,
+                y,
+                self.classifier.classify(check).value,
+            )
+            break
+
+        logger.warning("Could not open Attack menu — see data/debug/attack_*.png")
         return False
 
     def start_unranked_battle(self) -> bool:
@@ -393,7 +396,6 @@ class AttackNavigator:
                 self.input.back()
                 time.sleep(1.0)
                 continue
-            # Still in battle or unknown — try return_home then BACK.
             if self._tap_named("return_home", frame):
                 time.sleep(1.2)
                 continue

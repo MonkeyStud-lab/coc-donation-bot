@@ -83,7 +83,7 @@ STEPS: dict[str, CalibrationStep] = {
     "farm": CalibrationStep(
         "farm",
         "Farm / unranked attack",
-        "Attack button, unranked Battle, Find a Match, Return Home, optional deploy strip",
+        "Attack button, unranked Battle, Find a Match, Return Home, optional hero slots",
         ("attack_button", "unranked_battle", "return_home"),
     ),
     "optional": CalibrationStep(
@@ -642,20 +642,11 @@ class CalibrationWizard:
         else:
             _keeping("return_home")
 
-        print(
-            "\n--- Deploy strip (optional) ---\n"
-            "Usually skip this. The bot finds the defending village and deploys\n"
-            "just outside its edge. Only draw a strip if that fails."
-        )
-        if prompt_yes_no("Draw deploy_strip ROI?"):
-            coords, picked = self._pick_roi(
-                "Vertical deploy strip on one edge of the battle field"
-            )
-            fh, fw = picked.shape[:2]
-            self.config.rois["deploy_strip"] = _roi_list(coords, fw, fh)
-            logger.info("Saved ROI deploy_strip")
-        elif "deploy_strip" in self.config.rois:
-            _keeping("deploy_strip")
+        # deploy_strip ROI removed — scenery varies too much. The bot finds the
+        # red deployment ring / village outline / fixed geometry instead.
+        if "deploy_strip" in self.config.rois:
+            del self.config.rois["deploy_strip"]
+            logger.info("Removed obsolete deploy_strip ROI (not used anymore)")
 
         print(
             "\n--- Army bar slots (optional but recommended for heroes) ---\n"

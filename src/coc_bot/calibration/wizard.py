@@ -66,9 +66,9 @@ STEPS: dict[str, CalibrationStep] = {
             CalibrationPart("home", "Home anchor", "template", optional=True, description="Optional village/home template"),
             CalibrationPart(
                 "open_chat",
-                "Open chat",
+                "Open chat (chat bubble)",
                 "tap",
-                description="Chat bubble / > tab on home (opens clan chat)",
+                description="Chat bubble image on home — used to detect village vs battle",
             ),
         ),
     ),
@@ -548,18 +548,26 @@ class CalibrationWizard:
 
         print("\n--- Open chat button (must be captured from HOME screen) ---")
         print(
-            "This is the control that OPENS chat from home (bubble / ``>`` tab).\n"
-            "Closing chat uses a different orange ``<`` tab — calibrated in the Clan chat step."
+            "This is the chat bubble / ``>`` tab that OPENS clan chat from home.\n"
+            "Capture it as an IMAGE (recommended): the bot uses that picture to tell\n"
+            "home apart from battle. Closing chat uses a different orange ``<`` tab\n"
+            "(Clan chat step)."
         )
-        has_open = self._has_template("open_chat") or self._has_tap("open_chat")
-        if not has_open or prompt_yes_no("Update open_chat button?"):
-            if prompt_yes_no("Capture open_chat button as image template?"):
-                coords, picked = self._pick_roi("Chat bubble / open-chat control on HOME", frame)
-                self._save_template_from_frame(picked, coords, "ui/open_chat.png", "open_chat")
-            else:
-                pt = self._pick_point("Tap point at CENTER of open-chat control", frame)
-                self.config.tap_points["open_chat"] = list(pt)
-                logger.info("Saved tap point open_chat")
+        has_tpl = self._has_template("open_chat")
+        has_tap = self._has_tap("open_chat")
+        if not has_tpl or prompt_yes_no("Update open_chat chat-bubble image?"):
+            coords, picked = self._pick_roi(
+                "Drag a box tightly around the chat bubble on HOME", frame
+            )
+            self._save_template_from_frame(picked, coords, "ui/open_chat.png", "open_chat")
+            # Also store center as tap point for opening chat.
+            x, y, bw, bh = coords
+            self.config.tap_points["open_chat"] = [int(x + bw / 2), int(y + bh / 2)]
+            logger.info("Saved open_chat template + tap at center")
+        elif not has_tap or prompt_yes_no("Update open_chat tap point only?"):
+            pt = self._pick_point("Tap point at CENTER of open-chat control", frame)
+            self.config.tap_points["open_chat"] = list(pt)
+            logger.info("Saved tap point open_chat")
         else:
             _keeping("open_chat")
 

@@ -58,12 +58,22 @@ class ScreenClassifier:
         region = crop_roi(frame, self.config.rois[roi_key])
         return float(np.std(region))
 
+    def _open_chat_icon_visible(self, frame: np.ndarray) -> bool:
+        """
+        True when the home-screen chat bubble / open-chat control is on screen.
+
+        That icon is only on the village (chat closed). It disappears in battle,
+        attack menus, and while clan chat is open — so it is the best home signal.
+        """
+        return self._template_visible(frame, "open_chat")
+
     def _is_home_screen(self, frame: np.ndarray) -> bool:
+        # Primary: chat icon visible ⇒ village home with chat closed.
+        if self._open_chat_icon_visible(frame):
+            return True
         if self._template_visible(frame, "home"):
             return True
-        if self._template_visible(frame, "open_chat"):
-            return True
-        # Tap-point-only calibration: village screen does not show the chat panel UI.
+        # Weak fallback when only a tap point was calibrated (no open_chat image).
         if self.config.tap_points.get("open_chat") and not self._clan_chat_anchor_visible(frame):
             chat_std = self._roi_std(frame, "chat_panel")
             if chat_std is not None and chat_std <= 15:
@@ -362,7 +372,7 @@ class ScreenClassifier:
         ):
             return ScreenType.BATTLE_RESULTS
 
-        # Prefer chat/donation before battle/home heuristics — donation bars look busy.
+        # Prefer chat/donation before home/battle — donation bars look busy.
         if self._clan_chat_anchor_visible(frame):
             return ScreenType.CLAN_CHAT
 
@@ -372,13 +382,19 @@ class ScreenClassifier:
         if self._in_clan_chat_context(frame):
             return ScreenType.CLAN_CHAT
 
-        # Village home before loose battle-tray heuristics (bottom chrome false-matches).
-        if self._is_home_screen(frame) or self._home_attack_chip_visible(frame):
-            # Attack picker / battle still win when their chrome is present.
+        # Chat bubble on screen ⇒ village home (not battle / not attack menu).
+        if self._open_chat_icon_visible(frame):
+            return ScreenType.HOME
+
+        # Village Attack! chip (no open_chat template) — still home unless battle chrome.
+        if self._home_attack_chip_visible(frame):
             if self._looks_like_attack_menu(frame):
                 return ScreenType.ATTACK_MENU
             if self._looks_like_battle(frame):
                 return ScreenType.BATTLE
+            return ScreenType.HOME
+
+        if self._is_home_screen(frame):
             return ScreenType.HOME
 
         # Live battle / scout (Next, End Battle, or army tray without Attack!).

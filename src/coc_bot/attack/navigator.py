@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 
 import cv2
 import numpy as np
@@ -10,6 +11,7 @@ from coc_bot.adb.capture import ScreenCapture
 from coc_bot.adb.input import InputController
 from coc_bot.config import BotConfig
 from coc_bot.donation.navigator import Navigator
+from coc_bot.stop import interrupted_sleep
 from coc_bot.vision.matcher import TemplateMatcher
 from coc_bot.vision.screens import ScreenClassifier, ScreenType
 
@@ -32,6 +34,13 @@ class AttackNavigator:
         self.classifier = ScreenClassifier(config, self.matcher)
         self.donation_nav = donation_navigator
         self._template_cache: dict[str, np.ndarray] = {}
+        self.stop_check: Callable[[], bool] | None = None
+
+    def _stopping(self) -> bool:
+        return bool(self.stop_check and self.stop_check())
+
+    def _sleep(self, seconds: float) -> bool:
+        return interrupted_sleep(seconds, self.stop_check)
 
     def load_template(self, key: str) -> np.ndarray | None:
         if key in self._template_cache:
@@ -102,6 +111,9 @@ class AttackNavigator:
         """Close donation panel / clan chat so Attack is reachable on home."""
         deadline = time.time() + timeout
         while time.time() < deadline:
+            if self._stopping():
+                logger.info("leave_chat_for_home: stop requested — aborting")
+                return False
             frame = self.capture.screenshot()
             # Ground truth for farm: Attack! visible ⇒ ready (ignore false clan_chat).
             if self.attack_button_visible(frame):
@@ -118,11 +130,13 @@ class AttackNavigator:
                 return True
             if screen == ScreenType.DONATION_PANEL and self.donation_nav is not None:
                 self.donation_nav.close_donation_panel(frame)
-                time.sleep(0.6)
+                if self._sleep(0.6):
+                    return False
                 continue
             if screen == ScreenType.POPUP and self.donation_nav is not None:
                 self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
-                time.sleep(0.8)
+                if self._sleep(0.8):
+                    return False
                 continue
             if screen == ScreenType.CLAN_CHAT:
                 # Orange ``<`` tab on the chat edge — NOT the same as open_chat.
@@ -130,7 +144,8 @@ class AttackNavigator:
                     self.donation_nav.close_clan_chat(frame)
                 else:
                     self._close_clan_chat_fallback(frame)
-                time.sleep(0.8)
+                if self._sleep(0.8):
+                    return False
                 continue
             if screen in (
                 ScreenType.ATTACK_MENU,
@@ -139,14 +154,17 @@ class AttackNavigator:
                 ScreenType.BATTLE_RESULTS,
             ):
                 self.return_home_from_attack()
-                time.sleep(1.0)
+                if self._sleep(1.0):
+                    return False
                 continue
             if screen == ScreenType.LOADING:
-                time.sleep(1.5)
+                if self._sleep(1.5):
+                    return False
                 continue
             # Unknown — do not blindly toggle chat (that can open it over Attack!).
             self._nudge_clear_home_overlays(frame)
-            time.sleep(0.5)
+            if self._sleep(0.5):
+                return False
         logger.warning("Could not reach home before attack")
         frame = self.capture.screenshot()
         return self.attack_button_visible(frame) or (
@@ -357,6 +375,9 @@ class AttackNavigator:
         deadline = time.time() + timeout
         last_screen = "unknown"
         while time.time() < deadline:
+            if self._stopping():
+                logger.info("wait_for_battle: stop requested — aborting")
+                return False
             frame = self.capture.screenshot()
             screen = self.classifier.classify(frame)
             last_screen = screen.value
@@ -376,7 +397,8 @@ class AttackNavigator:
             if screen == ScreenType.POPUP and self.donation_nav is not None:
                 self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
             logger.debug("wait_for_battle: screen={}", screen.value)
-            time.sleep(0.6)
+            if self._sleep(0.6):
+                return False
         logger.warning("Matchmaking timed out after {}s (last_screen={})", timeout, last_screen)
         # Final peek — opponent may have loaded on the last tick.
         frame = self.capture.screenshot()
@@ -390,6 +412,9 @@ class AttackNavigator:
         timeout = timeout if timeout is not None else float(self.config.farm_battle_timeout_seconds)
         deadline = time.time() + timeout
         while time.time() < deadline:
+            if self._stopping():
+                logger.info("wait_for_battle_end: stop requested — aborting")
+                return ScreenType.UNKNOWN
             frame = self.capture.screenshot()
             screen = self.classifier.classify(frame)
             if screen == ScreenType.BATTLE_RESULTS or self.classifier._looks_like_battle_results(  # noqa: SLF001
@@ -401,11 +426,13 @@ class AttackNavigator:
                 logger.info("Battle ended — screen={}", screen.value)
                 return screen
             if screen == ScreenType.BATTLE:
-                time.sleep(1.2)
+                if self._sleep(1.2):
+                    return ScreenType.UNKNOWN
                 continue
             if screen == ScreenType.POPUP and self.donation_nav is not None:
                 self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
-            time.sleep(1.2)
+            if self._sleep(1.2):
+                return ScreenType.UNKNOWN
         logger.warning("Battle wait timed out after {}s", timeout)
         frame = self.capture.screenshot()
         if self.classifier._looks_like_battle_results(frame):  # noqa: SLF001
@@ -442,6 +469,9 @@ class AttackNavigator:
     def return_home_from_attack(self) -> bool:
         """Tap Return Home / dismiss attack UI until home or chat — never mid-deploy battle."""
         for _ in range(12):
+            if self._stopping():
+                logger.info("return_home_from_attack: stop requested — aborting")
+                return False
             frame = self.capture.screenshot()
             screen = self.classifier.classify(frame)
             if screen in (ScreenType.HOME, ScreenType.CLAN_CHAT):
@@ -455,34 +485,40 @@ class AttackNavigator:
             )
             if in_battle:
                 logger.info("return_home_from_attack: still in battle — waiting")
-                time.sleep(1.5)
+                if self._sleep(1.5):
+                    return False
                 continue
 
             if results or screen == ScreenType.UNKNOWN:
                 logger.info("Tapping Return Home (screen={})", screen.value)
                 self._tap_return_home(frame)
-                time.sleep(1.6)
+                if self._sleep(1.6):
+                    return False
                 continue
 
             if screen == ScreenType.ATTACK_MENU:
                 self.input.back()
-                time.sleep(0.8)
+                if self._sleep(0.8):
+                    return False
                 continue
             if screen == ScreenType.MATCHMAKING:
                 self.input.back()
-                time.sleep(1.0)
+                if self._sleep(1.0):
+                    return False
                 continue
 
             # Popup / odd UI — try Return Home once, then BACK.
             self._tap_return_home(frame)
-            time.sleep(1.2)
+            if self._sleep(1.2):
+                return False
             if self.classifier.classify(self.capture.screenshot()) in (
                 ScreenType.HOME,
                 ScreenType.CLAN_CHAT,
             ):
                 return True
             self.input.back()
-            time.sleep(0.8)
+            if self._sleep(0.8):
+                return False
         return self.classifier.classify(self.capture.screenshot()) in (
             ScreenType.HOME,
             ScreenType.CLAN_CHAT,

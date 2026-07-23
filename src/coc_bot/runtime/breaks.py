@@ -26,9 +26,12 @@ class BreakManager:
         self.tracker = tracker
         self.app = app
         self.navigator = navigator
+        self.stop_check = None
 
     def check_and_break_if_needed(self) -> bool:
         """Returns True if a break cycle was executed."""
+        if self.stop_check and self.stop_check():
+            return False
         self.tracker.tick()
         if not self.tracker.limit_reached:
             return False
@@ -51,7 +54,11 @@ class BreakManager:
         remaining = (until - now).total_seconds()
         logger.info("Resuming pending break for {:.0f}s", remaining)
         self.tracker.pause()
-        time.sleep(remaining)
+        from coc_bot.stop import interrupted_sleep
+
+        if interrupted_sleep(remaining, self.stop_check):
+            logger.info("Break interrupted by stop — leaving CoC stopped")
+            return False
         self._relaunch_and_resume()
         self.tracker.reset_after_break(break_seconds)
         return True
@@ -68,7 +75,11 @@ class BreakManager:
 
         until = datetime.now(timezone.utc) + timedelta(seconds=break_seconds)
         self.tracker.set_break_until(until.isoformat(), break_seconds=break_seconds)
-        time.sleep(break_seconds)
+        from coc_bot.stop import interrupted_sleep
+
+        if interrupted_sleep(break_seconds, self.stop_check):
+            logger.info("Break interrupted by stop — leaving CoC stopped")
+            return
 
         self._relaunch_and_resume()
         self.tracker.reset_after_break(break_seconds)

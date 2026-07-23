@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 
 from loguru import logger
 
@@ -10,6 +11,7 @@ from coc_bot.config import BotConfig
 from coc_bot.donation.capacity_parser import RequestCapacity
 from coc_bot.donation.inventory import InventoryParser, InventorySlot
 from coc_bot.donation.request_parser import RequestKind
+from coc_bot.stop import interrupted_sleep
 from coc_bot.vision.matcher import TemplateMatcher
 from coc_bot.vision.screens import ScreenClassifier
 
@@ -32,6 +34,10 @@ class DonationExecutor:
         self.matcher = matcher or TemplateMatcher(threshold=config.template_threshold)
         self.inventory_parser = InventoryParser(config, matcher=self.matcher)
         self.classifier = ScreenClassifier(config, self.matcher)
+        self.stop_check: Callable[[], bool] | None = None
+
+    def _stopping(self) -> bool:
+        return bool(self.stop_check and self.stop_check())
 
     def donate_for_request(
         self,
@@ -43,6 +49,8 @@ class DonationExecutor:
     ) -> bool:
         """Donate for the current donation panel using colored slot detection."""
         del capacity  # reserved for a later smart-fill mode; unused in simple path
+        if self._stopping():
+            return False
         frame = self.capture.screenshot()
         if not self.classifier.is_donation_panel(frame):
             logger.warning(
@@ -57,14 +65,12 @@ class DonationExecutor:
             resolved_kind = RequestKind.SPECIFIC if is_specific else RequestKind.OPEN
 
         if resolved_kind == RequestKind.SPECIFIC:
-            # Requested units are colored; others are grey — but greys can sit BETWEEN
-            # colored slots (e.g. Lightning, grey Rage, Freeze). Also Freezes may be
-            # off-screen to the right. So: tap every colored slot and scroll each bar.
             logger.info(
                 "Specific request — tapping all colored slots (scroll troop/spell bars)"
             )
             donated_any = self._donate_open_colored_scroll()
-            self._close_panel()
+            if not self._stopping():
+                self._close_panel()
             return donated_any
 
         if not self.config.donate_open_requests:
@@ -75,12 +81,14 @@ class DonationExecutor:
         if resolved_kind == RequestKind.HYBRID:
             logger.info("Hybrid request — tapping all colored slots (scroll bars)")
             donated_any = self._donate_open_colored_scroll()
-            self._close_panel()
+            if not self._stopping():
+                self._close_panel()
             return donated_any
 
         logger.info("Open request — tapping colored slots (scroll troop bar incl. siege, then spells)")
         donated_any = self._donate_open_colored_scroll()
-        self._close_panel()
+        if not self._stopping():
+            self._close_panel()
         return donated_any
 
     def _donate_open_colored_scroll(self) -> bool:
@@ -111,9 +119,13 @@ class DonationExecutor:
         empty_streak = 0
 
         for scroll_i in range(max_scrolls + 1):
+            if self._stopping():
+                return made
             tapped_this_view = False
             # Exhaust colored slots on the current view before any swipe.
             for _ in range(15):
+                if self._stopping():
+                    return made
                 frame = self.capture.screenshot()
                 if not self.classifier.is_donation_panel(frame):
                     return made
@@ -132,7 +144,8 @@ class DonationExecutor:
                 self._tap_colored_slots(slots)
                 made = True
                 tapped_this_view = True
-                time.sleep(0.4)
+                if interrupted_sleep(0.4, self.stop_check):
+                    return made
 
             if tapped_this_view:
                 empty_streak = 0
@@ -160,7 +173,8 @@ class DonationExecutor:
                 max_scrolls,
             )
             self.input.swipe(x1, y1, x2, y2, duration_ms=280)
-            time.sleep(0.45)
+            if interrupted_sleep(0.45, self.stop_check):
+                return made
 
         return made
 
@@ -168,10 +182,15 @@ class DonationExecutor:
         if not slots:
             return False
         for slot in slots:
+            if self._stopping():
+                return True
             logger.info("Tapping colored slot {} x{} at {}", slot.unit_id, slot.quantity, slot.center)
             for _ in range(slot.quantity):
+                if self._stopping():
+                    return True
                 self.input.tap(*slot.center)
-            time.sleep(0.15)
+            if interrupted_sleep(0.15, self.stop_check):
+                return True
         return True
 
     def _close_panel(self) -> None:

@@ -553,17 +553,28 @@ class ScreenClassifier:
         """True when the donate popup is up (does not require full classify)."""
         return self._donation_panel_heuristic(frame)
 
-    def wait_for_donation_panel(self, capture, timeout_seconds: float = 3.0, poll_interval: float = 0.35) -> bool:
-        """Poll until donation panel appears or timeout."""
+    def wait_for_donation_panel(
+        self,
+        capture,
+        timeout_seconds: float = 3.0,
+        poll_interval: float = 0.35,
+        should_stop=None,
+    ) -> bool:
+        """Poll until donation panel appears, timeout, or stop requested."""
         import time
+
+        from coc_bot.stop import interrupted_sleep
 
         deadline = time.time() + timeout_seconds
         last_frame = None
         while time.time() < deadline:
+            if should_stop and should_stop():
+                return False
             last_frame = capture.screenshot()
             if self.is_donation_panel(last_frame):
                 return True
-            time.sleep(poll_interval)
+            if interrupted_sleep(poll_interval, should_stop):
+                return False
         if last_frame is not None:
             from loguru import logger
 

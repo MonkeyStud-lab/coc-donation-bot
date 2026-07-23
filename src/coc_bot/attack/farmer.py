@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from loguru import logger
@@ -40,6 +41,10 @@ class AttackFarmer:
             config, capture, input_ctrl, self.matcher, donation_navigator
         )
         self.deployer = EdgeDeployer(config, input_ctrl)
+        self.stop_check: Callable[[], bool] | None = None
+
+    def _stopping(self) -> bool:
+        return bool(self.stop_check and self.stop_check())
 
     def run_one_attack(self) -> FarmResult:
         if not self.config.farm_calibrated:
@@ -50,9 +55,17 @@ class AttackFarmer:
             self.config.farm_deploy_side,
         )
 
+        if self._stopping():
+            return FarmResult(False, "stopped")
+
         if not self.attack_nav.leave_chat_for_home():
+            if self._stopping():
+                return FarmResult(False, "stopped")
             self._abort_to_chat()
             return FarmResult(False, "could not reach home")
+
+        if self._stopping():
+            return FarmResult(False, "stopped")
 
         if self.donation_nav is not None:
             frame = self.capture.screenshot()
@@ -60,14 +73,26 @@ class AttackFarmer:
                 self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
 
         if not self.attack_nav.open_attack_menu():
+            if self._stopping():
+                return FarmResult(False, "stopped")
             self._abort_to_chat()
             return FarmResult(False, "could not open Attack menu")
 
+        if self._stopping():
+            return FarmResult(False, "stopped")
+
         if not self.attack_nav.start_unranked_battle():
+            if self._stopping():
+                return FarmResult(False, "stopped")
             self._abort_to_chat()
             return FarmResult(False, "could not start unranked Battle")
 
+        if self._stopping():
+            return FarmResult(False, "stopped")
+
         if not self.attack_nav.wait_for_battle():
+            if self._stopping():
+                return FarmResult(False, "stopped")
             frame = self.capture.screenshot()
             # Opponent may already be loaded even if wait_for_battle mis-timed.
             if (
@@ -83,6 +108,9 @@ class AttackFarmer:
                 self._abort_to_chat()
                 return FarmResult(False, "matchmaking timeout")
 
+        if self._stopping():
+            return FarmResult(False, "stopped")
+
         frame = self.capture.screenshot()
         logger.info(
             "Opponent ready — deploying (pan_swipes={}, e-drag taps={}, heroes={}) along {}",
@@ -94,7 +122,12 @@ class AttackFarmer:
         taps = self.deployer.dump_army_along_edge(frame)
         logger.info("Deploy finished — {} map taps", taps)
 
+        if self._stopping():
+            return FarmResult(False, "stopped")
+
         end_screen = self.attack_nav.wait_for_battle_end()
+        if self._stopping() or end_screen == ScreenType.UNKNOWN:
+            return FarmResult(False, "stopped")
         if end_screen == ScreenType.BATTLE:
             logger.warning("Still in battle after timeout — trying return home")
             self.attack_nav.return_home_from_attack()
@@ -106,8 +139,13 @@ class AttackFarmer:
             logger.info("Leaving results screen (end_screen={})", end_screen.value)
             self.attack_nav.return_home_from_attack()
 
+        if self._stopping():
+            return FarmResult(False, "stopped")
+
         if self.donation_nav is not None:
             ok = self.donation_nav.ensure_clan_chat()
+            if self._stopping():
+                return FarmResult(False, "stopped")
             if not ok:
                 return FarmResult(False, "attack finished but could not reopen clan chat")
 
@@ -115,11 +153,13 @@ class AttackFarmer:
         return FarmResult(True, "ok")
 
     def _abort_to_chat(self) -> None:
+        if self._stopping():
+            return
         try:
             self.attack_nav.return_home_from_attack()
         except Exception:  # noqa: BLE001
             logger.exception("return_home during farm abort failed")
-        if self.donation_nav is not None:
+        if self.donation_nav is not None and not self._stopping():
             try:
                 self.donation_nav.ensure_clan_chat()
             except Exception:  # noqa: BLE001

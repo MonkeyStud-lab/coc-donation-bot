@@ -32,6 +32,10 @@ class Navigator:
         self.classifier = ScreenClassifier(config, self.matcher)
         self._template_cache: dict[str, np.ndarray] = {}
         self._last_jump_at = 0.0
+        self.stop_check: Callable[[], bool] | None = None
+
+    def _stopping(self) -> bool:
+        return bool(self.stop_check and self.stop_check())
 
     def load_template(self, key: str) -> np.ndarray | None:
         if key in self._template_cache:
@@ -58,6 +62,9 @@ class Navigator:
         close_streak = 0
 
         while time.time() < deadline:
+            if self._stopping():
+                logger.info("ensure_clan_chat: stop requested — aborting")
+                return False
             frame = self.capture.screenshot()
             screen = self.classifier.classify(frame)
             logger.debug("ensure_clan_chat: detected screen={}", screen.value)
@@ -74,14 +81,16 @@ class Navigator:
                     logger.warning("Stuck in donation-panel close loop — opening clan chat instead")
                     self._open_clan_chat(self.capture.screenshot())
                     close_streak = 0
-                    time.sleep(1.0)
+                    if self._sleep(1.0):
+                        return False
                 continue
 
             close_streak = 0
 
             if screen == ScreenType.POPUP:
                 self._dismiss_popup(frame)
-                time.sleep(1.0)
+                if self._sleep(1.0):
+                    return False
                 continue
 
             if screen == ScreenType.CLAN_CHAT:
@@ -91,11 +100,13 @@ class Navigator:
             if screen == ScreenType.HOME or screen == ScreenType.UNKNOWN:
                 logger.info("Not in clan chat (screen={}) — opening chat", screen.value)
                 self._open_clan_chat(frame)
-                time.sleep(1.0)
+                if self._sleep(1.0):
+                    return False
                 continue
 
             if screen == ScreenType.LOADING:
-                time.sleep(2.0)
+                if self._sleep(2.0):
+                    return False
                 continue
 
             if screen in (
@@ -116,11 +127,17 @@ class Navigator:
                         self.input.back()
                 else:
                     self.input.back()
-                time.sleep(1.2)
+                if self._sleep(1.2):
+                    return False
                 continue
 
         logger.warning("Failed to reach clan chat within timeout")
         return False
+
+    def _sleep(self, seconds: float) -> bool:
+        from coc_bot.stop import interrupted_sleep
+
+        return interrupted_sleep(seconds, self.stop_check)
 
     def _open_clan_chat(self, frame: np.ndarray) -> None:
         h, w = frame.shape[:2]

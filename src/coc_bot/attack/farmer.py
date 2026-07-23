@@ -74,7 +74,8 @@ class AttackFarmer:
 
         frame = self.capture.screenshot()
         logger.info(
-            "Deploying army (e-drag taps={}, heroes={}) along village {}",
+            "Deploying army (pan_swipes={}, e-drag taps={}, heroes={}) along {}",
+            self.config.farm_pan_swipes,
             self.config.farm_edrag_deploy_taps,
             self.config.farm_hero_count,
             self.config.farm_deploy_side,

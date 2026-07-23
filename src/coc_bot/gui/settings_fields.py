@@ -166,6 +166,16 @@ SETTINGS: list[SettingField] = [
         ("farm", "deploy_side"),
     ),
     SettingField(
+        "farm_pan_swipes",
+        "Camera pan swipes",
+        "How many fixed swipes from the centered match view toward the deploy edge "
+        "(base size is fixed; 3 usually reaches grass).",
+        "int",
+        lambda c: c.farm_pan_swipes,
+        "Farm",
+        ("farm", "pan_swipes"),
+    ),
+    SettingField(
         "farm_match_timeout_seconds",
         "Matchmaking timeout (seconds)",
         "How long to wait in Find a Match / clouds before aborting the farm attempt.",
@@ -304,6 +314,12 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
             parsed: Any = bool(raw)
         elif field.kind == "int":
             parsed = int(str(raw).strip())
+            if field.key == "farm_hero_count" and (parsed < 0 or parsed > 4):
+                raise ValueError("Heroes to deploy must be between 0 and 4")
+            if field.key == "farm_edrag_deploy_taps" and parsed < 1:
+                raise ValueError("E-drag map taps must be at least 1")
+            if field.key == "farm_pan_swipes" and parsed < 0:
+                raise ValueError("Camera pan swipes cannot be negative")
         elif field.kind == "float":
             parsed = float(str(raw).strip())
         elif field.kind == "int_pair":
@@ -315,16 +331,6 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
                 if side not in ("left", "right"):
                     raise ValueError("Deploy side must be 'left' or 'right'")
                 parsed = side
-            if field.key == "farm_hero_count":
-                n = int(parsed) if not isinstance(parsed, int) else parsed
-                if n < 0 or n > 4:
-                    raise ValueError("Heroes to deploy must be between 0 and 4")
-                parsed = n
-            if field.key == "farm_edrag_deploy_taps":
-                n = int(parsed) if not isinstance(parsed, int) else parsed
-                if n < 1:
-                    raise ValueError("E-drag map taps must be at least 1")
-                parsed = n
 
         cursor = payload
         for part in field.yaml_path[:-1]:

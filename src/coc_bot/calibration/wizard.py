@@ -642,8 +642,7 @@ class CalibrationWizard:
         else:
             _keeping("return_home")
 
-        # deploy_strip ROI removed — scenery varies too much. The bot finds the
-        # red deployment ring / village outline / fixed geometry instead.
+        # deploy_strip ROI removed — bot pans from center with fixed swipes instead.
         if "deploy_strip" in self.config.rois:
             del self.config.rois["deploy_strip"]
             logger.info("Removed obsolete deploy_strip ROI (not used anymore)")

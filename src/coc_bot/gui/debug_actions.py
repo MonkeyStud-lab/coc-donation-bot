@@ -210,20 +210,20 @@ class DebugSession:
         )
 
     def farm_deploy_dry_taps(self) -> str:
-        """Tap deploy edge points without waiting for a full attack end."""
+        """Pan toward deploy edge, then tap a few ladder points (no full attack wait)."""
         frame = self.capture.screenshot()
         screen = self.classifier.classify(frame)
-        village = self.deployer.find_village_bbox(frame)
         side = self.config.farm_deploy_side
-        red_x = self.deployer.find_red_deploy_line_x(frame, side)
-        points = self.deployer.deploy_points(frame)
+        pans = self.config.farm_pan_swipes
+        self.deployer.pan_to_deploy_side(frame, side=side)
+        points = self.deployer.deploy_points(frame, side=side)
         # Only a short ladder so debug stays quick.
         for x, y in points[:4]:
             self.input.tap(x, y)
             time.sleep(0.1)
         return (
-            f"Deploy dry-run: {min(4, len(points))} taps on {side} "
-            f"(red_x={red_x}, village={village}, screen={screen.value}). "
+            f"Deploy dry-run: {pans} pan swipe(s) toward {side}, "
+            f"then {min(4, len(points))} taps (screen={screen.value}). "
             f"Full ladder has {len(points)} points."
         )
 

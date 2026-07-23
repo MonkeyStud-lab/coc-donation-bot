@@ -92,6 +92,7 @@ class DonationBot:
         self._stop_requested = False
         self._farm_requested = False
         self._farm_fail_cooldown_until = 0.0
+        self.last_screen: str = "unknown"
 
     def request_stop(self) -> None:
         """Ask the main loop to exit after the current tick (leaves CoC running)."""
@@ -123,6 +124,12 @@ class DonationBot:
         if remaining <= 0:
             return "Farm: due on next safe tick"
         return f"Farm: next auto in {remaining // 60}m {remaining % 60}s"
+
+    def screen_status_line(self) -> str:
+        """Short screen label for the GUI."""
+        from coc_bot.vision.screens import screen_display_name
+
+        return f"Screen: {screen_display_name(self.last_screen)}"
 
     def run(self) -> None:
         logger.info("CoC Donation Bot starting (dry_run={})", self.config.dry_run)
@@ -292,6 +299,7 @@ class DonationBot:
         if frame is None:
             frame = self.capture.screenshot()
         screen = ScreenClassifier(self.config, self.matcher).classify(frame)
+        self.last_screen = screen.value
         if screen in (ScreenType.CLAN_CHAT, ScreenType.DONATION_PANEL):
             return True
         if screen == ScreenType.LOADING:

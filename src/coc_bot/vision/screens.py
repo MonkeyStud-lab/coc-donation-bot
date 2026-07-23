@@ -22,6 +22,26 @@ class ScreenType(str, Enum):
     UNKNOWN = "unknown"
 
 
+# Short labels for the control panel “what screen is this?” line.
+SCREEN_LABELS: dict[str, str] = {
+    ScreenType.HOME.value: "Home (village)",
+    ScreenType.CLAN_CHAT.value: "Clan chat",
+    ScreenType.DONATION_PANEL.value: "Donation panel",
+    ScreenType.LOADING.value: "Loading",
+    ScreenType.POPUP.value: "Popup",
+    ScreenType.ATTACK_MENU.value: "Attack menu",
+    ScreenType.MATCHMAKING.value: "Matchmaking",
+    ScreenType.BATTLE.value: "Battle / scout",
+    ScreenType.BATTLE_RESULTS.value: "Battle results",
+    ScreenType.UNKNOWN.value: "Unknown",
+}
+
+
+def screen_display_name(screen: ScreenType | str) -> str:
+    key = screen.value if isinstance(screen, ScreenType) else str(screen)
+    return SCREEN_LABELS.get(key, key)
+
+
 class ScreenClassifier:
     """Classify current game screen using calibrated anchor templates."""
 

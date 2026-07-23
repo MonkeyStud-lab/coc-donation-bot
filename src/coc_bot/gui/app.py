@@ -69,6 +69,7 @@ class BotControlApp(tk.Tk):
         self._log_sink_id: int | None = None
         self._setting_vars: dict[str, tk.Variable] = {}
         self._debug_busy = False
+        self._screen_busy = False
         self._page = "home"
         self._nav_buttons: dict[str, ttk.Button] = {}
         self._pages: dict[str, ttk.Frame] = {}
@@ -114,6 +115,7 @@ class BotControlApp(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(400, self._refresh_calib_status)
         self.after(1000, self._refresh_farm_status)
+        self.after(1500, self._refresh_screen_status)
         self._install_log_sink()
 
     def _build_sidebar(self, parent: ttk.Frame) -> None:
@@ -242,6 +244,16 @@ class BotControlApp(tk.Tk):
             font=ui_font(10),
             anchor="w",
         ).pack(fill=tk.X, pady=(12, 0))
+
+        self._screen_status = tk.StringVar(value="Screen: —")
+        tk.Label(
+            pad,
+            textvariable=self._screen_status,
+            bg=SURFACE_2,
+            fg=ACCENT,
+            font=ui_font(11, "bold"),
+            anchor="w",
+        ).pack(fill=tk.X, pady=(4, 0))
 
         log_card = self._card(page, fill=tk.BOTH, expand=True)
         log_pad = tk.Frame(log_card, bg=SURFACE_2)
@@ -664,6 +676,45 @@ class BotControlApp(tk.Tk):
         except Exception:  # noqa: BLE001
             self._farm_status.set("Farm: —")
         self.after(5000, self._refresh_farm_status)
+
+    def _refresh_screen_status(self) -> None:
+        """Show what ScreenClassifier thinks the current frame is (live ADB peek)."""
+        if self._screen_busy:
+            self.after(2000, self._refresh_screen_status)
+            return
+        self._screen_busy = True
+
+        def worker() -> None:
+            try:
+                from coc_bot.adb.capture import ScreenCapture
+                from coc_bot.adb.client import AdbClient
+                from coc_bot.vision.matcher import TemplateMatcher
+                from coc_bot.vision.screens import ScreenClassifier, screen_display_name
+
+                config = load_config()
+                client = AdbClient(device=config.adb_device)
+                client.ensure_connected()
+                frame = ScreenCapture(client).screenshot()
+                matcher = TemplateMatcher(
+                    threshold=config.template_threshold,
+                    scale_range=config.scale_range,
+                )
+                screen = ScreenClassifier(config, matcher).classify(frame)
+                label = f"Screen: {screen_display_name(screen)}"
+                bot = self._bot
+                if bot is not None:
+                    bot.last_screen = screen.value
+            except Exception as exc:  # noqa: BLE001
+                label = f"Screen: (unavailable — {exc})"
+
+            def done() -> None:
+                self._screen_busy = False
+                self._screen_status.set(label)
+                self.after(2500, self._refresh_screen_status)
+
+            self.after(0, done)
+
+        threading.Thread(target=worker, daemon=True, name="screen-status").start()
 
     def view_bot_screenshot(self) -> None:
         """Grab one ADB frame (what the bot sees) and show it in a preview window."""

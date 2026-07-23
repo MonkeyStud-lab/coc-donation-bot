@@ -123,12 +123,10 @@ class ScreenClassifier:
         """
         Donation popup over clan chat (troop + spell bars).
 
-        Must not fire on village home, plain clan chat, or attack results.
+        Must not fire on village home or attack results. Green Donate buttons can
+        look like Return Home — strong bar signals still count as the popup.
         """
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
-            return False
-        # Results screen green CTA is not a donate bar.
-        if self.find_return_home_button(frame) is not None:
             return False
         if self._template_visible(frame, "donation_panel"):
             return True
@@ -138,10 +136,14 @@ class ScreenClassifier:
         if troop_std is None or spell_std is None:
             return False
 
-        # Strong dual-bar signal (popup troop + spell rows).
+        # Strong dual-bar signal — trust this even if green Donate pills look like
+        # Return Home (that veto was blocking real donation popups).
         if troop_std > 40 and spell_std > 40:
             return True
-        # Medium bars + dimmed modal (popup over chat). Return Home already excluded.
+
+        # Weaker path: require no bottom-center Return Home CTA (attack results).
+        if self.find_return_home_button(frame) is not None:
+            return False
         if troop_std > 30 and spell_std > 30 and self._has_dimmed_modal_overlay(frame):
             return True
         return False

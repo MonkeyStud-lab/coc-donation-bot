@@ -307,6 +307,54 @@ class ScreenClassifier:
         # Dimmed overlay alone can false-match busy villages; require the green Okay/Claim too.
         return self._has_dimmed_modal_overlay(frame) and self._has_green_dialog_button(frame)
 
+    def looks_like_surrender_dialog(self, frame: np.ndarray) -> bool:
+        """
+        Mid-battle Surrender confirm (Cancel orange + Okay green).
+
+        Triggered by Android BACK / red Surrender — must Cancel, never Okay.
+        """
+        h, w = frame.shape[:2]
+        # Button row on the centered card.
+        y0, y1 = int(h * 0.50), int(h * 0.72)
+        x0, x1 = int(w * 0.28), int(w * 0.72)
+        crop = frame[y0:y1, x0:x1]
+        if crop.size == 0:
+            return False
+        mid = crop.shape[1] // 2
+        left, right = crop[:, :mid], crop[:, mid:]
+        hsv_l = cv2.cvtColor(left, cv2.COLOR_BGR2HSV)
+        hsv_r = cv2.cvtColor(right, cv2.COLOR_BGR2HSV)
+        orange = cv2.inRange(hsv_l, (5, 90, 90), (28, 255, 255))
+        green = cv2.inRange(hsv_r, (35, 90, 80), (90, 255, 255))
+        orange_frac = float(orange.mean()) / 255.0
+        green_frac = float(green.mean()) / 255.0
+        if orange_frac < 0.035 or green_frac < 0.035:
+            return False
+        # Live battle chrome still visible (timer / army bar) under the dim.
+        return self._looks_like_battle(frame) or self._has_dimmed_modal_overlay(frame)
+
+    def find_surrender_cancel_button(self, frame: np.ndarray) -> tuple[int, int] | None:
+        """Orange Cancel on the Surrender dialog (left of the green Okay)."""
+        h, w = frame.shape[:2]
+        y0, y1 = int(h * 0.50), int(h * 0.72)
+        x0, x1 = int(w * 0.28), int(w * 0.52)
+        crop = frame[y0:y1, x0:x1]
+        if crop.size == 0:
+            return None
+        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+        orange = cv2.inRange(hsv, (5, 90, 90), (28, 255, 255))
+        orange = cv2.morphologyEx(
+            orange, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (9, 7))
+        )
+        contours, _ = cv2.findContours(orange, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return (int(w * 0.38), int(h * 0.60))
+        largest = max(contours, key=cv2.contourArea)
+        if float(cv2.contourArea(largest)) < crop.shape[0] * crop.shape[1] * 0.01:
+            return (int(w * 0.38), int(h * 0.60))
+        bx, by, bw, bh = cv2.boundingRect(largest)
+        return int(x0 + bx + bw / 2), int(y0 + by + bh / 2)
+
     def _home_blocking_popup(self, frame: np.ndarray) -> bool:
         """
         Home-village modal (Star Bonus, news, etc.) with Attack! / chat still visible.
@@ -380,16 +428,43 @@ class ScreenClassifier:
         warm = cv2.inRange(hsv, (5, 70, 70), (35, 255, 255))
         return float(warm.mean()) / 255.0 > 0.08
 
+    def _live_battle_chrome_visible(self, frame: np.ndarray) -> bool:
+        """
+        True while a live attack/scout still shows End Battle / Surrender or Next.
+
+        Used to veto false \"Return Home\" / results detections mid-fight.
+        """
+        h, w = frame.shape[:2]
+        # Red End Battle / Surrender chip — bottom-left above the army bar.
+        end_roi = frame[int(h * 0.70) : h, 0 : int(w * 0.24)]
+        if end_roi.size:
+            hsv_e = cv2.cvtColor(end_roi, cv2.COLOR_BGR2HSV)
+            red1 = cv2.inRange(hsv_e, (0, 70, 70), (12, 255, 255))
+            red2 = cv2.inRange(hsv_e, (168, 70, 70), (180, 255, 255))
+            if float(cv2.bitwise_or(red1, red2).mean()) / 255.0 > 0.02:
+                return True
+        # Orange Next on the right (scout before deploy).
+        next_roi = frame[int(h * 0.50) : int(h * 0.92), int(w * 0.78) : w]
+        if next_roi.size:
+            hsv_n = cv2.cvtColor(next_roi, cv2.COLOR_BGR2HSV)
+            nxt = cv2.inRange(hsv_n, (5, 80, 80), (30, 255, 255))
+            if float(nxt.mean()) / 255.0 > 0.045:
+                return True
+        return False
+
     def find_return_home_button(self, frame: np.ndarray) -> tuple[int, int] | None:
         """
         Tap target for the green Return Home button on defeat/victory.
 
-        Prefers a wide green CTA in the lower center (not other green UI), and
-        biases slightly down-right so we don't miss high/left of the pill.
+        Prefers a wide green CTA in the lower center (not other green UI).
+        Never matches while live End Battle / Next chrome is still on screen.
         """
+        if self._live_battle_chrome_visible(frame):
+            return None
+
         h, w = frame.shape[:2]
-        # Button sits bottom-center of the results card — keep ROI tight.
-        x0, x1 = int(w * 0.28), int(w * 0.72)
+        # Button sits bottom-center of the results card — keep ROI tight & centered.
+        x0, x1 = int(w * 0.32), int(w * 0.68)
         y0, y1 = int(h * 0.78), int(h * 0.96)
         crop = frame[y0:y1, x0:x1]
         if crop.size == 0:
@@ -402,7 +477,7 @@ class ScreenClassifier:
         contours, _ = cv2.findContours(green, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
             return None
-        min_area = crop.shape[0] * crop.shape[1] * 0.015
+        min_area = crop.shape[0] * crop.shape[1] * 0.025
         crop_cx = crop.shape[1] / 2.0
 
         def _score(c: np.ndarray) -> float:
@@ -410,13 +485,15 @@ class ScreenClassifier:
             if area < min_area:
                 return -1.0
             bx, by, bw, bh = cv2.boundingRect(c)
-            if bh < 8 or bw < 40:
+            if bh < 10 or bw < 60:
                 return -1.0
             aspect = bw / float(bh)
-            if aspect < 1.4:
+            if aspect < 1.8:
                 return -1.0
-            # Prefer wide pills near horizontal center of the ROI.
+            # Prefer wide pills near horizontal center — reject far-right green junk.
             cx = bx + bw / 2.0
+            if abs(cx - crop_cx) > crop.shape[1] * 0.28:
+                return -1.0
             center_pen = 1.0 - min(1.0, abs(cx - crop_cx) / (crop.shape[1] * 0.5))
             return area * aspect * (0.55 + 0.45 * center_pen)
 
@@ -503,6 +580,9 @@ class ScreenClassifier:
         Distinct from live scout/battle: no Next, no End Battle, big green CTA.
         Must NOT match clan chat / Donate button screens.
         """
+        # Still fighting — never results.
+        if self._live_battle_chrome_visible(frame):
+            return False
         # Real chat/donate UI — never Return Home.
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
             return False
@@ -515,24 +595,7 @@ class ScreenClassifier:
             frame, "battle_end"
         ):
             return True
-        if self.find_return_home_button(frame) is not None:
-            # Live scout still has Next (right) or End Battle (left) — not results.
-            h, w = frame.shape[:2]
-            next_roi = frame[int(h * 0.52) : int(h * 0.92), int(w * 0.80) : w]
-            if next_roi.size:
-                hsv_n = cv2.cvtColor(next_roi, cv2.COLOR_BGR2HSV)
-                nxt = cv2.inRange(hsv_n, (5, 90, 90), (28, 255, 255))
-                if float(nxt.mean()) / 255.0 > 0.06:
-                    return False
-            end_roi = frame[int(h * 0.78) : h, 0 : int(w * 0.20)]
-            if end_roi.size:
-                hsv_e = cv2.cvtColor(end_roi, cv2.COLOR_BGR2HSV)
-                red1 = cv2.inRange(hsv_e, (0, 100, 80), (8, 255, 255))
-                red2 = cv2.inRange(hsv_e, (170, 100, 80), (180, 255, 255))
-                if float(cv2.bitwise_or(red1, red2).mean()) / 255.0 > 0.04:
-                    return False
-            return True
-        return False
+        return self.find_return_home_button(frame) is not None
 
     def classify(self, frame: np.ndarray, mode: BotMode | None = None) -> ScreenType:
         """
@@ -592,6 +655,9 @@ class ScreenClassifier:
 
     def _classify_attack(self, frame: np.ndarray) -> ScreenType:
         """Attack flow only — never donation panel / donate-button chat heuristics."""
+        # Live End Battle / Next wins over any false Return Home green blob.
+        if self._live_battle_chrome_visible(frame):
+            return ScreenType.BATTLE
         if self._looks_like_battle_results(frame):
             return ScreenType.BATTLE_RESULTS
         if self._template_visible(frame, "return_home") or self._template_visible(
@@ -639,6 +705,9 @@ class ScreenClassifier:
 
         if self._template_visible(frame, "donate_button"):
             return ScreenType.CLAN_CHAT
+
+        if self._live_battle_chrome_visible(frame):
+            return ScreenType.BATTLE
 
         if self._looks_like_battle_results(frame):
             return ScreenType.BATTLE_RESULTS

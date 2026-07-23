@@ -420,16 +420,33 @@ class AttackNavigator:
     def wait_for_battle_end(self, timeout: float | None = None) -> ScreenType:
         """Wait until results or home; do not surrender early."""
         timeout = timeout if timeout is not None else float(self.config.farm_battle_timeout_seconds)
+        # Ignore false \"results\" right after deploy — a real fight takes longer.
+        min_results_after = 45.0
         deadline = time.time() + timeout
+        started = time.time()
         while time.time() < deadline:
             if self._stopping():
                 logger.info("wait_for_battle_end: stop requested — aborting")
                 return ScreenType.UNKNOWN
             frame = self.capture.screenshot()
+            if self.classifier._live_battle_chrome_visible(frame):  # noqa: SLF001
+                if self._sleep(1.2):
+                    return ScreenType.UNKNOWN
+                continue
             screen = self.classify(frame, mode=BotMode.ATTACK)
             if screen == ScreenType.BATTLE_RESULTS or self.classifier._looks_like_battle_results(  # noqa: SLF001
                 frame
             ):
+                elapsed = time.time() - started
+                if elapsed < min_results_after:
+                    logger.debug(
+                        "Ignoring early battle_results signal ({:.0f}s < {:.0f}s)",
+                        elapsed,
+                        min_results_after,
+                    )
+                    if self._sleep(1.2):
+                        return ScreenType.UNKNOWN
+                    continue
                 logger.info("Battle ended — screen=battle_results")
                 return ScreenType.BATTLE_RESULTS
             if screen in (ScreenType.HOME, ScreenType.CLAN_CHAT):
@@ -445,6 +462,8 @@ class AttackNavigator:
                 return ScreenType.UNKNOWN
         logger.warning("Battle wait timed out after {}s", timeout)
         frame = self.capture.screenshot()
+        if self.classifier._live_battle_chrome_visible(frame):  # noqa: SLF001
+            return ScreenType.BATTLE
         if self.classifier._looks_like_battle_results(frame):  # noqa: SLF001
             return ScreenType.BATTLE_RESULTS
         return self.classify(frame, mode=BotMode.ATTACK)
@@ -484,6 +503,21 @@ class AttackNavigator:
                 return False
             frame = self.capture.screenshot()
             screen = self.classify(frame, mode=BotMode.ATTACK)
+
+            # Android BACK mid-battle opens this — Cancel, never Okay / never BACK again.
+            if self.classifier.looks_like_surrender_dialog(frame):
+                cancel = self.classifier.find_surrender_cancel_button(frame)
+                if cancel:
+                    logger.info(
+                        "Surrender dialog — tapping Cancel at ({}, {})",
+                        cancel[0],
+                        cancel[1],
+                    )
+                    self.input.tap(cancel[0], cancel[1], jitter=0)
+                if self._sleep(1.0):
+                    return False
+                continue
+
             if screen == ScreenType.POPUP and self.donation_nav is not None:
                 logger.info("Dismissing post-battle popup (e.g. Star Bonus)")
                 self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
@@ -504,8 +538,11 @@ class AttackNavigator:
                 return True
 
             # Defeat/victory card often still looks like a battle tray. If the green
-            # Return Home CTA is visible, leave — do not sit in the "still in battle" wait.
-            if self.classifier.find_return_home_button(frame) is not None:
+            # Return Home CTA is visible (and live End Battle chrome is gone), leave.
+            if (
+                not self.classifier._live_battle_chrome_visible(frame)  # noqa: SLF001
+                and self.classifier.find_return_home_button(frame) is not None
+            ):
                 logger.info(
                     "Return Home button visible (screen={}) — tapping to leave",
                     screen.value,
@@ -515,14 +552,20 @@ class AttackNavigator:
                     return False
                 continue
 
-            results = screen == ScreenType.BATTLE_RESULTS or self.classifier._looks_like_battle_results(  # noqa: SLF001
-                frame
+            results = (
+                not self.classifier._live_battle_chrome_visible(frame)  # noqa: SLF001
+                and (
+                    screen == ScreenType.BATTLE_RESULTS
+                    or self.classifier._looks_like_battle_results(frame)  # noqa: SLF001
+                )
             )
             in_battle = (not results) and (
-                screen == ScreenType.BATTLE or self.classifier._looks_like_battle(frame)  # noqa: SLF001
+                screen == ScreenType.BATTLE
+                or self.classifier._live_battle_chrome_visible(frame)  # noqa: SLF001
+                or self.classifier._looks_like_battle(frame)  # noqa: SLF001
             )
             if in_battle:
-                logger.info("return_home_from_attack: still in battle — waiting")
+                logger.info("return_home_from_attack: still in battle — waiting (no BACK)")
                 if self._sleep(1.5):
                     return False
                 continue
@@ -545,15 +588,21 @@ class AttackNavigator:
                     return False
                 continue
 
-            # Popup / odd UI — try Return Home once, then BACK.
+            # Odd UI — try Return Home; do not BACK if battle chrome is still up.
             self._tap_return_home(frame)
             if self._sleep(1.2):
                 return False
-            if self.classify(self.capture.screenshot(), mode=BotMode.ATTACK) in (
+            check = self.capture.screenshot()
+            if self.classify(check, mode=BotMode.ATTACK) in (
                 ScreenType.HOME,
                 ScreenType.CLAN_CHAT,
             ):
                 return True
+            if self.classifier._looks_like_battle(check):  # noqa: SLF001
+                logger.info("Still looks like battle after Return Home tap — waiting")
+                if self._sleep(1.5):
+                    return False
+                continue
             self.input.back()
             if self._sleep(0.8):
                 return False

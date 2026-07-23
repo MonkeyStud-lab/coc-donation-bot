@@ -130,14 +130,50 @@ class Navigator:
                         "ensure_clan_chat: leaving attack UI (screen={})",
                         screen.value,
                     )
+                    # Never Android BACK during live battle — that opens Surrender.
+                    if self.classifier.looks_like_surrender_dialog(frame):
+                        cancel = self.classifier.find_surrender_cancel_button(frame)
+                        if cancel:
+                            logger.info(
+                                "Surrender dialog open — tapping Cancel at ({}, {})",
+                                cancel[0],
+                                cancel[1],
+                            )
+                            self.input.tap(cancel[0], cancel[1], jitter=0)
+                        if self._sleep(1.0):
+                            return False
+                        continue
+                    if screen == ScreenType.BATTLE:
+                        logger.info(
+                            "ensure_clan_chat: live battle — waiting (not pressing BACK)"
+                        )
+                        if self._sleep(2.0):
+                            return False
+                        continue
                     if screen == ScreenType.BATTLE_RESULTS:
-                        point = self.config.tap_points.get("return_home")
-                        if point:
-                            self.input.tap(int(point[0]), int(point[1]))
+                        # Mid-fight can false-read as results — wait if End Battle is up.
+                        if self.classifier._live_battle_chrome_visible(frame):  # noqa: SLF001
+                            logger.info(
+                                "ensure_clan_chat: false results (live chrome) — waiting"
+                            )
+                            if self._sleep(2.0):
+                                return False
+                            continue
+                        found = self.classifier.find_return_home_button(frame)
+                        if found is not None:
+                            self.input.tap(found[0], found[1], jitter=0)
                         else:
-                            self.input.back()
-                    else:
-                        self.input.back()
+                            point = self.config.tap_points.get("return_home")
+                            if point:
+                                self.input.tap(int(point[0]), int(point[1]))
+                            else:
+                                h, w = frame.shape[:2]
+                                self.input.tap(int(w * 0.50), int(h * 0.88))
+                        if self._sleep(1.2):
+                            return False
+                        continue
+                    # Attack menu / matchmaking — BACK is safe here.
+                    self.input.back()
                     if self._sleep(1.2):
                         return False
                     continue

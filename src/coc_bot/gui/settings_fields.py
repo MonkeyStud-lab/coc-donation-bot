@@ -186,8 +186,9 @@ SETTINGS: list[SettingField] = [
     ),
     SettingField(
         "farm_battle_timeout_seconds",
-        "Battle timeout (seconds)",
-        "Safety cap waiting for the attack timer to end (default 240 > normal ~3 min).",
+        "Battle wait after deploy (seconds)",
+        "After the first troop is placed, wait this long then tap Return Home "
+        "(default 210 = 3 minutes 30 seconds). Then confirm home village / chat.",
         "int",
         lambda c: c.farm_battle_timeout_seconds,
         "Farm",

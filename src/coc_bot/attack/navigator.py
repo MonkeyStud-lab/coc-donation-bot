@@ -404,19 +404,32 @@ class AttackNavigator:
             if screen == ScreenType.BATTLE or self.classifier._looks_like_battle(frame):  # noqa: SLF001
                 logger.info("Battle field ready (screen={})", screen.value)
                 return True
-            if screen == ScreenType.BATTLE_RESULTS:
-                # Double-check — do not abort a live attack mislabeled as results.
-                if self.classifier._looks_like_battle(frame):  # noqa: SLF001
-                    logger.info("Battle field ready (overrode false results)")
-                    return True
-                logger.warning("Saw battle results before deploy — opponent may have ended early")
-                return False
-            # Search clouds (white fog or MATCHMAKING) — keep waiting; not home yet.
+            # Search clouds — keep waiting (never treat as results/home).
             if (
                 screen == ScreenType.MATCHMAKING
                 or self.classifier.looks_like_white_clouds(frame)
             ):
                 logger.debug("wait_for_battle: still searching (clouds / matchmaking)")
+                if self._sleep(0.6):
+                    return False
+                continue
+            if screen == ScreenType.BATTLE_RESULTS or self.classifier._looks_like_battle_results(  # noqa: SLF001
+                frame
+            ):
+                # Matchmaking / load screens often false-trigger results. Only abort
+                # when side silhouettes + Return Home look real and we are not searching.
+                if self.classifier._looks_like_battle(frame):  # noqa: SLF001
+                    logger.info("Battle field ready (overrode false results)")
+                    return True
+                if self.classifier.looks_like_results_side_silhouettes(frame):
+                    logger.warning(
+                        "Saw battle results before deploy — opponent may have ended early"
+                    )
+                    return False
+                logger.debug(
+                    "Ignoring false battle_results during matchmaking (screen={})",
+                    screen.value,
+                )
                 if self._sleep(0.6):
                     return False
                 continue
@@ -437,66 +450,48 @@ class AttackNavigator:
             return True
         return False
 
-    def wait_for_battle_end(self, timeout: float | None = None) -> ScreenType:
-        """Wait until results or home; do not surrender early."""
-        timeout = timeout if timeout is not None else float(self.config.farm_battle_timeout_seconds)
-        # Ignore false \"results\" right after deploy — a real fight takes longer.
-        min_results_after = 45.0
-        deadline = time.time() + timeout
-        started = time.time()
-        while time.time() < deadline:
-            if self._stopping():
-                logger.info("wait_for_battle_end: stop requested — aborting")
-                return ScreenType.UNKNOWN
-            frame = self.capture.screenshot()
-            if self.classifier.looks_like_live_replay(frame):
-                logger.info("wait_for_battle_end: Live Replay (defense) — waiting")
-                if self._sleep(3.0):
-                    return ScreenType.UNKNOWN
-                continue
-            if self.classifier._live_battle_chrome_visible(frame):  # noqa: SLF001
-                if self._sleep(1.2):
-                    return ScreenType.UNKNOWN
-                continue
-            screen = self.classify(frame, mode=BotMode.ATTACK)
-            if screen == ScreenType.LIVE_REPLAY:
-                logger.info("wait_for_battle_end: Live Replay — waiting")
-                if self._sleep(3.0):
-                    return ScreenType.UNKNOWN
-                continue
-            if screen == ScreenType.BATTLE_RESULTS or self.classifier._looks_like_battle_results(  # noqa: SLF001
-                frame
-            ):
-                elapsed = time.time() - started
-                if elapsed < min_results_after:
-                    logger.debug(
-                        "Ignoring early battle_results signal ({:.0f}s < {:.0f}s)",
-                        elapsed,
-                        min_results_after,
-                    )
-                    if self._sleep(1.2):
-                        return ScreenType.UNKNOWN
-                    continue
-                logger.info("Battle ended — screen=battle_results")
-                return ScreenType.BATTLE_RESULTS
-            if screen in (ScreenType.HOME, ScreenType.CLAN_CHAT):
-                logger.info("Battle ended — screen={}", screen.value)
-                return screen
-            if screen == ScreenType.BATTLE:
-                if self._sleep(1.2):
-                    return ScreenType.UNKNOWN
-                continue
-            if screen == ScreenType.POPUP and self.donation_nav is not None:
-                self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
-            if self._sleep(1.2):
-                return ScreenType.UNKNOWN
-        logger.warning("Battle wait timed out after {}s", timeout)
+    def wait_for_battle_end(
+        self,
+        timeout: float | None = None,
+        *,
+        since: float | None = None,
+    ) -> ScreenType:
+        """
+        Simple farm leave: wait a fixed time from first deploy, then tap Return Home.
+
+        Does not try to vision-detect results mid-fight (that was too flaky). After
+        the timer, taps calibrated Return Home coords and lets the caller confirm
+        home village with the existing leave rules.
+        """
+        total = timeout if timeout is not None else float(self.config.farm_battle_timeout_seconds)
+        started = since if since is not None else time.time()
+        remaining = max(0.0, total - (time.time() - started))
+        logger.info(
+            "Battle timer: waiting {:.0f}s more ({}s from first deploy), then Return Home",
+            remaining,
+            int(total),
+        )
+        if remaining > 0 and self._sleep(remaining):
+            logger.info("wait_for_battle_end: stop requested — aborting")
+            return ScreenType.UNKNOWN
+
+        if self._stopping():
+            return ScreenType.UNKNOWN
+
         frame = self.capture.screenshot()
-        if self.classifier._live_battle_chrome_visible(frame):  # noqa: SLF001
-            return ScreenType.BATTLE
-        if self.classifier._looks_like_battle_results(frame):  # noqa: SLF001
-            return ScreenType.BATTLE_RESULTS
-        return self.classify(frame, mode=BotMode.ATTACK)
+        # Already home somehow — nothing to tap.
+        if self.classify(frame, mode=BotMode.ATTACK) in (
+            ScreenType.HOME,
+            ScreenType.CLAN_CHAT,
+        ) or self.attack_button_visible(frame):
+            logger.info("Battle timer done — already on village")
+            return ScreenType.HOME
+
+        logger.info("Battle timer done — tapping Return Home coordinates")
+        self._tap_return_home(frame)
+        if self._sleep(1.5):
+            return ScreenType.UNKNOWN
+        return ScreenType.BATTLE_RESULTS
 
     def _tap_return_home(self, frame: np.ndarray) -> bool:
         """Tap calibrated Return Home, green button blob, or lower-center fallback."""

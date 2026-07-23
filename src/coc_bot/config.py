@@ -65,7 +65,7 @@ class BotConfig:
     farm_deploy_side: str = "left"
     farm_pan_swipes: float = 3.0
     farm_match_timeout_seconds: int = 120
-    farm_battle_timeout_seconds: int = 240
+    farm_battle_timeout_seconds: int = 210
     farm_retry_cooldown_seconds: int = 300
     farm_edrag_deploy_taps: int = 14
     farm_hero_count: int = 4
@@ -227,7 +227,7 @@ def load_config(
         farm_deploy_side=deploy_side,
         farm_pan_swipes=max(0.0, float(farm.get("pan_swipes", 3))),
         farm_match_timeout_seconds=int(farm.get("match_timeout_seconds", 120)),
-        farm_battle_timeout_seconds=int(farm.get("battle_timeout_seconds", 240)),
+        farm_battle_timeout_seconds=int(farm.get("battle_timeout_seconds", 210)),
         farm_retry_cooldown_seconds=int(farm.get("retry_cooldown_seconds", 300)),
         farm_edrag_deploy_taps=int(farm.get("edrag_deploy_taps", 14)),
         farm_hero_count=max(0, min(4, int(farm.get("hero_count", 4)))),

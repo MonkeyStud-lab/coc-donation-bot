@@ -137,8 +137,9 @@ Orchestrator: [`src/coc_bot/attack/farmer.py`](../src/coc_bot/attack/farmer.py).
 ```text
 leave clan chat → Attack! → unranked Battle → (clouds) → battlefield
     → pan + dump e-drags → rage → siege → heroes
-    → wait for timer / results (no early surrender)
-    → Return Home → leave clouds → open clan chat to confirm
+    → wait 3m30s from first deploy (configurable), then tap Return Home coords
+    → confirm home (Attack! / leave clouds / clan chat) — no early surrender
+    → reopen clan chat
 ```
 
 | Piece | Location |
@@ -149,18 +150,14 @@ leave clan chat → Attack! → unranked Battle → (clouds) → battlefield
 
 ### Leave / Return Home safeguards
 
-Leaving results is one of the easiest places for vision to fail (scenery, green UI, white fog). The leave path stacks several checks:
+Leaving after a fight used to rely heavily on vision mid-battle; that was flaky. The farm path is now intentionally simple:
 
-1. Prefer the green **Return Home** CTA only when live End Battle / Next chrome is **gone**
-2. After a tap, **white transition clouds** strongly suggest the leave started
-3. If End Battle chrome is still visible and there are **no** leave clouds, treat the tap as a **false scenery match** and keep waiting in battle
-4. When the bot *thinks* it is home, it **opens clan chat** to prove it:
-   - Chat opens → leave confirmed
-   - Still End Battle / battlefield → battle was still going
-   - Still results / Return Home button → Return Home did not land; try again
-5. Never press Android **BACK** mid-battle (opens Surrender). On the Surrender dialog, tap **Cancel**
+1. **Timer** from first troop deploy (`farm.battle_timeout_seconds`, default **210** = 3m30s)
+2. Tap calibrated **Return Home** coordinates (green CTA if seen)
+3. Confirm village with existing rules (Attack! chip, leave clouds, open clan chat)
+4. Never press Android **BACK** mid-battle (opens Surrender). On the Surrender dialog, tap **Cancel**
 
-Matchmaking clouds during `wait_for_battle` are intentionally **not** treated as “we’re home.”
+Matchmaking clouds during `wait_for_battle` are intentionally **not** treated as “we’re home,” and false “battle results” during search are ignored unless real side silhouettes appear.
 
 ---
 

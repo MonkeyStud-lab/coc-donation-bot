@@ -132,25 +132,26 @@ class AttackFarmer:
             self.config.farm_hero_count,
             self.config.farm_deploy_side,
         )
+        # Timer starts when the first troop goes down (beginning of dump).
+        deploy_started = time.time()
         taps = self.deployer.dump_army_along_edge(frame)
         logger.info("Deploy finished — {} map taps", taps)
 
         if self._stopping():
             return FarmResult(False, "stopped")
 
-        end_screen = self.attack_nav.wait_for_battle_end()
+        # Wait remaining of the fixed battle window, tap Return Home coords, then
+        # confirm village with existing Attack!/chat leave rules.
+        end_screen = self.attack_nav.wait_for_battle_end(since=deploy_started)
         if self._stopping() or end_screen == ScreenType.UNKNOWN:
             return FarmResult(False, "stopped")
-        if end_screen == ScreenType.BATTLE:
-            logger.warning("Still in battle after timeout — trying return home")
-            self.attack_nav.return_home_from_attack()
-            self._abort_to_chat()
-            return FarmResult(False, "battle timeout")
 
-        # Always try Return Home after an attack unless already on home/chat.
-        if end_screen not in (ScreenType.HOME, ScreenType.CLAN_CHAT):
-            logger.info("Leaving results screen (end_screen={})", end_screen.value)
-            self.attack_nav.return_home_from_attack()
+        logger.info("Confirming leave after battle timer (screen={})", end_screen.value)
+        if not self.attack_nav.return_home_from_attack():
+            if self._stopping():
+                return FarmResult(False, "stopped")
+            self._abort_to_chat()
+            return FarmResult(False, "could not confirm home after Return Home tap")
 
         if self._stopping():
             return FarmResult(False, "stopped")

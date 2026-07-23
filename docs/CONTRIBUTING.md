@@ -52,7 +52,9 @@ Prefer small, focused changes. Match existing naming and logging style (`loguru`
 | Tunables | `config/default.yaml` → `farm:` + `BotConfig` in `config.py` + GUI field in `gui/settings_fields.py` |
 | New tap targets | Wizard step `"farm"` |
 
-Keep **no early surrender** unless you intentionally redesign `wait_for_battle_end`. Leave path should remain failsafe-heavy (live chrome veto, leave clouds, clan-chat confirm).
+Keep the simple post-deploy timer in `wait_for_battle_end` (wait N seconds from first
+deploy, tap Return Home coords, then confirm home). Leave confirmation should stay
+failsafe-heavy (Attack! chip, leave clouds, clan-chat confirm).
 
 ### 3. Change donation behavior
 

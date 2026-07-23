@@ -69,6 +69,8 @@ class BotConfig:
     farm_retry_cooldown_seconds: int = 300
     farm_edrag_deploy_taps: int = 14
     farm_hero_count: int = 4
+    farm_deploy_siege: bool = True
+    farm_activate_hero_abilities: bool = True
     data_dir: Path = field(default_factory=lambda: _project_root() / "data")
     templates_dir: Path = field(default_factory=lambda: _project_root() / "data" / "templates")
 
@@ -225,6 +227,8 @@ def load_config(
         farm_retry_cooldown_seconds=int(farm.get("retry_cooldown_seconds", 300)),
         farm_edrag_deploy_taps=int(farm.get("edrag_deploy_taps", 14)),
         farm_hero_count=max(0, min(4, int(farm.get("hero_count", 4)))),
+        farm_deploy_siege=bool(farm.get("deploy_siege", True)),
+        farm_activate_hero_abilities=bool(farm.get("activate_hero_abilities", True)),
         data_dir=root / "data",
         templates_dir=root / "data" / "templates",
     )

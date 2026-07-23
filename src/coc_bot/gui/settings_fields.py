@@ -222,6 +222,24 @@ SETTINGS: list[SettingField] = [
         ("farm", "hero_count"),
     ),
     SettingField(
+        "farm_deploy_siege",
+        "Deploy siege machine",
+        "After e-drags, select the siege slot and drop it on the deploy edge.",
+        "bool",
+        lambda c: c.farm_deploy_siege,
+        "Farm",
+        ("farm", "deploy_siege"),
+    ),
+    SettingField(
+        "farm_activate_hero_abilities",
+        "Activate hero abilities",
+        "After placing each hero, tap their army-bar icon again to trigger the ability.",
+        "bool",
+        lambda c: c.farm_activate_hero_abilities,
+        "Farm",
+        ("farm", "activate_hero_abilities"),
+    ),
+    SettingField(
         "adb_device",
         "ADB device address",
         "Waydroid ADB target, e.g. 192.168.240.112:5555 or 127.0.0.1:5555. "

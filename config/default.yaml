@@ -51,3 +51,5 @@ farm:
   retry_cooldown_seconds: 300     # wait after a failed farm before retrying
   edrag_deploy_taps: 14           # map taps while e-drags selected (11 troops + spare)
   hero_count: 4                   # heroes to select + place after e-drags
+  deploy_siege: true              # select + drop siege machine after e-drags
+  activate_hero_abilities: true   # re-tap each hero icon after placing to fire ability

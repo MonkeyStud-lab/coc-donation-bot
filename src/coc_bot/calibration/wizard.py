@@ -188,6 +188,13 @@ STEPS: dict[str, CalibrationStep] = {
                 description="First troop card on the bottom battle bar",
             ),
             CalibrationPart(
+                "siege_slot",
+                "Siege machine slot",
+                "tap",
+                optional=True,
+                description="Siege card on the bottom battle bar",
+            ),
+            CalibrationPart(
                 "hero_1",
                 "Hero 1 slot",
                 "tap",
@@ -839,19 +846,25 @@ class CalibrationWizard:
             logger.info("Removed obsolete deploy_strip ROI (not used anymore)")
 
         print(
-            "\n--- Army bar slots (optional but recommended for heroes) ---\n"
-            "On a BATTLE screen with your e-drag army visible in the bottom bar:\n"
+            "\n--- Army bar slots (optional but recommended) ---\n"
+            "On a BATTLE / scout screen with your army visible in the bottom bar:\n"
             "  • e-drag / first troop card\n"
+            "  • siege machine card\n"
             "  • each of the 4 hero cards (left → right)\n"
             "Skip to use built-in default positions."
         )
-        if prompt_yes_no("Calibrate e-drag + hero army-bar taps now?"):
+        if prompt_yes_no("Calibrate army-bar taps (e-drag, siege, heroes) now?"):
             print("Open any battle so the army bar is visible, then press Enter.")
             _press_enter()
             frame = self.capture.screenshot()
             pt = self._pick_point("CENTER of the electro dragon (first troop) card", frame)
             self.config.tap_points["edrag_slot"] = list(pt)
             logger.info("Saved tap point edrag_slot")
+            if prompt_yes_no("Calibrate siege_slot?"):
+                frame = self.capture.screenshot()
+                pt = self._pick_point("CENTER of the siege machine card", frame)
+                self.config.tap_points["siege_slot"] = list(pt)
+                logger.info("Saved tap point siege_slot")
             for i in range(1, 5):
                 if not prompt_yes_no(f"Calibrate hero_{i}?"):
                     break
@@ -860,7 +873,7 @@ class CalibrationWizard:
                 self.config.tap_points[f"hero_{i}"] = list(pt)
                 logger.info("Saved tap point hero_{}", i)
         else:
-            for key in ("edrag_slot", "hero_1", "hero_2", "hero_3", "hero_4"):
+            for key in ("edrag_slot", "siege_slot", "hero_1", "hero_2", "hero_3", "hero_4"):
                 if key in self.config.tap_points:
                     _keeping(key)
 

@@ -112,6 +112,21 @@ class EdgeDeployer:
             self.input.tap(x, y)
         time.sleep(0.25)
 
+    def select_siege_slot(self, frame: np.ndarray) -> bool:
+        """Tap the siege machine card on the bottom army bar. Returns False if disabled."""
+        if not self.config.farm_deploy_siege:
+            return False
+        point = self.config.tap_points.get("siege_slot")
+        if point:
+            self.input.tap(int(point[0]), int(point[1]), jitter=0)
+        else:
+            # Typical spot after heroes / before spells on a filled army bar.
+            x, y = self._army_bar_point(frame, 0.48)
+            logger.info("Selecting siege slot at fallback ({}, {})", x, y)
+            self.input.tap(x, y, jitter=0)
+        time.sleep(0.30)
+        return True
+
     def hero_slot_points(self, frame: np.ndarray) -> list[tuple[int, int]]:
         """Return up to 4 hero card centers on the bottom army bar."""
         count = max(0, min(4, int(self.config.farm_hero_count)))
@@ -138,13 +153,12 @@ class EdgeDeployer:
         tap_pause: float = 0.10,
     ) -> int:
         """
-        Pan to the deploy edge, select e-drags, spam the ladder, then place heroes.
+        Pan to the deploy edge, dump e-drags, siege, then heroes (+ ability re-taps).
 
         Returns total map taps (not including army-bar selection taps).
         """
         side = self._resolve_side(side)
         self.pan_to_deploy_side(frame, side=side)
-        # Fresh frame not required for fixed geometry; keep original dims.
         points = self.deploy_points(frame, side=side)
         if not points:
             logger.warning("No deploy points — skipping dump")
@@ -176,19 +190,39 @@ class EdgeDeployer:
 
         logger.info("Deployed e-drags along {} — {} map taps", side, total)
 
+        # Siege: select card, drop once near mid-edge.
+        if self.select_siege_slot(frame):
+            sx, sy = points[len(points) // 2]
+            logger.info("Deploying siege at ({}, {})", sx, sy)
+            self.input.tap(sx, sy)
+            total += 1
+            time.sleep(0.35)
+
         heroes = self.hero_slot_points(frame)
         place_idxs = [
             int(i * (len(points) - 1) / max(1, len(heroes) - 1)) if len(heroes) > 1 else len(points) // 2
             for i in range(len(heroes))
         ]
+        activate = bool(self.config.farm_activate_hero_abilities)
         for hero_i, (hx, hy) in enumerate(heroes):
             logger.info("Deploying hero {} via slot ({}, {})", hero_i + 1, hx, hy)
-            self.input.tap(hx, hy)
+            self.input.tap(hx, hy, jitter=0)
             time.sleep(0.30)
             px, py = points[place_idxs[hero_i]]
             self.input.tap(px, py)
             total += 1
-            time.sleep(0.35)
+            time.sleep(0.40)
+            # Ability: tap the same hero icon again after they are on the map.
+            if activate:
+                logger.info("Activating hero {} ability (re-tap slot)", hero_i + 1)
+                self.input.tap(hx, hy, jitter=0)
+                time.sleep(0.35)
 
-        logger.info("Army dump complete — {} map taps, {} heroes", total, len(heroes))
+        logger.info(
+            "Army dump complete — {} map taps, {} heroes (abilities={}), siege={}",
+            total,
+            len(heroes),
+            activate,
+            self.config.farm_deploy_siege,
+        )
         return total

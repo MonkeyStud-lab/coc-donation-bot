@@ -101,9 +101,9 @@ class AttackFarmer:
             self._abort_to_chat()
             return FarmResult(False, "battle timeout")
 
-        if end_screen == ScreenType.BATTLE_RESULTS:
-            self.attack_nav.return_home_from_attack()
-        elif end_screen not in (ScreenType.HOME, ScreenType.CLAN_CHAT):
+        # Always try Return Home after an attack unless already on home/chat.
+        if end_screen not in (ScreenType.HOME, ScreenType.CLAN_CHAT):
+            logger.info("Leaving results screen (end_screen={})", end_screen.value)
             self.attack_nav.return_home_from_attack()
 
         if self.donation_nav is not None:

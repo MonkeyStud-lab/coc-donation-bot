@@ -392,37 +392,78 @@ class AttackNavigator:
         while time.time() < deadline:
             frame = self.capture.screenshot()
             screen = self.classifier.classify(frame)
+            if screen == ScreenType.BATTLE_RESULTS or self.classifier._looks_like_battle_results(  # noqa: SLF001
+                frame
+            ):
+                logger.info("Battle ended — screen=battle_results")
+                return ScreenType.BATTLE_RESULTS
+            if screen in (ScreenType.HOME, ScreenType.CLAN_CHAT):
+                logger.info("Battle ended — screen={}", screen.value)
+                return screen
             if screen == ScreenType.BATTLE:
                 time.sleep(1.2)
                 continue
-            if screen in (ScreenType.BATTLE_RESULTS, ScreenType.HOME, ScreenType.CLAN_CHAT):
-                logger.info("Battle ended — screen={}", screen.value)
-                return screen
             if screen == ScreenType.POPUP and self.donation_nav is not None:
                 self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
             time.sleep(1.2)
         logger.warning("Battle wait timed out after {}s", timeout)
-        return self.classifier.classify(self.capture.screenshot())
+        frame = self.capture.screenshot()
+        if self.classifier._looks_like_battle_results(frame):  # noqa: SLF001
+            return ScreenType.BATTLE_RESULTS
+        return self.classifier.classify(frame)
+
+    def _tap_return_home(self, frame: np.ndarray) -> bool:
+        """Tap calibrated Return Home, green button blob, or lower-center fallback."""
+        # Prefer vision of the green button on the defeat/victory card.
+        found = self.classifier.find_return_home_button(frame)
+        if found is not None:
+            logger.info("Return Home via green button at ({}, {})", found[0], found[1])
+            self.input.tap(found[0], found[1], jitter=0)
+            return True
+        point = self._scaled_point("return_home", frame)
+        if point:
+            logger.info("Tap return_home at ({}, {})", point[0], point[1])
+            self.input.tap(point[0], point[1], jitter=0)
+            return True
+        template = self.load_template("return_home") or self.load_template("battle_end")
+        if template is not None:
+            match = self.matcher.find(frame, template)
+            if match:
+                cx, cy = match.center
+                logger.info("Tap return_home via template at ({}, {})", cx, cy)
+                self.input.tap(cx, cy, jitter=0)
+                return True
+        h, w = frame.shape[:2]
+        fx, fy = int(w * 0.50), int(h * 0.85)
+        logger.info("return_home fallback tap ({}, {})", fx, fy)
+        self.input.tap(fx, fy, jitter=0)
+        return True
 
     def return_home_from_attack(self) -> bool:
         """Tap Return Home / dismiss attack UI until home or chat — never mid-deploy battle."""
-        for _ in range(8):
+        for _ in range(12):
             frame = self.capture.screenshot()
             screen = self.classifier.classify(frame)
             if screen in (ScreenType.HOME, ScreenType.CLAN_CHAT):
                 return True
-            # Still fighting — do not mash return_home (template may exist from calib).
-            if screen == ScreenType.BATTLE or self.classifier._looks_like_battle(frame):  # noqa: SLF001
+
+            results = screen == ScreenType.BATTLE_RESULTS or self.classifier._looks_like_battle_results(  # noqa: SLF001
+                frame
+            )
+            in_battle = (not results) and (
+                screen == ScreenType.BATTLE or self.classifier._looks_like_battle(frame)  # noqa: SLF001
+            )
+            if in_battle:
                 logger.info("return_home_from_attack: still in battle — waiting")
                 time.sleep(1.5)
                 continue
-            if screen == ScreenType.BATTLE_RESULTS:
-                if self._tap_named("return_home", frame):
-                    time.sleep(1.5)
-                    continue
-                self.input.back()
-                time.sleep(0.8)
+
+            if results or screen == ScreenType.UNKNOWN:
+                logger.info("Tapping Return Home (screen={})", screen.value)
+                self._tap_return_home(frame)
+                time.sleep(1.6)
                 continue
+
             if screen == ScreenType.ATTACK_MENU:
                 self.input.back()
                 time.sleep(0.8)
@@ -431,7 +472,15 @@ class AttackNavigator:
                 self.input.back()
                 time.sleep(1.0)
                 continue
-            # Unknown / popup — prefer BACK over a blind return_home tap.
+
+            # Popup / odd UI — try Return Home once, then BACK.
+            self._tap_return_home(frame)
+            time.sleep(1.2)
+            if self.classifier.classify(self.capture.screenshot()) in (
+                ScreenType.HOME,
+                ScreenType.CLAN_CHAT,
+            ):
+                return True
             self.input.back()
             time.sleep(0.8)
         return self.classifier.classify(self.capture.screenshot()) in (

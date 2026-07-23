@@ -205,6 +205,9 @@ class ScreenClassifier:
             return True
         if self._clan_chat_anchor_visible(frame):
             return False
+        # Victory/defeat summary can show a troop icon — never treat as live battle.
+        if self._looks_like_battle_results(frame):
+            return False
 
         h, w = frame.shape[:2]
 
@@ -237,8 +240,6 @@ class ScreenClassifier:
         gray = cv2.cvtColor(bar, cv2.COLOR_BGR2GRAY)
         edge_frac = float(cv2.Canny(gray, 30, 100).mean()) / 255.0
 
-        # Home Attack! is gold/brown bottom-left WITHOUT a full army tray.
-        # Only reject when tray looks empty and a gold Attack chip is present.
         bl = frame[int(h * 0.82) : h, 0 : int(w * 0.12)]
         gold_chip = False
         if bl.size:
@@ -252,12 +253,66 @@ class ScreenClassifier:
             return False
         return structured or dark_tray
 
+    def find_return_home_button(self, frame: np.ndarray) -> tuple[int, int] | None:
+        """Center of the green Return Home button on the defeat/victory screen."""
+        h, w = frame.shape[:2]
+        x0, x1 = int(w * 0.20), int(w * 0.80)
+        y0, y1 = int(h * 0.68), int(h * 0.96)
+        crop = frame[y0:y1, x0:x1]
+        if crop.size == 0:
+            return None
+        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+        green = cv2.inRange(hsv, (35, 70, 70), (95, 255, 255))
+        green = cv2.morphologyEx(
+            green, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (15, 9))
+        )
+        contours, _ = cv2.findContours(green, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+        best = max(contours, key=cv2.contourArea)
+        if cv2.contourArea(best) < (crop.shape[0] * crop.shape[1] * 0.02):
+            return None
+        bx, by, bw, bh = cv2.boundingRect(best)
+        return int(x0 + bx + bw / 2), int(y0 + by + bh / 2)
+
+    def _looks_like_battle_results(self, frame: np.ndarray) -> bool:
+        """
+        End-of-attack screen with a large green Return Home / OK button.
+
+        Distinct from live scout/battle: no Next, no End Battle, big green CTA.
+        """
+        if self._template_visible(frame, "return_home") or self._template_visible(
+            frame, "battle_end"
+        ):
+            return True
+        if self.find_return_home_button(frame) is not None:
+            # Live scout still has Next (right) or End Battle (left) — not results.
+            h, w = frame.shape[:2]
+            next_roi = frame[int(h * 0.52) : int(h * 0.92), int(w * 0.80) : w]
+            if next_roi.size:
+                hsv_n = cv2.cvtColor(next_roi, cv2.COLOR_BGR2HSV)
+                nxt = cv2.inRange(hsv_n, (5, 90, 90), (28, 255, 255))
+                if float(nxt.mean()) / 255.0 > 0.06:
+                    return False
+            end_roi = frame[int(h * 0.78) : h, 0 : int(w * 0.20)]
+            if end_roi.size:
+                hsv_e = cv2.cvtColor(end_roi, cv2.COLOR_BGR2HSV)
+                red1 = cv2.inRange(hsv_e, (0, 100, 80), (8, 255, 255))
+                red2 = cv2.inRange(hsv_e, (170, 100, 80), (180, 255, 255))
+                if float(cv2.bitwise_or(red1, red2).mean()) / 255.0 > 0.04:
+                    return False
+            return True
+        return False
+
     def classify(self, frame: np.ndarray) -> ScreenType:
         if self._template_visible(frame, "loading"):
             return ScreenType.LOADING
 
-        # Live battle has a bottom army bar — never treat it as results even if a
-        # return_home template false-matches somewhere on the HUD.
+        # Results before live-battle — green Return Home must win over tray heuristics.
+        if self._looks_like_battle_results(frame):
+            return ScreenType.BATTLE_RESULTS
+
+        # Live battle / scout (army tray, Next, End Battle).
         if self._looks_like_battle(frame):
             return ScreenType.BATTLE
 

@@ -361,6 +361,10 @@ class AttackNavigator:
             if screen == ScreenType.BATTLE:
                 logger.info("Battle field ready")
                 return True
+            # Army bar heuristic alone (in case classify still lags).
+            if self.classifier._looks_like_battle(frame):  # noqa: SLF001
+                logger.info("Battle field ready (army-bar heuristic)")
+                return True
             if screen == ScreenType.BATTLE_RESULTS:
                 logger.warning("Saw battle results before deploy — opponent may have ended early")
                 return False
@@ -369,6 +373,7 @@ class AttackNavigator:
                 return False
             if screen == ScreenType.POPUP and self.donation_nav is not None:
                 self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
+            logger.debug("wait_for_battle: screen={}", screen.value)
             time.sleep(0.8)
         logger.warning("Matchmaking timed out after {}s", timeout)
         return False
@@ -380,6 +385,9 @@ class AttackNavigator:
         while time.time() < deadline:
             frame = self.capture.screenshot()
             screen = self.classifier.classify(frame)
+            if screen == ScreenType.BATTLE:
+                time.sleep(1.2)
+                continue
             if screen in (ScreenType.BATTLE_RESULTS, ScreenType.HOME, ScreenType.CLAN_CHAT):
                 logger.info("Battle ended — screen={}", screen.value)
                 return screen
@@ -390,16 +398,24 @@ class AttackNavigator:
         return self.classifier.classify(self.capture.screenshot())
 
     def return_home_from_attack(self) -> bool:
-        """Tap Return Home / dismiss attack UI until home or chat."""
+        """Tap Return Home / dismiss attack UI until home or chat — never mid-deploy battle."""
         for _ in range(8):
             frame = self.capture.screenshot()
             screen = self.classifier.classify(frame)
             if screen in (ScreenType.HOME, ScreenType.CLAN_CHAT):
                 return True
-            if screen == ScreenType.BATTLE_RESULTS or self.load_template("return_home") is not None:
+            # Still fighting — do not mash return_home (template may exist from calib).
+            if screen == ScreenType.BATTLE or self.classifier._looks_like_battle(frame):  # noqa: SLF001
+                logger.info("return_home_from_attack: still in battle — waiting")
+                time.sleep(1.5)
+                continue
+            if screen == ScreenType.BATTLE_RESULTS:
                 if self._tap_named("return_home", frame):
                     time.sleep(1.5)
                     continue
+                self.input.back()
+                time.sleep(0.8)
+                continue
             if screen == ScreenType.ATTACK_MENU:
                 self.input.back()
                 time.sleep(0.8)
@@ -408,9 +424,7 @@ class AttackNavigator:
                 self.input.back()
                 time.sleep(1.0)
                 continue
-            if self._tap_named("return_home", frame):
-                time.sleep(1.2)
-                continue
+            # Unknown / popup — prefer BACK over a blind return_home tap.
             self.input.back()
             time.sleep(0.8)
         return self.classifier.classify(self.capture.screenshot()) in (

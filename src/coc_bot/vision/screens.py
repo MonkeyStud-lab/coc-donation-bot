@@ -212,6 +212,11 @@ class ScreenClassifier:
         if self._template_visible(frame, "loading"):
             return ScreenType.LOADING
 
+        # Live battle has a bottom army bar — never treat it as results even if a
+        # return_home template false-matches somewhere on the HUD.
+        if self._looks_like_battle(frame):
+            return ScreenType.BATTLE
+
         if self._template_visible(frame, "return_home") or self._template_visible(
             frame, "battle_end"
         ):
@@ -225,7 +230,7 @@ class ScreenClassifier:
         if self.looks_like_blocking_popup(frame):
             return ScreenType.POPUP
 
-        # Prefer chat/donation before battle heuristics — donation bars look like army bars.
+        # Prefer chat/donation before matchmaking — donation bars look like army bars.
         if self._clan_chat_anchor_visible(frame):
             return ScreenType.CLAN_CHAT
 
@@ -237,9 +242,6 @@ class ScreenClassifier:
 
         if self._looks_like_matchmaking(frame):
             return ScreenType.MATCHMAKING
-
-        if self._looks_like_battle(frame):
-            return ScreenType.BATTLE
 
         if self._is_home_screen(frame):
             return ScreenType.HOME

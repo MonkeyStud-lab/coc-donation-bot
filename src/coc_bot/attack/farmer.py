@@ -68,13 +68,14 @@ class AttackFarmer:
             return FarmResult(False, "could not start unranked Battle")
 
         if not self.attack_nav.wait_for_battle():
+            logger.warning("Did not reach battle field — aborting without deploy")
             self.attack_nav.return_home_from_attack()
             self._abort_to_chat()
             return FarmResult(False, "matchmaking timeout")
 
         frame = self.capture.screenshot()
         logger.info(
-            "Deploying army (pan_swipes={}, e-drag taps={}, heroes={}) along {}",
+            "Opponent ready — deploying (pan_swipes={}, e-drag taps={}, heroes={}) along {}",
             self.config.farm_pan_swipes,
             self.config.farm_edrag_deploy_taps,
             self.config.farm_hero_count,

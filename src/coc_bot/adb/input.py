@@ -27,10 +27,10 @@ class InputController:
         lo, hi = self.delay_ms
         time.sleep(random.uniform(lo, hi) / 1000.0)
 
-    def tap(self, x: int, y: int) -> None:
-        j = self.jitter_px
-        tx = x + random.randint(-j, j)
-        ty = y + random.randint(-j, j)
+    def tap(self, x: int, y: int, *, jitter: int | None = None) -> None:
+        j = self.jitter_px if jitter is None else max(0, int(jitter))
+        tx = x + (random.randint(-j, j) if j else 0)
+        ty = y + (random.randint(-j, j) if j else 0)
         if self.dry_run:
             logger.info("[DRY-RUN] tap ({}, {})", tx, ty)
         else:

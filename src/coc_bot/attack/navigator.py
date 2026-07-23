@@ -105,6 +105,8 @@ class AttackNavigator:
             frame = self.capture.screenshot()
             screen = self.classifier.classify(frame)
             if screen == ScreenType.HOME:
+                # Dismiss any open building/shop sheet that can cover Attack.
+                self._nudge_clear_home_overlays(frame)
                 return True
             if screen == ScreenType.DONATION_PANEL and self.donation_nav is not None:
                 self.donation_nav.close_donation_panel(frame)
@@ -118,7 +120,7 @@ class AttackNavigator:
                 # Toggle chat closed via the same open_chat control.
                 if not self._tap_named("open_chat", frame):
                     h, w = frame.shape[:2]
-                    self.input.tap(int(w * 0.72), int(h * 0.45))
+                    self.input.tap(int(w * 0.72), int(h * 0.45), jitter=0)
                 time.sleep(0.8)
                 continue
             if screen in (
@@ -135,54 +137,160 @@ class AttackNavigator:
                 continue
             # Unknown — try tapping open_chat toggle / village.
             h, w = frame.shape[:2]
-            self.input.tap(int(w * 0.72), int(h * 0.45))
+            self.input.tap(int(w * 0.72), int(h * 0.45), jitter=0)
             time.sleep(0.8)
         logger.warning("Could not reach home before attack")
         return self.classifier.classify(self.capture.screenshot()) == ScreenType.HOME
 
-    def open_attack_menu(self) -> bool:
-        frame = self.capture.screenshot()
-        if self.classifier.classify(frame) == ScreenType.ATTACK_MENU:
-            return True
+    def _nudge_clear_home_overlays(self, frame: np.ndarray) -> None:
+        """Tap empty village space so shop/info cards do not cover the Attack button."""
+        h, w = frame.shape[:2]
+        # Upper-center is usually empty sky / map, not the bottom UI bar.
+        self.input.tap(int(w * 0.50), int(h * 0.28), jitter=2)
+        time.sleep(0.35)
 
-        # Try calibrated / template / default Attack, then a few nearby fallbacks.
+    def find_attack_button_candidates(self, frame: np.ndarray) -> list[tuple[int, int]]:
+        """
+        Ordered tap points for the home Attack (sword) control.
+
+        Prefers calibration / template, then a warm-color blob search in the
+        bottom-left chrome, then a dense fixed grid (UI spot is stable).
+        """
         h, w = frame.shape[:2]
         candidates: list[tuple[int, int]] = []
+
         scaled = self._scaled_point("attack_button", frame)
         if scaled:
-            candidates.append(scaled)
+            ax, ay = scaled
+            candidates.append((ax, ay))
+            # Neighbors around the calibrated point (picker can be a few px off).
+            for dx, dy in (
+                (0, -18),
+                (0, 18),
+                (-18, 0),
+                (18, 0),
+                (-22, -22),
+                (22, -22),
+                (-22, 22),
+                (22, 22),
+            ):
+                candidates.append((ax + dx, ay + dy))
+
         template = self.load_template("attack_button")
         if template is not None:
-            match = self.matcher.find(frame, template)
+            # Wider scales + slightly lower threshold — Attack art varies by skin/UI.
+            match = self.matcher.find(frame, template, threshold=max(0.70, self.config.template_threshold - 0.12))
             if match:
                 candidates.append(match.center)
-        # Typical home Attack button — bottom-left sword icon (always same UI spot).
-        candidates.extend(
-            [
-                (int(w * 0.09), int(h * 0.93)),
-                (int(w * 0.07), int(h * 0.90)),
-                (int(w * 0.12), int(h * 0.92)),
-                (int(w * 0.10), int(h * 0.88)),
-            ]
-        )
 
+        blob = self._find_attack_button_blob(frame)
+        if blob is not None:
+            candidates.append(blob)
+
+        # Dense bottom-left grid — Attack lives in this corner on home village.
+        for nx in (0.05, 0.07, 0.09, 0.11, 0.13, 0.16):
+            for ny in (0.86, 0.88, 0.90, 0.92, 0.94, 0.96):
+                candidates.append((int(w * nx), int(h * ny)))
+
+        # Clamp + dedupe.
+        cleaned: list[tuple[int, int]] = []
         seen: set[tuple[int, int]] = set()
         for x, y in candidates:
-            key = (x // 8, y // 8)
+            x = int(max(4, min(w - 4, x)))
+            y = int(max(4, min(h - 4, y)))
+            key = (x // 10, y // 10)
             if key in seen:
                 continue
             seen.add(key)
+            cleaned.append((x, y))
+        return cleaned
+
+    def _find_attack_button_blob(self, frame: np.ndarray) -> tuple[int, int] | None:
+        """
+        Find a warm circular UI chip in the bottom-left (Attack sword badge).
+
+        Scenery-independent: searches only the bottom UI chrome strip.
+        """
+        h, w = frame.shape[:2]
+        x0, x1 = 0, int(w * 0.22)
+        y0, y1 = int(h * 0.78), h
+        crop = frame[y0:y1, x0:x1]
+        if crop.size == 0:
+            return None
+
+        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+        # Wooden / gold Attack badge: warm hues, decent saturation.
+        warm = cv2.inRange(hsv, (5, 60, 70), (35, 255, 255))
+        warm = cv2.morphologyEx(
+            warm, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        )
+        warm = cv2.morphologyEx(
+            warm, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+        )
+        contours, _ = cv2.findContours(warm, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+
+        best = None
+        best_score = -1.0
+        crop_h, crop_w = crop.shape[:2]
+        min_area = crop_w * crop_h * 0.01
+        max_area = crop_w * crop_h * 0.35
+        for cnt in contours:
+            area = float(cv2.contourArea(cnt))
+            if area < min_area or area > max_area:
+                continue
+            bx, by, bw, bh = cv2.boundingRect(cnt)
+            # Prefer round-ish blobs near the lower-left of the strip.
+            aspect = bw / max(1, bh)
+            if aspect < 0.55 or aspect > 1.8:
+                continue
+            cx, cy = bx + bw / 2, by + bh / 2
+            # Prefer lower-left within the ROI.
+            score = area - cx * 0.15 - (crop_h - cy) * 0.35
+            if score > best_score:
+                best_score = score
+                best = (int(x0 + cx), int(y0 + cy))
+        return best
+
+    def _attack_menu_open(self, frame: np.ndarray) -> bool:
+        screen = self.classifier.classify(frame)
+        if screen in (ScreenType.ATTACK_MENU, ScreenType.MATCHMAKING):
+            return True
+        return self.classifier._looks_like_attack_menu(frame)  # noqa: SLF001
+
+    def open_attack_menu(self) -> bool:
+        frame = self.capture.screenshot()
+        if self._attack_menu_open(frame):
+            return True
+
+        # Make sure chat/popups are not covering the sword.
+        screen = self.classifier.classify(frame)
+        if screen != ScreenType.HOME:
+            if not self.leave_chat_for_home(timeout=10.0):
+                logger.warning("open_attack_menu: not on home (screen={})", screen.value)
+            frame = self.capture.screenshot()
+            if self._attack_menu_open(frame):
+                return True
+
+        candidates = self.find_attack_button_candidates(frame)
+        logger.info("Trying {} Attack-button candidate(s)", len(candidates))
+
+        for x, y in candidates:
             logger.info("Trying Attack button at ({}, {})", x, y)
-            self.input.tap(x, y)
-            time.sleep(1.1)
-            screen = self.classifier.classify(self.capture.screenshot())
-            if screen in (ScreenType.ATTACK_MENU, ScreenType.MATCHMAKING):
+            self.input.tap(x, y, jitter=0)
+            time.sleep(1.25)
+            check = self.capture.screenshot()
+            if self._attack_menu_open(check):
+                logger.info("Attack menu opened after tap at ({}, {})", x, y)
+                # Remember what worked for this session's config (not persisted).
+                self.config.tap_points["attack_button"] = [x, y]
                 return True
-            if screen == ScreenType.UNKNOWN:
-                # Attack menu sometimes classifies as unknown without templates.
-                time.sleep(0.4)
-                return True
-        logger.warning("Could not open Attack menu")
+            # If we opened a shop/builder card instead, dismiss and continue.
+            if self.classifier.classify(check) == ScreenType.HOME:
+                self._nudge_clear_home_overlays(check)
+
+        logger.warning("Could not open Attack menu after {} taps", len(candidates))
         return False
 
     def start_unranked_battle(self) -> bool:

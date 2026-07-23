@@ -176,16 +176,24 @@ class DebugSession:
         return f"Break cycle finished (waited {wait_seconds}s) but clan chat reopen failed."
 
     def farm_open_attack_menu(self) -> str:
-        if not self.config.tap_points.get("attack_button"):
-            return "attack_button not calibrated — run Calibration → Farm."
         ok_home = self.attack_nav.leave_chat_for_home()
         if not ok_home:
             return "Could not reach home before opening Attack."
+        frame = self.capture.screenshot()
+        n = len(self.attack_nav.find_attack_button_candidates(frame))
+        cal = self.config.tap_points.get("attack_button")
         ok = self.attack_nav.open_attack_menu()
         screen = self.classifier.classify(self.capture.screenshot())
         if ok:
-            return f"Opened Attack menu — screen now: {screen.value}"
-        return f"Failed to open Attack menu — screen: {screen.value}"
+            return (
+                f"Opened Attack menu — screen={screen.value} "
+                f"(calib={cal}, tried up to {n} candidates)"
+            )
+        return (
+            f"Failed to open Attack menu — screen={screen.value} "
+            f"(calib={cal}, tried {n} candidates). "
+            "Recalibrate Attack on a clear home village screen."
+        )
 
     def farm_start_unranked_search(self) -> str:
         if not self.config.tap_points.get("unranked_battle"):

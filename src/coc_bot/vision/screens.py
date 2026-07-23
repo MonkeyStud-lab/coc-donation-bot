@@ -141,6 +141,27 @@ class ScreenClassifier:
         # Dimmed overlay alone can false-match busy villages; require the green Okay/Claim too.
         return self._has_dimmed_modal_overlay(frame) and self._has_green_dialog_button(frame)
 
+    def _looks_like_attack_menu(self, frame: np.ndarray) -> bool:
+        """
+        Multiplayer Attack picker (Ranked / Battle) without requiring a template.
+
+        Looks for a dimmed village + a large center card with a green Battle-style button.
+        """
+        if self._template_visible(frame, "attack_menu") or self._template_visible(
+            frame, "unranked_battle"
+        ):
+            return True
+        if not self._has_dimmed_modal_overlay(frame):
+            return False
+        h, w = frame.shape[:2]
+        # Battle / Find-a-Match green sits in the lower half of the modal, often right side.
+        crop = frame[int(h * 0.48) : int(h * 0.82), int(w * 0.35) : int(w * 0.78)]
+        if crop.size == 0:
+            return False
+        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+        green = cv2.inRange(hsv, (35, 90, 80), (90, 255, 255))
+        return float(green.mean()) / 255.0 > 0.04
+
     def _looks_like_matchmaking(self, frame: np.ndarray) -> bool:
         """Cloud search screen — optional template, else soft blue-sky heuristic."""
         if self._template_visible(frame, "matchmaking") or self._template_visible(frame, "find_match"):
@@ -179,6 +200,11 @@ class ScreenClassifier:
         ):
             return ScreenType.BATTLE_RESULTS
 
+        # Attack picker also dims the village + shows a green Battle button — detect
+        # it before the generic popup heuristic so we do not "dismiss" Attack.
+        if self._looks_like_attack_menu(frame):
+            return ScreenType.ATTACK_MENU
+
         if self.looks_like_blocking_popup(frame):
             return ScreenType.POPUP
 
@@ -191,11 +217,6 @@ class ScreenClassifier:
 
         if self._in_clan_chat_context(frame):
             return ScreenType.CLAN_CHAT
-
-        if self._template_visible(frame, "attack_menu") or self._template_visible(
-            frame, "unranked_battle"
-        ):
-            return ScreenType.ATTACK_MENU
 
         if self._looks_like_matchmaking(frame):
             return ScreenType.MATCHMAKING

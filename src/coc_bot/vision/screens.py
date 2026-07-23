@@ -147,27 +147,28 @@ class ScreenClassifier:
         Large light-gray/white donation popup card (center-right).
 
         Distinct from clan chat (darker) and battle results (no such card).
+        Thresholds are strict on purpose — clan chat can have light message bubbles.
         """
         h, w = frame.shape[:2]
-        y0, y1 = int(h * 0.10), int(h * 0.90)
-        x0, x1 = int(w * 0.30), int(w * 0.98)
+        y0, y1 = int(h * 0.12), int(h * 0.88)
+        x0, x1 = int(w * 0.32), int(w * 0.96)
         crop = frame[y0:y1, x0:x1]
         if crop.size == 0:
             return False
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        light = cv2.inRange(gray, 170, 255)
+        light = cv2.inRange(gray, 185, 255)
         light_frac = float(light.mean()) / 255.0
-        if light_frac < 0.38:
+        if light_frac < 0.48:
             return False
         contours, _ = cv2.findContours(light, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
             return False
         largest = max(contours, key=cv2.contourArea)
         area_frac = float(cv2.contourArea(largest)) / float(crop.shape[0] * crop.shape[1])
-        if area_frac < 0.42:
+        if area_frac < 0.50:
             return False
         _bx, _by, bw, bh = cv2.boundingRect(largest)
-        return bw > crop.shape[1] * 0.50 and bh > crop.shape[0] * 0.50
+        return bw > crop.shape[1] * 0.55 and bh > crop.shape[0] * 0.55
 
     def _donation_resource_title_visible(self, frame: np.ndarray) -> bool:
         """
@@ -222,16 +223,16 @@ class ScreenClassifier:
         """
         Donation popup over clan chat.
 
-        Prefer the unique white \"Donation Resource\" card; fall back to troop/spell
-        bar ROIs. Green Donate buttons can look like Return Home — strong bar or
-        white-card signals still count as the popup.
+        Prefer template / \"Donation Resource\" title. A white card alone is not
+        enough (clan chat light areas false-positive). Troop+spell bars confirm.
         """
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
             return False
+        # Clan-chat anchor is covered by the popup — if it is still visible, we
+        # are still in chat, not on the donation panel.
+        if self._clan_chat_anchor_visible(frame):
+            return False
         if self._template_visible(frame, "donation_panel"):
-            return True
-        # Unique UI: large white card and/or \"Donation Resource\" title.
-        if self._has_white_donation_card(frame):
             return True
         if self._donation_resource_title_visible(frame):
             return True
@@ -241,12 +242,17 @@ class ScreenClassifier:
         if troop_std is None or spell_std is None:
             return False
 
-        # Strong dual-bar signal — trust this even if green Donate pills look like
-        # Return Home (that veto was blocking real donation popups).
+        has_card = self._has_white_donation_card(frame)
+
+        # White card + busy bars — real donation popup.
+        if has_card and troop_std > 28 and spell_std > 28:
+            return True
+
+        # Strong dual-bar signal without relying on the white-card detector.
         if troop_std > 40 and spell_std > 40:
             return True
 
-        # Weaker path: require no bottom-center Return Home CTA (attack results).
+        # Weaker path: bars + dimmed overlay, and not a Return Home results card.
         if self.find_return_home_button(frame) is not None:
             return False
         if troop_std > 30 and spell_std > 30 and self._has_dimmed_modal_overlay(frame):

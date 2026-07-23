@@ -120,6 +120,14 @@ class Navigator:
                         return False
                     continue
 
+                if screen == ScreenType.LIVE_REPLAY:
+                    logger.info(
+                        "ensure_clan_chat: Live Replay (defense) — waiting (no taps)"
+                    )
+                    if self._sleep(3.0):
+                        return False
+                    continue
+
                 if screen in (
                     ScreenType.ATTACK_MENU,
                     ScreenType.MATCHMAKING,
@@ -130,6 +138,13 @@ class Navigator:
                         "ensure_clan_chat: leaving attack UI (screen={})",
                         screen.value,
                     )
+                    if self.classifier.looks_like_live_replay(frame):
+                        logger.info(
+                            "ensure_clan_chat: Live Replay under false attack UI — waiting"
+                        )
+                        if self._sleep(3.0):
+                            return False
+                        continue
                     # Never Android BACK during live battle — that opens Surrender.
                     if self.classifier.looks_like_surrender_dialog(frame):
                         cancel = self.classifier.find_surrender_cancel_button(frame)

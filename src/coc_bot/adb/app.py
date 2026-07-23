@@ -84,6 +84,10 @@ class AppController:
             f"monkey -p {pkg} -c android.intent.category.LAUNCHER 1",
             check=False,
         )
+        # Live Replay only appears right after opening Clash (e.g. post-break).
+        from coc_bot.vision.screens import ScreenClassifier
+
+        ScreenClassifier.arm_live_replay_watch()
 
     def wait_until_ready(
         self,

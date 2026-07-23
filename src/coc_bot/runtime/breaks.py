@@ -89,4 +89,8 @@ class BreakManager:
         self.app.launch()
         self.app.wait_until_ready(loading_template=loading_template)
         self.navigator.ensure_clan_chat()
+        # Past boot popups / possible Live Replay — stop watching for it.
+        from coc_bot.vision.screens import ScreenClassifier
+
+        ScreenClassifier.disarm_live_replay_watch()
         self.tracker.resume()

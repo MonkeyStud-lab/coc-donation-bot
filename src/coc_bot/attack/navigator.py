@@ -131,6 +131,11 @@ class AttackNavigator:
                     return True
 
                 screen = self.classify(frame, mode=BotMode.ANY)
+                if screen == ScreenType.LIVE_REPLAY or self.classifier.looks_like_live_replay(frame):
+                    logger.info("leave_chat_for_home: Live Replay — waiting")
+                    if self._sleep(3.0):
+                        return False
+                    continue
                 if screen == ScreenType.HOME:
                     self._nudge_clear_home_overlays(frame)
                     if self.attack_button_visible(self.capture.screenshot()):
@@ -429,11 +434,21 @@ class AttackNavigator:
                 logger.info("wait_for_battle_end: stop requested — aborting")
                 return ScreenType.UNKNOWN
             frame = self.capture.screenshot()
+            if self.classifier.looks_like_live_replay(frame):
+                logger.info("wait_for_battle_end: Live Replay (defense) — waiting")
+                if self._sleep(3.0):
+                    return ScreenType.UNKNOWN
+                continue
             if self.classifier._live_battle_chrome_visible(frame):  # noqa: SLF001
                 if self._sleep(1.2):
                     return ScreenType.UNKNOWN
                 continue
             screen = self.classify(frame, mode=BotMode.ATTACK)
+            if screen == ScreenType.LIVE_REPLAY:
+                logger.info("wait_for_battle_end: Live Replay — waiting")
+                if self._sleep(3.0):
+                    return ScreenType.UNKNOWN
+                continue
             if screen == ScreenType.BATTLE_RESULTS or self.classifier._looks_like_battle_results(  # noqa: SLF001
                 frame
             ):
@@ -503,6 +518,13 @@ class AttackNavigator:
                 return False
             frame = self.capture.screenshot()
             screen = self.classify(frame, mode=BotMode.ATTACK)
+
+            # Defense spectator — wait; do not tap Return Home / BACK.
+            if screen == ScreenType.LIVE_REPLAY or self.classifier.looks_like_live_replay(frame):
+                logger.info("return_home_from_attack: Live Replay — waiting for defense to end")
+                if self._sleep(3.0):
+                    return False
+                continue
 
             # Android BACK mid-battle opens this — Cancel, never Okay / never BACK again.
             if self.classifier.looks_like_surrender_dialog(frame):

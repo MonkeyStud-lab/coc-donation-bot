@@ -172,6 +172,9 @@ class DebugSession:
         ok = self.navigator.ensure_clan_chat(
             has_donate_request=lambda f: self.chat_monitor.find_donate_request(f) is not None
         )
+        from coc_bot.vision.screens import ScreenClassifier
+
+        ScreenClassifier.disarm_live_replay_watch()
         if ok:
             return f"Break cycle done (waited {wait_seconds}s) — clan chat open."
         return f"Break cycle finished (waited {wait_seconds}s) but clan chat reopen failed."

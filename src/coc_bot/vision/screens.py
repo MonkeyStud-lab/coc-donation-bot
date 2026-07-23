@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from enum import Enum
 
 import cv2
@@ -19,6 +20,7 @@ class ScreenType(str, Enum):
     MATCHMAKING = "matchmaking"
     BATTLE = "battle"
     BATTLE_RESULTS = "battle_results"
+    LIVE_REPLAY = "live_replay"
     UNKNOWN = "unknown"
 
 
@@ -49,6 +51,7 @@ SCREEN_LABELS: dict[str, str] = {
     ScreenType.MATCHMAKING.value: "Matchmaking",
     ScreenType.BATTLE.value: "Battle / scout",
     ScreenType.BATTLE_RESULTS.value: "Battle results",
+    ScreenType.LIVE_REPLAY.value: "Live replay (defense)",
     ScreenType.UNKNOWN.value: "Unknown",
 }
 
@@ -67,6 +70,33 @@ def screen_display_name(screen: ScreenType | str) -> str:
 
 class ScreenClassifier:
     """Classify current game screen using calibrated anchor templates."""
+
+    # Shared across instances — Live Replay only after we relaunch Clash.
+    _live_replay_armed_until: float = 0.0
+
+    @classmethod
+    def arm_live_replay_watch(cls, duration_seconds: float = 240.0) -> None:
+        """
+        Allow Live Replay detection for a short window after opening Clash.
+
+        Defenses show up right after relaunch (e.g. post mandatory break). Mid-session
+        farm/donate must never misread a screen as Live Replay.
+        """
+        cls._live_replay_armed_until = time.monotonic() + max(0.0, duration_seconds)
+        from loguru import logger
+
+        logger.info(
+            "Live Replay watch armed for {:.0f}s (only after Clash relaunch)",
+            duration_seconds,
+        )
+
+    @classmethod
+    def disarm_live_replay_watch(cls) -> None:
+        cls._live_replay_armed_until = 0.0
+
+    @classmethod
+    def live_replay_watch_armed(cls) -> bool:
+        return time.monotonic() < cls._live_replay_armed_until
 
     def __init__(self, config: BotConfig, matcher: TemplateMatcher | None = None) -> None:
         self.config = config
@@ -306,6 +336,84 @@ class ScreenClassifier:
             return True
         # Dimmed overlay alone can false-match busy villages; require the green Okay/Claim too.
         return self._has_dimmed_modal_overlay(frame) and self._has_green_dialog_button(frame)
+
+    def looks_like_live_replay(self, frame: np.ndarray) -> bool:
+        """
+        Spectator view while someone attacks *our* village (Live Replay).
+
+        Only considered after Clash was just opened (mandatory-break relaunch).
+        """
+        if not self.live_replay_watch_armed():
+            return False
+        if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
+            return False
+        h, w = frame.shape[:2]
+
+        # Red \"Live Replay\" badge — bottom-right.
+        br = frame[int(h * 0.80) : int(h * 0.98), int(w * 0.52) : int(w * 0.98)]
+        red_frac = 0.0
+        if br.size:
+            hsv_br = cv2.cvtColor(br, cv2.COLOR_BGR2HSV)
+            r1 = cv2.inRange(hsv_br, (0, 90, 90), (10, 255, 255))
+            r2 = cv2.inRange(hsv_br, (170, 90, 90), (180, 255, 255))
+            red_frac = float(cv2.bitwise_or(r1, r2).mean()) / 255.0
+
+        # Right side often has the large villager / \"is attacking\" graphic.
+        right = frame[int(h * 0.12) : int(h * 0.72), int(w * 0.62) : int(w * 0.98)]
+        portrait = False
+        if right.size:
+            hsv_r = cv2.cvtColor(right, cv2.COLOR_BGR2HSV)
+            # Skin / warm illustration tones + bright regions.
+            skin = cv2.inRange(hsv_r, (5, 40, 80), (30, 200, 255))
+            bright = cv2.cvtColor(right, cv2.COLOR_BGR2GRAY)
+            portrait = float(skin.mean()) / 255.0 > 0.04 and float((bright > 180).mean()) > 0.08
+
+        if red_frac > 0.03 and portrait:
+            return True
+
+        # OCR fallback — \"live replay\" / \"attacking your village\".
+        if red_frac > 0.02 or portrait:
+            if self._live_replay_ocr_visible(frame):
+                return True
+        return False
+
+    def _live_replay_ocr_visible(self, frame: np.ndarray) -> bool:
+        import re
+        import shutil
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        if shutil.which("tesseract") is None:
+            return False
+        h, w = frame.shape[:2]
+        # Bottom-right badge + mid-right speech area.
+        crops = [
+            frame[int(h * 0.78) : int(h * 0.98), int(w * 0.45) : w],
+            frame[int(h * 0.35) : int(h * 0.70), int(w * 0.55) : w],
+        ]
+        for crop in crops:
+            if crop.size == 0:
+                continue
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            up = cv2.resize(gray, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC)
+            try:
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = Path(tmp) / "replay.png"
+                    cv2.imwrite(str(path), up)
+                    proc = subprocess.run(  # noqa: S603
+                        ["tesseract", str(path), "stdout", "--psm", "6", "-l", "eng"],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=3,
+                    )
+                text = re.sub(r"[^a-z]", "", (proc.stdout or "").lower())
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+            if "livereplay" in text or ("attacking" in text and "village" in text):
+                return True
+        return False
 
     def looks_like_surrender_dialog(self, frame: np.ndarray) -> bool:
         """
@@ -583,6 +691,8 @@ class ScreenClassifier:
         # Still fighting — never results.
         if self._live_battle_chrome_visible(frame):
             return False
+        if self.looks_like_live_replay(frame):
+            return False
         # Real chat/donate UI — never Return Home.
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
             return False
@@ -620,6 +730,8 @@ class ScreenClassifier:
 
     def _classify_home(self, frame: np.ndarray) -> ScreenType:
         """Village only: home or Attack menu — never battle results / donation."""
+        if self.looks_like_live_replay(frame):
+            return ScreenType.LIVE_REPLAY
         if self._home_blocking_popup(frame):
             return ScreenType.POPUP
         if self._looks_like_attack_menu(frame):
@@ -634,6 +746,8 @@ class ScreenClassifier:
 
     def _classify_donate(self, frame: np.ndarray) -> ScreenType:
         """Clan chat / donation only — never battle results or live battle."""
+        if self.looks_like_live_replay(frame):
+            return ScreenType.LIVE_REPLAY
         if self._home_blocking_popup(frame):
             return ScreenType.POPUP
         if self._donation_panel_heuristic(frame):
@@ -655,6 +769,9 @@ class ScreenClassifier:
 
     def _classify_attack(self, frame: np.ndarray) -> ScreenType:
         """Attack flow only — never donation panel / donate-button chat heuristics."""
+        # Someone attacking *us* — wait it out, never farm Return Home.
+        if self.looks_like_live_replay(frame):
+            return ScreenType.LIVE_REPLAY
         # Live End Battle / Next wins over any false Return Home green blob.
         if self._live_battle_chrome_visible(frame):
             return ScreenType.BATTLE
@@ -687,6 +804,9 @@ class ScreenClassifier:
         if self._home_blocking_popup(frame):
             return ScreenType.POPUP
 
+        if self.looks_like_live_replay(frame):
+            return ScreenType.LIVE_REPLAY
+
         # Village home first.
         if self._open_chat_icon_visible(frame):
             return ScreenType.HOME
@@ -708,6 +828,9 @@ class ScreenClassifier:
 
         if self._live_battle_chrome_visible(frame):
             return ScreenType.BATTLE
+
+        if self.looks_like_live_replay(frame):
+            return ScreenType.LIVE_REPLAY
 
         if self._looks_like_battle_results(frame):
             return ScreenType.BATTLE_RESULTS

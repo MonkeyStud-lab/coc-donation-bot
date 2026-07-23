@@ -113,10 +113,10 @@ class DonationExecutor:
         On each view: tap every colored slot (re-scan until none left), then scroll.
 
         Never scrolls while colored icons are still visible. Stops after enough
-        consecutive empty views (spells: 1, troops: 2 so siege can still appear).
+        consecutive empty views (spells: 1, troops: 3 so siege past a gap still appears).
         """
         max_scrolls = self._max_scrolls_for_bar(bar_roi_key)
-        empty_limit = 1 if bar_roi_key == "donation_spell_bar" else 2
+        empty_limit = 1 if bar_roi_key == "donation_spell_bar" else 3
         made = False
         empty_streak = 0
 

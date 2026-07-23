@@ -36,12 +36,13 @@ class EdgeDeployer:
         Pan from the centered matchmaking view toward the deploy edge.
 
         Finger drag pulls the map: swipe right reveals the left edge; swipe left
-        reveals the right edge. Swipe count is fixed (base space is fixed).
+        reveals the right edge. Count may be fractional (e.g. 1.25 = one full
+        swipe plus a quarter-length swipe).
         """
         h, w = frame.shape[:2]
         side = self._resolve_side(side)
-        count = max(0, int(self.config.farm_pan_swipes))
-        if count == 0:
+        total = max(0.0, float(self.config.farm_pan_swipes))
+        if total <= 0:
             logger.info("Camera pan skipped (farm_pan_swipes=0)")
             return
 
@@ -59,19 +60,29 @@ class EdgeDeployer:
         else:
             x1, x2 = right_x, left_x
 
+        full = int(total)
+        frac = total - full
         logger.info(
-            "Panning camera toward {} edge — {} swipe(s) ({},{}) -> ({},{})",
+            "Panning camera toward {} edge — {:.2f} swipe(s) ({},{}) -> ({},{})",
             side,
-            count,
+            total,
             x1,
             y,
             x2,
             y,
         )
-        for i in range(count):
+        for i in range(full):
             self.input.swipe(x1, y, x2, y, duration_ms=duration_ms)
             time.sleep(settle)
-            logger.debug("Pan swipe {}/{} done", i + 1, count)
+            logger.debug("Pan swipe {}/{} done", i + 1, total)
+
+        if frac >= 0.05:
+            # Partial swipe: same start, shorter travel = less camera movement.
+            x2_frac = int(round(x1 + (x2 - x1) * frac))
+            dur = max(120, int(duration_ms * frac))
+            self.input.swipe(x1, y, x2_frac, y, duration_ms=dur)
+            time.sleep(settle)
+            logger.debug("Pan fractional swipe {:.2f} done ({},{}) -> ({},{})", frac, x1, y, x2_frac, y)
 
     def deploy_points(self, frame: np.ndarray, side: str | None = None) -> list[tuple[int, int]]:
         """Vertical tap ladder on the visible deploy edge after panning."""

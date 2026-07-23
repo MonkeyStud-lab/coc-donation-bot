@@ -168,9 +168,9 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "farm_pan_swipes",
         "Camera pan swipes",
-        "How many fixed swipes from the centered match view toward the deploy edge "
-        "(base size is fixed; 3 usually reaches grass).",
-        "int",
+        "How many swipes from the centered match view toward the deploy edge. "
+        "Decimals allowed (e.g. 1.25 = one full swipe + a short extra pan).",
+        "float",
         lambda c: c.farm_pan_swipes,
         "Farm",
         ("farm", "pan_swipes"),
@@ -336,10 +336,10 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
                 raise ValueError("Heroes to deploy must be between 0 and 4")
             if field.key == "farm_edrag_deploy_taps" and parsed < 1:
                 raise ValueError("E-drag map taps must be at least 1")
-            if field.key == "farm_pan_swipes" and parsed < 0:
-                raise ValueError("Camera pan swipes cannot be negative")
         elif field.kind == "float":
             parsed = float(str(raw).strip())
+            if field.key == "farm_pan_swipes" and parsed < 0:
+                raise ValueError("Camera pan swipes cannot be negative")
         elif field.kind == "int_pair":
             parsed = parse_int_pair(str(raw))
         else:

@@ -50,7 +50,7 @@ class BotConfig:
     donation_order: list[str] = field(default_factory=lambda: ["troop", "spell", "siege"])
     handled_request_ttl_seconds: int = 120
     chat_max_scroll_attempts: int = 20
-    bar_max_scroll_attempts: int = 4
+    bar_max_scroll_attempts: int = 5
     spell_bar_max_scroll_attempts: int = 2
     donate_open_requests: bool = True
     parse_request_capacity: bool = False
@@ -63,7 +63,7 @@ class BotConfig:
     farm_enabled: bool = False
     farm_interval_seconds: int = 3600
     farm_deploy_side: str = "left"
-    farm_pan_swipes: int = 3
+    farm_pan_swipes: float = 3.0
     farm_match_timeout_seconds: int = 120
     farm_battle_timeout_seconds: int = 240
     farm_retry_cooldown_seconds: int = 300
@@ -210,7 +210,7 @@ def load_config(
         donation_order=donation.get("order", ["troop", "spell", "siege"]),
         handled_request_ttl_seconds=donation.get("handled_request_ttl_seconds", 120),
         chat_max_scroll_attempts=donation.get("chat_max_scroll_attempts", 20),
-        bar_max_scroll_attempts=donation.get("bar_max_scroll_attempts", 4),
+        bar_max_scroll_attempts=donation.get("bar_max_scroll_attempts", 5),
         spell_bar_max_scroll_attempts=donation.get("spell_bar_max_scroll_attempts", 2),
         donate_open_requests=donation.get("donate_open_requests", True),
         parse_request_capacity=donation.get("parse_request_capacity", False),
@@ -221,7 +221,7 @@ def load_config(
         farm_enabled=bool(farm.get("enabled", False)),
         farm_interval_seconds=int(farm.get("interval_seconds", 3600)),
         farm_deploy_side=deploy_side,
-        farm_pan_swipes=max(0, int(farm.get("pan_swipes", 3))),
+        farm_pan_swipes=max(0.0, float(farm.get("pan_swipes", 3))),
         farm_match_timeout_seconds=int(farm.get("match_timeout_seconds", 120)),
         farm_battle_timeout_seconds=int(farm.get("battle_timeout_seconds", 240)),
         farm_retry_cooldown_seconds=int(farm.get("retry_cooldown_seconds", 300)),

@@ -88,10 +88,13 @@ class ScreenClassifier:
         """
         Chat panel area looks filled (clan chat open).
 
-        Village home often paints busy scenery into the chat ROI — never treat
-        home (chat bubble / Attack!) as clan-chat context.
+        Village home and attack-results cards often paint busy pixels into the
+        chat ROI — never treat those as clan chat.
         """
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
+            return False
+        # Defeat/victory card sits where chat ROIs are — big green Return Home.
+        if self.find_return_home_button(frame) is not None:
             return False
         chat_std = self._roi_std(frame, "chat_panel")
         return chat_std is not None and chat_std > 22
@@ -100,9 +103,12 @@ class ScreenClassifier:
         """
         Donation popup over clan chat (troop + spell bars).
 
-        Must not fire on village home or plain clan chat — those ROIs are often busy.
+        Must not fire on village home, plain clan chat, or attack results.
         """
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
+            return False
+        # Results screen green CTA is not a donate bar.
+        if self.find_return_home_button(frame) is not None:
             return False
         if self._template_visible(frame, "donation_panel"):
             return True
@@ -110,15 +116,11 @@ class ScreenClassifier:
         troop_std = self._roi_std(frame, "donation_troop_bar")
         spell_std = self._roi_std(frame, "donation_spell_bar")
 
-        # Both bars must look very structured; raise bar so chat/home chrome does not match.
+        # Both bars must look very structured; raise bar so chat/home/results do not match.
         if troop_std is None or spell_std is None:
             return False
-        if troop_std < 38 or spell_std < 38:
-            return False
-        # Strong match, or modal dimming typical of the donate popup.
-        if troop_std > 50 and spell_std > 50:
-            return True
-        return self._has_dimmed_modal_overlay(frame)
+        # Require a strong dual-bar signal only (dimmed overlay alone matches results cards).
+        return troop_std > 50 and spell_std > 50
 
     def is_home_screen(self, frame: np.ndarray) -> bool:
         return self._is_home_screen(frame)
@@ -231,6 +233,60 @@ class ScreenClassifier:
         warm = cv2.inRange(hsv, (5, 70, 70), (35, 255, 255))
         return float(warm.mean()) / 255.0 > 0.08
 
+    def find_return_home_button(self, frame: np.ndarray) -> tuple[int, int] | None:
+        """
+        Tap target for the green Return Home button on defeat/victory.
+
+        Prefers a wide green CTA in the lower center (not other green UI), and
+        biases slightly down-right so we don't miss high/left of the pill.
+        """
+        h, w = frame.shape[:2]
+        # Button sits bottom-center of the results card — keep ROI tight.
+        x0, x1 = int(w * 0.28), int(w * 0.72)
+        y0, y1 = int(h * 0.78), int(h * 0.96)
+        crop = frame[y0:y1, x0:x1]
+        if crop.size == 0:
+            return None
+        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+        green = cv2.inRange(hsv, (35, 70, 70), (95, 255, 255))
+        green = cv2.morphologyEx(
+            green, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (11, 7))
+        )
+        contours, _ = cv2.findContours(green, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+        min_area = crop.shape[0] * crop.shape[1] * 0.015
+        crop_cx = crop.shape[1] / 2.0
+
+        def _score(c: np.ndarray) -> float:
+            area = float(cv2.contourArea(c))
+            if area < min_area:
+                return -1.0
+            bx, by, bw, bh = cv2.boundingRect(c)
+            if bh < 8 or bw < 40:
+                return -1.0
+            aspect = bw / float(bh)
+            if aspect < 1.4:
+                return -1.0
+            # Prefer wide pills near horizontal center of the ROI.
+            cx = bx + bw / 2.0
+            center_pen = 1.0 - min(1.0, abs(cx - crop_cx) / (crop.shape[1] * 0.5))
+            return area * aspect * (0.55 + 0.45 * center_pen)
+
+        best = max(contours, key=_score)
+        if _score(best) < 0:
+            return None
+        m = cv2.moments(best)
+        if m["m00"] > 1e-3:
+            cx = x0 + m["m10"] / m["m00"]
+            cy = y0 + m["m01"] / m["m00"]
+        else:
+            bx, by, bw, bh = cv2.boundingRect(best)
+            cx = x0 + bx + bw / 2.0
+            cy = y0 + by + bh / 2.0
+        # Slight down-right bias — blob center reads a bit high/left of the label.
+        return int(cx + w * 0.018), int(cy + h * 0.022)
+
     def _looks_like_battle(self, frame: np.ndarray) -> bool:
         """
         True on opponent scout / live attack (army tray at bottom).
@@ -293,75 +349,19 @@ class ScreenClassifier:
         dark_tray = dark_frac > 0.25
         return structured or dark_tray
 
-    def find_return_home_button(self, frame: np.ndarray) -> tuple[int, int] | None:
-        """
-        Tap target for the green Return Home button on defeat/victory.
-
-        Prefers a wide green CTA in the lower center (not other green UI), and
-        biases slightly down-right so we don't miss high/left of the pill.
-        """
-        h, w = frame.shape[:2]
-        # Button sits bottom-center of the results card — keep ROI tight.
-        x0, x1 = int(w * 0.28), int(w * 0.72)
-        y0, y1 = int(h * 0.78), int(h * 0.96)
-        crop = frame[y0:y1, x0:x1]
-        if crop.size == 0:
-            return None
-        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-        green = cv2.inRange(hsv, (35, 70, 70), (95, 255, 255))
-        green = cv2.morphologyEx(
-            green, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (11, 7))
-        )
-        contours, _ = cv2.findContours(green, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            return None
-        min_area = crop.shape[0] * crop.shape[1] * 0.015
-        crop_cx = crop.shape[1] / 2.0
-
-        def _score(c: np.ndarray) -> float:
-            area = float(cv2.contourArea(c))
-            if area < min_area:
-                return -1.0
-            bx, by, bw, bh = cv2.boundingRect(c)
-            if bh < 8 or bw < 40:
-                return -1.0
-            aspect = bw / float(bh)
-            if aspect < 1.4:
-                return -1.0
-            # Prefer wide pills near horizontal center of the ROI.
-            cx = bx + bw / 2.0
-            center_pen = 1.0 - min(1.0, abs(cx - crop_cx) / (crop.shape[1] * 0.5))
-            return area * aspect * (0.55 + 0.45 * center_pen)
-
-        best = max(contours, key=_score)
-        if _score(best) < 0:
-            return None
-        m = cv2.moments(best)
-        if m["m00"] > 1e-3:
-            cx = x0 + m["m10"] / m["m00"]
-            cy = y0 + m["m01"] / m["m00"]
-        else:
-            bx, by, bw, bh = cv2.boundingRect(best)
-            cx = x0 + bx + bw / 2.0
-            cy = y0 + by + bh / 2.0
-        # Slight down-right bias — blob center reads a bit high/left of the label.
-        return int(cx + w * 0.018), int(cy + h * 0.022)
-
     def _looks_like_battle_results(self, frame: np.ndarray) -> bool:
         """
         End-of-attack screen with a large green Return Home / OK button.
 
         Distinct from live scout/battle: no Next, no End Battle, big green CTA.
-        Must NOT match donation panel green Donate buttons or clan-chat chrome.
+        Must NOT match clan chat / Donate button screens.
         """
-        # Chat / donate UI often has green buttons — never treat as Return Home.
+        # Real chat/donate UI — never Return Home.
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
             return False
         if self._clan_chat_anchor_visible(frame):
             return False
         if self._template_visible(frame, "donate_button"):
-            return False
-        if self._donation_panel_heuristic(frame):
             return False
 
         if self._template_visible(frame, "return_home") or self._template_visible(
@@ -391,8 +391,7 @@ class ScreenClassifier:
         if self._template_visible(frame, "loading"):
             return ScreenType.LOADING
 
-        # Chat bubble / Attack! on village ⇒ home BEFORE green-button heuristics
-        # (donate greens were being mistaken for Return Home).
+        # Village home first.
         if self._open_chat_icon_visible(frame):
             return ScreenType.HOME
 
@@ -401,23 +400,16 @@ class ScreenClassifier:
                 return ScreenType.ATTACK_MENU
             return ScreenType.HOME
 
-        # Clan chat / donation before battle_results — green Donate ≠ Return Home.
+        # Strong chat anchors (not soft ROI heuristics).
         if self._clan_chat_anchor_visible(frame):
             return ScreenType.CLAN_CHAT
 
         if self._template_visible(frame, "donate_button"):
-            # Donate button in chat means we are in clan chat (panel may be closed).
             if self._donation_panel_heuristic(frame):
                 return ScreenType.DONATION_PANEL
             return ScreenType.CLAN_CHAT
 
-        if self._in_clan_chat_context(frame) and self._donation_panel_heuristic(frame):
-            return ScreenType.DONATION_PANEL
-
-        if self._in_clan_chat_context(frame):
-            return ScreenType.CLAN_CHAT
-
-        # Results before live-battle — green Return Home must win over tray heuristics.
+        # Attack results: large green Return Home — before soft donation ROI matches.
         if self._looks_like_battle_results(frame):
             return ScreenType.BATTLE_RESULTS
 
@@ -426,15 +418,19 @@ class ScreenClassifier:
         ):
             return ScreenType.BATTLE_RESULTS
 
+        # Soft donation / chat only after results are ruled out.
+        if self._in_clan_chat_context(frame) and self._donation_panel_heuristic(frame):
+            return ScreenType.DONATION_PANEL
+
+        if self._in_clan_chat_context(frame):
+            return ScreenType.CLAN_CHAT
+
         if self._is_home_screen(frame):
             return ScreenType.HOME
 
-        # Live battle / scout (Next, End Battle, or army tray without Attack!).
         if self._looks_like_battle(frame):
             return ScreenType.BATTLE
 
-        # Attack picker also dims the village + shows a green Battle button — detect
-        # it before the generic popup heuristic so we do not "dismiss" Attack.
         if self._looks_like_attack_menu(frame):
             return ScreenType.ATTACK_MENU
 

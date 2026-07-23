@@ -213,14 +213,16 @@ class DebugSession:
         """Tap deploy edge points without waiting for a full attack end."""
         frame = self.capture.screenshot()
         screen = self.classifier.classify(frame)
+        village = self.deployer.find_village_bbox(frame)
         points = self.deployer.deploy_points(frame)
         # Only a short ladder so debug stays quick.
         for x, y in points[:4]:
             self.input.tap(x, y)
             time.sleep(0.1)
+        village_txt = f"village={village}" if village else "village=not found"
         return (
             f"Deploy dry-run: {min(4, len(points))} taps on "
-            f"{self.config.farm_deploy_side} edge (screen was {screen.value}). "
+            f"{self.config.farm_deploy_side} ({village_txt}, screen={screen.value}). "
             f"Full ladder has {len(points)} points."
         )
 

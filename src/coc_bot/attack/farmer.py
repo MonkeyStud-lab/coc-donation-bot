@@ -73,6 +73,12 @@ class AttackFarmer:
             return FarmResult(False, "matchmaking timeout")
 
         frame = self.capture.screenshot()
+        logger.info(
+            "Deploying army (e-drag taps={}, heroes={}) along village {}",
+            self.config.farm_edrag_deploy_taps,
+            self.config.farm_hero_count,
+            self.config.farm_deploy_side,
+        )
         self.deployer.dump_army_along_edge(frame)
 
         end_screen = self.attack_nav.wait_for_battle_end()

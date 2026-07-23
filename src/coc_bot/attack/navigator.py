@@ -47,15 +47,39 @@ class AttackNavigator:
             self._template_cache[key] = img
         return img
 
-    def _tap_named(self, key: str, frame: np.ndarray | None = None) -> bool:
-        """Tap a calibrated point, falling back to a template match."""
+    def _scaled_point(self, key: str, frame: np.ndarray) -> tuple[int, int] | None:
+        """Return a tap point scaled to the current frame size if needed."""
         point = self.config.tap_points.get(key)
-        if point:
-            logger.info("Tap {} at ({}, {})", key, point[0], point[1])
-            self.input.tap(int(point[0]), int(point[1]))
-            return True
+        if not point or len(point) < 2:
+            return None
+        x, y = int(point[0]), int(point[1])
+        fh, fw = frame.shape[:2]
+        cw = int(self.config.frame_width or 0)
+        ch = int(self.config.frame_height or 0)
+        if cw > 0 and ch > 0 and (cw != fw or ch != fh):
+            x = int(round(x * fw / cw))
+            y = int(round(y * fh / ch))
+            logger.debug(
+                "Scaled tap {} from {}x{} calib → ({}, {}) on {}x{}",
+                key,
+                cw,
+                ch,
+                x,
+                y,
+                fw,
+                fh,
+            )
+        return x, y
+
+    def _tap_named(self, key: str, frame: np.ndarray | None = None) -> bool:
+        """Tap a calibrated point (resolution-scaled), then template, then key-specific fallback."""
         if frame is None:
             frame = self.capture.screenshot()
+        point = self._scaled_point(key, frame)
+        if point:
+            logger.info("Tap {} at ({}, {})", key, point[0], point[1])
+            self.input.tap(point[0], point[1])
+            return True
         template = self.load_template(key)
         if template is not None:
             match = self.matcher.find(frame, template)
@@ -64,6 +88,13 @@ class AttackNavigator:
                 logger.info("Tap {} via template at ({}, {})", key, cx, cy)
                 self.input.tap(cx, cy)
                 return True
+        # Attack is always bottom-left on home — use a stable default if uncalibrated.
+        if key == "attack_button":
+            h, w = frame.shape[:2]
+            fx, fy = int(w * 0.09), int(h * 0.93)
+            logger.warning("attack_button missing — fallback tap ({}, {})", fx, fy)
+            self.input.tap(fx, fy)
+            return True
         logger.warning("No tap point or template for {}", key)
         return False
 
@@ -113,11 +144,46 @@ class AttackNavigator:
         frame = self.capture.screenshot()
         if self.classifier.classify(frame) == ScreenType.ATTACK_MENU:
             return True
-        if not self._tap_named("attack_button", frame):
-            return False
-        time.sleep(1.2)
-        screen = self.classifier.classify(self.capture.screenshot())
-        return screen in (ScreenType.ATTACK_MENU, ScreenType.MATCHMAKING, ScreenType.UNKNOWN)
+
+        # Try calibrated / template / default Attack, then a few nearby fallbacks.
+        h, w = frame.shape[:2]
+        candidates: list[tuple[int, int]] = []
+        scaled = self._scaled_point("attack_button", frame)
+        if scaled:
+            candidates.append(scaled)
+        template = self.load_template("attack_button")
+        if template is not None:
+            match = self.matcher.find(frame, template)
+            if match:
+                candidates.append(match.center)
+        # Typical home Attack button — bottom-left sword icon (always same UI spot).
+        candidates.extend(
+            [
+                (int(w * 0.09), int(h * 0.93)),
+                (int(w * 0.07), int(h * 0.90)),
+                (int(w * 0.12), int(h * 0.92)),
+                (int(w * 0.10), int(h * 0.88)),
+            ]
+        )
+
+        seen: set[tuple[int, int]] = set()
+        for x, y in candidates:
+            key = (x // 8, y // 8)
+            if key in seen:
+                continue
+            seen.add(key)
+            logger.info("Trying Attack button at ({}, {})", x, y)
+            self.input.tap(x, y)
+            time.sleep(1.1)
+            screen = self.classifier.classify(self.capture.screenshot())
+            if screen in (ScreenType.ATTACK_MENU, ScreenType.MATCHMAKING):
+                return True
+            if screen == ScreenType.UNKNOWN:
+                # Attack menu sometimes classifies as unknown without templates.
+                time.sleep(0.4)
+                return True
+        logger.warning("Could not open Attack menu")
+        return False
 
     def start_unranked_battle(self) -> bool:
         """Tap unranked Battle, then Find a Match if calibrated."""

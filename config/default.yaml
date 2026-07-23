@@ -44,7 +44,9 @@ clan:
 farm:
   enabled: false
   interval_seconds: 3600          # auto one attack per hour when enabled
-  deploy_side: left               # left or right edge of the battlefield
+  deploy_side: left               # left or right side of the defending village
   match_timeout_seconds: 120      # clouds / Find a Match
   battle_timeout_seconds: 240     # safety cap above a normal ~3 min attack
   retry_cooldown_seconds: 300     # wait after a failed farm before retrying
+  edrag_deploy_taps: 14           # map taps while e-drags selected (11 troops + spare)
+  hero_count: 4                   # heroes to select + place after e-drags

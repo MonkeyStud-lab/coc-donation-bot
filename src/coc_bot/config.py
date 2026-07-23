@@ -61,6 +61,8 @@ class BotConfig:
     farm_match_timeout_seconds: int = 120
     farm_battle_timeout_seconds: int = 240
     farm_retry_cooldown_seconds: int = 300
+    farm_edrag_deploy_taps: int = 14
+    farm_hero_count: int = 4
     data_dir: Path = field(default_factory=lambda: _project_root() / "data")
     templates_dir: Path = field(default_factory=lambda: _project_root() / "data" / "templates")
 
@@ -214,6 +216,8 @@ def load_config(
         farm_match_timeout_seconds=int(farm.get("match_timeout_seconds", 120)),
         farm_battle_timeout_seconds=int(farm.get("battle_timeout_seconds", 240)),
         farm_retry_cooldown_seconds=int(farm.get("retry_cooldown_seconds", 300)),
+        farm_edrag_deploy_taps=int(farm.get("edrag_deploy_taps", 14)),
+        farm_hero_count=max(0, min(4, int(farm.get("hero_count", 4)))),
         data_dir=root / "data",
         templates_dir=root / "data" / "templates",
     )

@@ -25,6 +25,8 @@ def main() -> int:
     assert config.farm_deploy_side in ("left", "right")
     assert config.farm_match_timeout_seconds > 0
     assert config.farm_battle_timeout_seconds >= 180
+    assert config.farm_edrag_deploy_taps >= 11
+    assert 0 <= config.farm_hero_count <= 4
 
     for name in ("ATTACK_MENU", "MATCHMAKING", "BATTLE", "BATTLE_RESULTS"):
         assert hasattr(ScreenType, name), name

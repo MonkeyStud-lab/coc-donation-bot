@@ -644,8 +644,8 @@ class CalibrationWizard:
 
         print(
             "\n--- Deploy strip (optional) ---\n"
-            "Vertical strip along the LEFT or RIGHT edge where e-drags deploy.\n"
-            "If skipped, the bot uses a fixed left/right edge from Settings."
+            "Usually skip this. The bot finds the defending village and deploys\n"
+            "just outside its edge. Only draw a strip if that fails."
         )
         if prompt_yes_no("Draw deploy_strip ROI?"):
             coords, picked = self._pick_roi(
@@ -658,8 +658,34 @@ class CalibrationWizard:
             _keeping("deploy_strip")
 
         print(
+            "\n--- Army bar slots (optional but recommended for heroes) ---\n"
+            "On a BATTLE screen with your e-drag army visible in the bottom bar:\n"
+            "  • e-drag / first troop card\n"
+            "  • each of the 4 hero cards (left → right)\n"
+            "Skip to use built-in default positions."
+        )
+        if prompt_yes_no("Calibrate e-drag + hero army-bar taps now?"):
+            print("Open any battle so the army bar is visible, then press Enter.")
+            _press_enter()
+            frame = self.capture.screenshot()
+            pt = self._pick_point("CENTER of the electro dragon (first troop) card", frame)
+            self.config.tap_points["edrag_slot"] = list(pt)
+            logger.info("Saved tap point edrag_slot")
+            for i in range(1, 5):
+                if not prompt_yes_no(f"Calibrate hero_{i}?"):
+                    break
+                frame = self.capture.screenshot()
+                pt = self._pick_point(f"CENTER of hero card #{i} (left to right)", frame)
+                self.config.tap_points[f"hero_{i}"] = list(pt)
+                logger.info("Saved tap point hero_{}", i)
+        else:
+            for key in ("edrag_slot", "hero_1", "hero_2", "hero_3", "hero_4"):
+                if key in self.config.tap_points:
+                    _keeping(key)
+
+        print(
             "\nFarm calibration saved. Enable farm in Settings after verifying.\n"
-            "Keep electro dragons as the active army preset."
+            "Keep electro dragons as the active army preset (11 e-drags + 4 heroes)."
         )
 
     def step_optional(self) -> None:

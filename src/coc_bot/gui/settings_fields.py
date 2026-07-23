@@ -193,6 +193,25 @@ SETTINGS: list[SettingField] = [
         ("farm", "retry_cooldown_seconds"),
     ),
     SettingField(
+        "farm_edrag_deploy_taps",
+        "E-drag map taps",
+        "How many times to tap the village edge while electro dragons are selected "
+        "(use a bit more than 11 so all leave the bar).",
+        "int",
+        lambda c: c.farm_edrag_deploy_taps,
+        "Farm",
+        ("farm", "edrag_deploy_taps"),
+    ),
+    SettingField(
+        "farm_hero_count",
+        "Heroes to deploy (0–4)",
+        "After e-drags, select and place this many heroes from the army bar.",
+        "int",
+        lambda c: c.farm_hero_count,
+        "Farm",
+        ("farm", "hero_count"),
+    ),
+    SettingField(
         "adb_device",
         "ADB device address",
         "Waydroid ADB target, e.g. 192.168.240.112:5555 or 127.0.0.1:5555. "
@@ -296,6 +315,16 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
                 if side not in ("left", "right"):
                     raise ValueError("Deploy side must be 'left' or 'right'")
                 parsed = side
+            if field.key == "farm_hero_count":
+                n = int(parsed) if not isinstance(parsed, int) else parsed
+                if n < 0 or n > 4:
+                    raise ValueError("Heroes to deploy must be between 0 and 4")
+                parsed = n
+            if field.key == "farm_edrag_deploy_taps":
+                n = int(parsed) if not isinstance(parsed, int) else parsed
+                if n < 1:
+                    raise ValueError("E-drag map taps must be at least 1")
+                parsed = n
 
         cursor = payload
         for part in field.yaml_path[:-1]:

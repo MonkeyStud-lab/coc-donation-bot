@@ -242,7 +242,7 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "farm_deploy_rage",
         "Deploy rage spells",
-        "After troops/heroes, select rage and drop them slightly toward the base from the troop line.",
+        "After e-drags are down, select rage and drop them toward the base from the troop line.",
         "bool",
         lambda c: c.farm_deploy_rage,
         "Farm",

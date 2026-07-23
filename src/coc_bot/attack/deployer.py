@@ -233,7 +233,7 @@ class EdgeDeployer:
         tap_pause: float = 0.10,
     ) -> int:
         """
-        Pan to the deploy edge, dump e-drags, siege, heroes (+ abilities), then rage.
+        Pan to the deploy edge, dump e-drags, then rage, then siege + heroes.
 
         Returns total map taps (not including army-bar selection taps).
         """
@@ -270,6 +270,23 @@ class EdgeDeployer:
 
         logger.info("Deployed e-drags along {} — {} map taps", side, total)
 
+        # Rage right after dragons so the push is already on the map.
+        rage_dropped = 0
+        if self.select_rage_slot(frame):
+            # One select arms all remaining rages — keep tapping the map.
+            time.sleep(0.35)
+            rage_points = self.rage_drop_points(frame, points, side=side)
+            logger.info(
+                "Dropping {} rage spell(s) on the base (single slot select)",
+                len(rage_points),
+            )
+            for i, (rx, ry) in enumerate(rage_points):
+                logger.info("Deploying rage {}/{} at ({}, {})", i + 1, len(rage_points), rx, ry)
+                self.input.tap(rx, ry)
+                total += 1
+                rage_dropped += 1
+                time.sleep(0.18)
+
         # Siege: select card, drop once near mid-edge.
         if self.select_siege_slot(frame):
             sx, sy = points[len(points) // 2]
@@ -297,22 +314,6 @@ class EdgeDeployer:
                 logger.info("Activating hero {} ability (re-tap slot)", hero_i + 1)
                 self.input.tap(hx, hy, jitter=0)
                 time.sleep(0.35)
-
-        rage_dropped = 0
-        if self.select_rage_slot(frame):
-            # One select arms all remaining rages — keep tapping the map.
-            time.sleep(0.35)
-            rage_points = self.rage_drop_points(frame, points, side=side)
-            logger.info(
-                "Dropping {} rage spell(s) on the base (single slot select)",
-                len(rage_points),
-            )
-            for i, (rx, ry) in enumerate(rage_points):
-                logger.info("Deploying rage {}/{} at ({}, {})", i + 1, len(rage_points), rx, ry)
-                self.input.tap(rx, ry)
-                total += 1
-                rage_dropped += 1
-                time.sleep(0.18)
 
         logger.info(
             "Army dump complete — {} map taps, {} heroes (abilities={}), siege={}, rage={}",

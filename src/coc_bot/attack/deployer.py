@@ -306,13 +306,19 @@ class EdgeDeployer:
 
         rage_dropped = 0
         if self.select_rage_slot(frame):
+            # One select arms all remaining rages — keep tapping the map.
+            time.sleep(0.35)
             rage_points = self.rage_drop_points(frame, points, side=side)
+            logger.info(
+                "Dropping {} rage spell(s) on the base (single slot select)",
+                len(rage_points),
+            )
             for i, (rx, ry) in enumerate(rage_points):
                 logger.info("Deploying rage {}/{} at ({}, {})", i + 1, len(rage_points), rx, ry)
                 self.input.tap(rx, ry)
                 total += 1
                 rage_dropped += 1
-                time.sleep(0.22)
+                time.sleep(0.18)
 
         logger.info(
             "Army dump complete — {} map taps, {} heroes (abilities={}), siege={}, rage={}",

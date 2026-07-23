@@ -315,11 +315,10 @@ class Navigator:
 
     def _dismiss_popup(self, frame: np.ndarray) -> None:
         """
-        Clear launch/news modals.
+        Clear launch/news/Star Bonus modals.
 
-        Prefer tapping the calibrated Okay/Claim button when available. Otherwise
-        tap near the top-right gold area — outside most CoC dialogs and safer
-        than Android BACK (which can leave the game).
+        Prefer calibrated Okay/Claim. Otherwise tap a screen corner outside the
+        centered card (Star Bonus dismisses from any corner).
         """
         template = self.load_template("popup_dismiss")
         if template is not None:
@@ -337,9 +336,9 @@ class Navigator:
             return
 
         h, w = frame.shape[:2]
-        # Near the gold coin / resource strip — outside the centered modal card.
-        tx, ty = int(w * 0.92), int(h * 0.06)
-        logger.info("Dismissing popup — tap outside near top-right ({}, {})", tx, ty)
+        # Top-right corner — outside the blue Star Bonus / news card.
+        tx, ty = int(w * 0.96), int(h * 0.05)
+        logger.info("Dismissing popup — tap corner ({}, {})", tx, ty)
         self.input.tap(tx, ty)
 
     def _chat_region_roi(self, region: str) -> list[float] | None:

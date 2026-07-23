@@ -301,11 +301,21 @@ class ScreenClassifier:
         return center_p90 > 190 and corner_mean < 115 and bright_frac > 0.12
 
     def looks_like_blocking_popup(self, frame: np.ndarray) -> bool:
-        """True for Welcome Back / event / news modals that block play."""
+        """True for Welcome Back / event / news / Star Bonus modals that block play."""
         if self._template_visible(frame, "popup_dismiss") or self._template_visible(frame, "popup"):
             return True
         # Dimmed overlay alone can false-match busy villages; require the green Okay/Claim too.
         return self._has_dimmed_modal_overlay(frame) and self._has_green_dialog_button(frame)
+
+    def _home_blocking_popup(self, frame: np.ndarray) -> bool:
+        """
+        Home-village modal (Star Bonus, news, etc.) with Attack! / chat still visible.
+
+        Must win over HOME classification — those chips show through the dimmed backdrop.
+        """
+        if not self.looks_like_blocking_popup(frame):
+            return False
+        return self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame)
 
     def _looks_like_attack_menu(self, frame: np.ndarray) -> bool:
         """
@@ -547,6 +557,8 @@ class ScreenClassifier:
 
     def _classify_home(self, frame: np.ndarray) -> ScreenType:
         """Village only: home or Attack menu — never battle results / donation."""
+        if self._home_blocking_popup(frame):
+            return ScreenType.POPUP
         if self._looks_like_attack_menu(frame):
             return ScreenType.ATTACK_MENU
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
@@ -559,6 +571,8 @@ class ScreenClassifier:
 
     def _classify_donate(self, frame: np.ndarray) -> ScreenType:
         """Clan chat / donation only — never battle results or live battle."""
+        if self._home_blocking_popup(frame):
+            return ScreenType.POPUP
         if self._donation_panel_heuristic(frame):
             return ScreenType.DONATION_PANEL
         if self._clan_chat_anchor_visible(frame):
@@ -590,6 +604,9 @@ class ScreenClassifier:
             return ScreenType.MATCHMAKING
         if self._looks_like_attack_menu(frame):
             return ScreenType.ATTACK_MENU
+        # Star Bonus / news on home after Return Home — before HOME chip wins.
+        if self._home_blocking_popup(frame):
+            return ScreenType.POPUP
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
             return ScreenType.HOME
         if self._is_home_screen(frame):
@@ -600,6 +617,10 @@ class ScreenClassifier:
 
     def _classify_any(self, frame: np.ndarray) -> ScreenType:
         """Full unrestricted classify (boot / recovery)."""
+        # Star Bonus / Welcome Back — Attack! shows through the dimmed village.
+        if self._home_blocking_popup(frame):
+            return ScreenType.POPUP
+
         # Village home first.
         if self._open_chat_icon_visible(frame):
             return ScreenType.HOME

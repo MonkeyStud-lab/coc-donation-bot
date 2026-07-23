@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -153,6 +154,14 @@ class AttackFarmer:
 
         if self._stopping():
             return FarmResult(False, "stopped")
+
+        # Star Bonus / news modals after Return Home — corner-tap dismiss.
+        if self.donation_nav is not None:
+            frame = self.capture.screenshot()
+            if self.attack_nav.classifier.looks_like_blocking_popup(frame):
+                logger.info("Dismissing post-farm popup before reopening chat")
+                self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
+                time.sleep(0.9)
 
         self._set_mode(BotMode.DONATE)
         if self.donation_nav is not None:

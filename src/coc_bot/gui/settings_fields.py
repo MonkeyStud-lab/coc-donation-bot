@@ -251,7 +251,8 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "farm_rage_count",
         "Rage spell drops",
-        "How many rage spells to place (spread vertically — they cover a wide area).",
+        "How many rage spells to place after selecting the rage card once "
+        "(spread vertically on the base — default 5).",
         "int",
         lambda c: c.farm_rage_count,
         "Farm",

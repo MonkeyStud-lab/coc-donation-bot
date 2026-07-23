@@ -484,7 +484,23 @@ class AttackNavigator:
                 return False
             frame = self.capture.screenshot()
             screen = self.classify(frame, mode=BotMode.ATTACK)
+            if screen == ScreenType.POPUP and self.donation_nav is not None:
+                logger.info("Dismissing post-battle popup (e.g. Star Bonus)")
+                self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
+                if self._sleep(0.9):
+                    return False
+                continue
             if screen in (ScreenType.HOME, ScreenType.CLAN_CHAT):
+                # Safety: Attack! can show through a modal that classify missed.
+                if (
+                    self.donation_nav is not None
+                    and self.classifier.looks_like_blocking_popup(frame)
+                ):
+                    logger.info("Home under a blocking popup — dismissing")
+                    self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
+                    if self._sleep(0.9):
+                        return False
+                    continue
                 return True
 
             results = screen == ScreenType.BATTLE_RESULTS or self.classifier._looks_like_battle_results(  # noqa: SLF001

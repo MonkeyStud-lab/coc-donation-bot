@@ -119,16 +119,98 @@ class ScreenClassifier:
         chat_std = self._roi_std(frame, "chat_panel")
         return chat_std is not None and chat_std > 22
 
+    def _has_white_donation_card(self, frame: np.ndarray) -> bool:
+        """
+        Large light-gray/white donation popup card (center-right).
+
+        Distinct from clan chat (darker) and battle results (no such card).
+        """
+        h, w = frame.shape[:2]
+        y0, y1 = int(h * 0.10), int(h * 0.90)
+        x0, x1 = int(w * 0.30), int(w * 0.98)
+        crop = frame[y0:y1, x0:x1]
+        if crop.size == 0:
+            return False
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        light = cv2.inRange(gray, 170, 255)
+        light_frac = float(light.mean()) / 255.0
+        if light_frac < 0.38:
+            return False
+        contours, _ = cv2.findContours(light, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return False
+        largest = max(contours, key=cv2.contourArea)
+        area_frac = float(cv2.contourArea(largest)) / float(crop.shape[0] * crop.shape[1])
+        if area_frac < 0.42:
+            return False
+        _bx, _by, bw, bh = cv2.boundingRect(largest)
+        return bw > crop.shape[1] * 0.50 and bh > crop.shape[0] * 0.50
+
+    def _donation_resource_title_visible(self, frame: np.ndarray) -> bool:
+        """
+        True if the unique \"Donation Resource\" header is readable.
+
+        Uses a small top-of-panel crop + tesseract when available (fast). EasyOCR
+        is skipped here so wait_for_donation_panel stays snappy.
+        """
+        import re
+        import shutil
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        if shutil.which("tesseract") is None:
+            return False
+        h, w = frame.shape[:2]
+        # Title sits on the top-left of the white card.
+        crop = frame[int(h * 0.07) : int(h * 0.22), int(w * 0.30) : int(w * 0.70)]
+        if crop.size == 0:
+            return False
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        # Dark outline text on light card — boost contrast for OCR.
+        up = cv2.resize(gray, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+        _, bw = cv2.threshold(up, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "title.png"
+                cv2.imwrite(str(path), bw)
+                proc = subprocess.run(  # noqa: S603
+                    [
+                        "tesseract",
+                        str(path),
+                        "stdout",
+                        "--psm",
+                        "7",
+                        "-l",
+                        "eng",
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
+            text = (proc.stdout or "").lower()
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        compact = re.sub(r"[^a-z]", "", text)
+        return "donation" in compact and "resource" in compact
+
     def _donation_panel_heuristic(self, frame: np.ndarray) -> bool:
         """
-        Donation popup over clan chat (troop + spell bars).
+        Donation popup over clan chat.
 
-        Must not fire on village home or attack results. Green Donate buttons can
-        look like Return Home — strong bar signals still count as the popup.
+        Prefer the unique white \"Donation Resource\" card; fall back to troop/spell
+        bar ROIs. Green Donate buttons can look like Return Home — strong bar or
+        white-card signals still count as the popup.
         """
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
             return False
         if self._template_visible(frame, "donation_panel"):
+            return True
+        # Unique UI: large white card and/or \"Donation Resource\" title.
+        if self._has_white_donation_card(frame):
+            return True
+        if self._donation_resource_title_visible(frame):
             return True
 
         troop_std = self._roi_std(frame, "donation_troop_bar")

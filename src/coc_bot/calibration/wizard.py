@@ -114,9 +114,16 @@ STEPS: dict[str, CalibrationStep] = {
     "donation_panel": CalibrationStep(
         "donation_panel",
         "Donation panel",
-        "Troop+siege bar, spell bar, tap-outside-to-close point",
+        "Optional Donation Resource title, troop+siege/spell bars, tap-outside close",
         ("donation_troop_bar", "donation_spell_bar", "tap_outside_donation"),
         (
+            CalibrationPart(
+                "donation_panel",
+                "Donation Resource title",
+                "template",
+                optional=True,
+                description="Crop of the unique “Donation Resource” header on the white panel",
+            ),
             CalibrationPart("donation_troop_bar", "Troop + siege bar ROI", "roi"),
             CalibrationPart("donation_spell_bar", "Spell bar ROI", "roi"),
             CalibrationPart(
@@ -659,6 +666,19 @@ class CalibrationWizard:
         print("Tap Donate on a request to OPEN the donation panel, then continue.")
         _press_enter("With donation panel open, press Enter...")
         frame = self.capture.screenshot()
+
+        print(
+            "\n--- Donation Resource title (optional but recommended) ---\n"
+            "Crop tightly around the unique “Donation Resource” text at the top of\n"
+            "the white panel. The bot also detects the white card automatically."
+        )
+        self._maybe_update_template(
+            "donation_panel",
+            "Donation Resource title template",
+            "ui/donation_panel.png",
+            frame,
+            optional=True,
+        )
 
         print(
             "\nThe troop bar holds regular troops AND siege machines in the same area."

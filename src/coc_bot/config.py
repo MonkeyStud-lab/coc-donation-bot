@@ -8,8 +8,13 @@ from typing import Any
 import yaml
 
 
-def _project_root() -> Path:
+def project_root() -> Path:
+    """Repo root (contains ``scripts/``, ``config/``, ``data/``)."""
     return Path(__file__).resolve().parents[2]
+
+
+# Back-compat alias used throughout the package.
+_project_root = project_root
 
 
 @dataclass(frozen=True)

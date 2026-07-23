@@ -15,7 +15,7 @@ from tkinter import messagebox, scrolledtext, ttk
 from loguru import logger
 
 from coc_bot.calibration.wizard import STEP_IDS, STEPS, CalibrationWizard
-from coc_bot.config import load_config, user_settings_path
+from coc_bot.config import load_config, project_root, user_settings_path
 from coc_bot.gui.debug_actions import DEBUG_ACTIONS, run_debug_action
 from coc_bot.gui.settings_fields import SETTINGS, current_setting_values, save_settings_from_gui
 from coc_bot.gui.theme import (
@@ -34,12 +34,8 @@ from coc_bot.gui.theme import (
 )
 
 
-def _project_root() -> Path:
-    return Path(__file__).resolve().parents[2]
-
-
 def _calibrate_script() -> Path:
-    return _project_root() / "scripts" / "calibrate.py"
+    return project_root() / "scripts" / "calibrate.py"
 
 
 def _open_in_terminal(command: str) -> bool:
@@ -57,7 +53,7 @@ def _open_in_terminal(command: str) -> bool:
         if shutil.which(argv[0]) is None:
             continue
         try:
-            subprocess.Popen(argv, cwd=str(_project_root()))  # noqa: S603
+            subprocess.Popen(argv, cwd=str(project_root()))  # noqa: S603
             return True
         except OSError:
             continue
@@ -781,7 +777,7 @@ class BotControlApp(tk.Tk):
             return
         py = sys.executable
         cmd = (
-            f"cd {shlex.quote(str(_project_root()))} && {shlex.quote(py)} "
+            f"cd {shlex.quote(str(project_root()))} && {shlex.quote(py)} "
             f"{shlex.quote(str(script))} "
             + " ".join(shlex.quote(a) for a in extra_args)
         )

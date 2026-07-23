@@ -68,10 +68,20 @@ class AttackFarmer:
             return FarmResult(False, "could not start unranked Battle")
 
         if not self.attack_nav.wait_for_battle():
-            logger.warning("Did not reach battle field — aborting without deploy")
-            self.attack_nav.return_home_from_attack()
-            self._abort_to_chat()
-            return FarmResult(False, "matchmaking timeout")
+            frame = self.capture.screenshot()
+            # Opponent may already be loaded even if wait_for_battle mis-timed.
+            if (
+                self.attack_nav.classifier.classify(frame) == ScreenType.BATTLE
+                or self.attack_nav.classifier._looks_like_battle(frame)  # noqa: SLF001
+            ):
+                logger.warning(
+                    "wait_for_battle returned false but battle is on screen — deploying anyway"
+                )
+            else:
+                logger.warning("Did not reach battle field — aborting without deploy")
+                self.attack_nav.return_home_from_attack()
+                self._abort_to_chat()
+                return FarmResult(False, "matchmaking timeout")
 
         frame = self.capture.screenshot()
         logger.info(
@@ -81,7 +91,8 @@ class AttackFarmer:
             self.config.farm_hero_count,
             self.config.farm_deploy_side,
         )
-        self.deployer.dump_army_along_edge(frame)
+        taps = self.deployer.dump_army_along_edge(frame)
+        logger.info("Deploy finished — {} map taps", taps)
 
         end_screen = self.attack_nav.wait_for_battle_end()
         if end_screen == ScreenType.BATTLE:

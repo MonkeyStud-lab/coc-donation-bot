@@ -355,27 +355,34 @@ class AttackNavigator:
     def wait_for_battle(self, timeout: float | None = None) -> bool:
         timeout = timeout if timeout is not None else float(self.config.farm_match_timeout_seconds)
         deadline = time.time() + timeout
+        last_screen = "unknown"
         while time.time() < deadline:
             frame = self.capture.screenshot()
             screen = self.classifier.classify(frame)
-            if screen == ScreenType.BATTLE:
-                logger.info("Battle field ready")
-                return True
-            # Army bar heuristic alone (in case classify still lags).
-            if self.classifier._looks_like_battle(frame):  # noqa: SLF001
-                logger.info("Battle field ready (army-bar heuristic)")
+            last_screen = screen.value
+            if screen == ScreenType.BATTLE or self.classifier._looks_like_battle(frame):  # noqa: SLF001
+                logger.info("Battle field ready (screen={})", screen.value)
                 return True
             if screen == ScreenType.BATTLE_RESULTS:
+                # Double-check — do not abort a live attack mislabeled as results.
+                if self.classifier._looks_like_battle(frame):  # noqa: SLF001
+                    logger.info("Battle field ready (overrode false results)")
+                    return True
                 logger.warning("Saw battle results before deploy — opponent may have ended early")
                 return False
-            if screen == ScreenType.HOME:
+            if screen == ScreenType.HOME and self.attack_button_visible(frame):
                 logger.warning("Returned to home during matchmaking")
                 return False
             if screen == ScreenType.POPUP and self.donation_nav is not None:
                 self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
             logger.debug("wait_for_battle: screen={}", screen.value)
-            time.sleep(0.8)
-        logger.warning("Matchmaking timed out after {}s", timeout)
+            time.sleep(0.6)
+        logger.warning("Matchmaking timed out after {}s (last_screen={})", timeout, last_screen)
+        # Final peek — opponent may have loaded on the last tick.
+        frame = self.capture.screenshot()
+        if self.classifier._looks_like_battle(frame) or self.classifier.classify(frame) == ScreenType.BATTLE:  # noqa: SLF001
+            logger.info("Battle field ready on final check")
+            return True
         return False
 
     def wait_for_battle_end(self, timeout: float | None = None) -> ScreenType:

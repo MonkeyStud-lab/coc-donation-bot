@@ -195,18 +195,62 @@ class ScreenClassifier:
         return frac > 0.45 and not self._is_home_screen(frame)
 
     def _looks_like_battle(self, frame: np.ndarray) -> bool:
+        """
+        True on opponent scout / live attack (army tray at bottom).
+
+        Scout UI (before first deploy) shows: bottom troop cards, red End Battle
+        (bottom-left), orange Next (right). Do NOT treat End Battle as home Attack!.
+        """
         if self._template_visible(frame, "battle"):
             return True
-        # Army deployment bar lives along the bottom during attacks.
+        if self._clan_chat_anchor_visible(frame):
+            return False
+
         h, w = frame.shape[:2]
-        bar = frame[int(h * 0.82) : h, int(w * 0.05) : int(w * 0.95)]
+
+        # Orange "Next" (skip base) on the right — only on scout/battle, not home.
+        next_roi = frame[int(h * 0.52) : int(h * 0.92), int(w * 0.80) : w]
+        if next_roi.size:
+            hsv_n = cv2.cvtColor(next_roi, cv2.COLOR_BGR2HSV)
+            next_orange = cv2.inRange(hsv_n, (5, 90, 90), (28, 255, 255))
+            if float(next_orange.mean()) / 255.0 > 0.06:
+                return True
+
+        # Red "End Battle" chip bottom-left — scout/battle only (not home Attack!).
+        end_roi = frame[int(h * 0.78) : h, 0 : int(w * 0.20)]
+        if end_roi.size:
+            hsv_e = cv2.cvtColor(end_roi, cv2.COLOR_BGR2HSV)
+            red1 = cv2.inRange(hsv_e, (0, 100, 80), (8, 255, 255))
+            red2 = cv2.inRange(hsv_e, (170, 100, 80), (180, 255, 255))
+            if float(cv2.bitwise_or(red1, red2).mean()) / 255.0 > 0.04:
+                return True
+
+        # Army tray along the bottom (cards / wood chrome).
+        bar = frame[int(h * 0.78) : h, int(w * 0.02) : int(w * 0.98)]
         if bar.size == 0:
             return False
         hsv = cv2.cvtColor(bar, cv2.COLOR_BGR2HSV)
-        # Dark UI strip with troop icons — low value, some saturation spikes.
-        dark = cv2.inRange(hsv, (0, 0, 0), (180, 255, 70))
+        dark = cv2.inRange(hsv, (0, 0, 0), (180, 255, 100))
         dark_frac = float(dark.mean()) / 255.0
-        return dark_frac > 0.35 and not self._clan_chat_anchor_visible(frame)
+        brown = cv2.inRange(hsv, (5, 30, 40), (30, 255, 220))
+        brown_frac = float(brown.mean()) / 255.0
+        gray = cv2.cvtColor(bar, cv2.COLOR_BGR2GRAY)
+        edge_frac = float(cv2.Canny(gray, 30, 100).mean()) / 255.0
+
+        # Home Attack! is gold/brown bottom-left WITHOUT a full army tray.
+        # Only reject when tray looks empty and a gold Attack chip is present.
+        bl = frame[int(h * 0.82) : h, 0 : int(w * 0.12)]
+        gold_chip = False
+        if bl.size:
+            hsv_bl = cv2.cvtColor(bl, cv2.COLOR_BGR2HSV)
+            gold = cv2.inRange(hsv_bl, (12, 80, 90), (35, 255, 255))
+            gold_chip = float(gold.mean()) / 255.0 > 0.12
+
+        structured = edge_frac > 0.04 and (dark_frac > 0.10 or brown_frac > 0.06)
+        dark_tray = dark_frac > 0.25
+        if gold_chip and not structured and not dark_tray:
+            return False
+        return structured or dark_tray
 
     def classify(self, frame: np.ndarray) -> ScreenType:
         if self._template_visible(frame, "loading"):

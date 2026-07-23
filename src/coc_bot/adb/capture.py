@@ -53,6 +53,8 @@ class ScreenCapture:
         self._last_size: tuple[int, int] | None = None
         # InputControllers kept in sync so taps match screencap pixels.
         self._inputs: list = []
+        # Prefer the last method that worked (Waydroid often breaks exec-out).
+        self._preferred_method: str | None = None
 
     def bind_input(self, input_ctrl) -> None:
         """Link an InputController so its tap coords track screencap resolution."""
@@ -90,11 +92,14 @@ class ScreenCapture:
             Path(local).unlink(missing_ok=True)
 
     def screenshot(self) -> np.ndarray:
-        methods = (
+        methods = [
             ("exec-out png", self._capture_png_exec_out),
             ("exec-out raw", self._capture_raw_exec_out),
             ("pull png", self._capture_via_pull),
-        )
+        ]
+        if self._preferred_method:
+            methods.sort(key=lambda m: 0 if m[0] == self._preferred_method else 1)
+
         last_error: Exception | None = None
 
         for attempt in range(1, self.max_retries + 1):
@@ -108,8 +113,9 @@ class ScreenCapture:
                     self._last_size = (w, h)
                     for inp in self._inputs:
                         inp.set_frame_size(w, h)
-                    if attempt > 1 or method_name != "exec-out png":
+                    if self._preferred_method != method_name:
                         logger.info("Screencap OK via {} ({}x{})", method_name, w, h)
+                        self._preferred_method = method_name
                     return frame
                 except (AdbError, cv2.error, ValueError) as exc:
                     last_error = exc

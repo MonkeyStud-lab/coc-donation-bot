@@ -135,12 +135,16 @@ class ScreenClassifier:
 
         troop_std = self._roi_std(frame, "donation_troop_bar")
         spell_std = self._roi_std(frame, "donation_spell_bar")
-
-        # Both bars must look very structured; raise bar so chat/home/results do not match.
         if troop_std is None or spell_std is None:
             return False
-        # Require a strong dual-bar signal only (dimmed overlay alone matches results cards).
-        return troop_std > 50 and spell_std > 50
+
+        # Strong dual-bar signal (popup troop + spell rows).
+        if troop_std > 40 and spell_std > 40:
+            return True
+        # Medium bars + dimmed modal (popup over chat). Return Home already excluded.
+        if troop_std > 30 and spell_std > 30 and self._has_dimmed_modal_overlay(frame):
+            return True
+        return False
 
     def is_home_screen(self, frame: np.ndarray) -> bool:
         return self._is_home_screen(frame)
@@ -420,16 +424,19 @@ class ScreenClassifier:
                 return ScreenType.ATTACK_MENU
             return ScreenType.HOME
 
+        # Donation popup before clan_chat anchor — the anchor can still match under/near
+        # the popup on some calibrations, which blocked donating.
+        if self._donation_panel_heuristic(frame):
+            return ScreenType.DONATION_PANEL
+
         # Strong chat anchors (not soft ROI heuristics).
         if self._clan_chat_anchor_visible(frame):
             return ScreenType.CLAN_CHAT
 
         if self._template_visible(frame, "donate_button"):
-            if self._donation_panel_heuristic(frame):
-                return ScreenType.DONATION_PANEL
             return ScreenType.CLAN_CHAT
 
-        # Attack results: large green Return Home — before soft donation ROI matches.
+        # Attack results: large green Return Home — before soft chat ROI matches.
         if self._looks_like_battle_results(frame):
             return ScreenType.BATTLE_RESULTS
 
@@ -437,10 +444,6 @@ class ScreenClassifier:
             frame, "battle_end"
         ):
             return ScreenType.BATTLE_RESULTS
-
-        # Soft donation / chat only after results are ruled out.
-        if self._in_clan_chat_context(frame) and self._donation_panel_heuristic(frame):
-            return ScreenType.DONATION_PANEL
 
         if self._in_clan_chat_context(frame):
             return ScreenType.CLAN_CHAT
@@ -463,16 +466,29 @@ class ScreenClassifier:
         return ScreenType.UNKNOWN
 
     def is_donation_panel(self, frame: np.ndarray) -> bool:
-        return self.classify(frame) == ScreenType.DONATION_PANEL
+        """True when the donate popup is up (does not require full classify)."""
+        return self._donation_panel_heuristic(frame)
 
     def wait_for_donation_panel(self, capture, timeout_seconds: float = 3.0, poll_interval: float = 0.35) -> bool:
         """Poll until donation panel appears or timeout."""
         import time
 
         deadline = time.time() + timeout_seconds
+        last_frame = None
         while time.time() < deadline:
-            frame = capture.screenshot()
-            if self.is_donation_panel(frame):
+            last_frame = capture.screenshot()
+            if self.is_donation_panel(last_frame):
                 return True
             time.sleep(poll_interval)
+        if last_frame is not None:
+            from loguru import logger
+
+            troop = self._roi_std(last_frame, "donation_troop_bar")
+            spell = self._roi_std(last_frame, "donation_spell_bar")
+            logger.debug(
+                "Donation panel wait timed out (troop_std={}, spell_std={}, screen={})",
+                f"{troop:.1f}" if troop is not None else "n/a",
+                f"{spell:.1f}" if spell is not None else "n/a",
+                self.classify(last_frame).value,
+            )
         return False

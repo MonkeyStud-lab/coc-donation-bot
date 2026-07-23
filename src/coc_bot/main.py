@@ -371,18 +371,42 @@ class DonationBot:
                 m.center[1],
                 m.confidence,
             )
-        else:
-            self.chat_monitor.open_donation(self._pending_request)
+            self._set_state("donate")
+            return
+
         classifier = ScreenClassifier(self.config, self.matcher)
-        if not classifier.wait_for_donation_panel(
-            self.capture, timeout_seconds=self.config.donation_panel_wait_seconds
-        ):
-            logger.warning("Donation panel did not appear after tapping Donate")
+        opened = False
+        for attempt in range(2):
+            self.chat_monitor.open_donation(self._pending_request)
+            if classifier.wait_for_donation_panel(
+                self.capture, timeout_seconds=self.config.donation_panel_wait_seconds
+            ):
+                opened = True
+                break
+            logger.warning(
+                "Donation panel did not appear after tapping Donate (attempt {})",
+                attempt + 1,
+            )
+            time.sleep(0.4)
+
+        if not opened:
+            logger.warning(
+                "Donation panel still not detected — leaving request unmarked so it can retry. "
+                "If this keeps happening, recalibrate donation_troop_bar / donation_spell_bar "
+                "or capture a donation_panel template."
+            )
+            self._pending_request = None
+            self._set_state("scroll_chat")
+            return
+
         time.sleep(0.3)
         self._set_state("donate")
 
     def _do_donate(self) -> None:
-        request = self._pending_request
+        request = getattr(self, "_pending_request", None)
+        if request is None:
+            self._set_state("scan_chat")
+            return
         if self.config.dry_run:
             frame = self.capture.screenshot()
             self._maybe_save_debug(frame, "donate_dry_run")
@@ -390,6 +414,7 @@ class DonationBot:
                 "[DRY-RUN] Would execute donation kind={} (open fill=colored slots)",
                 request.kind.value,
             )
+            self._pending_request = None
             self._set_state("scan_chat")
             return
 
@@ -404,7 +429,8 @@ class DonationBot:
                 "No donation made — marking request handled to avoid reopening "
                 "(likely open/generic misclassified or already filled)"
             )
-            self.chat_monitor.mark_handled(self._pending_request)
+            self.chat_monitor.mark_handled(request)
+        self._pending_request = None
         self._set_state("scan_chat")
 
     def _recover(self) -> None:

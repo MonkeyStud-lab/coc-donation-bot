@@ -357,6 +357,7 @@ class BotControlApp(tk.Tk):
             else:
                 var.set(str(values[field.key]))
         self._append_log("==> Settings reloaded from disk")
+        self._install_log_sink()
 
     def _save_settings(self) -> None:
         try:
@@ -369,10 +370,12 @@ class BotControlApp(tk.Tk):
             messagebox.showerror("Invalid settings", str(exc))
             return
         path = user_settings_path()
+        self._install_log_sink()
         self._append_log(f"==> Settings saved to {path}")
         messagebox.showinfo(
             "Saved",
-            f"Settings saved to:\n{path}\n\nStop and Start the bot to apply them to a running loop.",
+            f"Settings saved to:\n{path}\n\nStop and Start the bot to apply them to a running loop.\n"
+            "Activity log DEBUG filter applies immediately.",
         )
 
     def _build_setup_page(self) -> None:
@@ -521,10 +524,24 @@ class BotControlApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def _install_log_sink(self) -> None:
+        if self._log_sink_id is not None:
+            try:
+                logger.remove(self._log_sink_id)
+            except ValueError:
+                pass
+            self._log_sink_id = None
+
+        show_debug = bool(load_config().gui_show_debug_activity)
+        level = "DEBUG" if show_debug else "INFO"
+
         def sink(message: str) -> None:
             self.after(0, lambda m=message: self._append_log(m.rstrip()))
 
-        self._log_sink_id = logger.add(sink, format="{time:HH:mm:ss} | {level:<7} | {message}")
+        self._log_sink_id = logger.add(
+            sink,
+            level=level,
+            format="{time:HH:mm:ss} | {level:<7} | {message}",
+        )
 
     def _append_log(self, line: str) -> None:
         self._log.configure(state=tk.NORMAL)

@@ -342,6 +342,16 @@ SETTINGS: list[SettingField] = [
         "Vision",
         ("vision", "donate_button_threshold"),
     ),
+    SettingField(
+        "gui_show_debug_activity",
+        "Show DEBUG messages in activity log",
+        "When enabled, Home → Activity also shows DEBUG lines (ADB commands, screen "
+        "classifications, etc.). Leave off for a quieter log of INFO and above.",
+        "bool",
+        lambda c: c.gui_show_debug_activity,
+        "Interface",
+        ("gui", "show_debug_activity"),
+    ),
 ]
 
 

@@ -74,6 +74,7 @@ class BotConfig:
     farm_deploy_rage: bool = True
     farm_rage_count: int = 5
     farm_rage_inward_frac: float = 0.22
+    gui_show_debug_activity: bool = False
     data_dir: Path = field(default_factory=lambda: _project_root() / "data")
     templates_dir: Path = field(default_factory=lambda: _project_root() / "data" / "templates")
 
@@ -235,6 +236,7 @@ def load_config(
         farm_deploy_rage=bool(farm.get("deploy_rage", True)),
         farm_rage_count=max(0, min(20, int(farm.get("rage_count", 5)))),
         farm_rage_inward_frac=max(0.0, min(0.45, float(farm.get("rage_inward_frac", 0.22)))),
+        gui_show_debug_activity=bool((merged.get("gui") or {}).get("show_debug_activity", False)),
         data_dir=root / "data",
         templates_dir=root / "data" / "templates",
     )

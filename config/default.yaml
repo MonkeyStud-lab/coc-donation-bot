@@ -56,3 +56,7 @@ farm:
   deploy_rage: true               # drop rage spells after troops/heroes
   rage_count: 5                   # how many rage drops (select once, then tap the map)
   rage_inward_frac: 0.22          # how far toward the base from the troop line (screen fraction)
+
+# Control window (GUI)
+gui:
+  show_debug_activity: false      # DEBUG lines in Home activity log (noisy; leave off normally)

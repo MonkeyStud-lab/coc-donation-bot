@@ -164,10 +164,11 @@ class EdgeDeployer:
         side: str | None = None,
     ) -> list[tuple[int, int]]:
         """
-        Spread rage drops slightly toward the base from the troop column.
+        Spread rage drops deep into the base, well past the troop column.
 
-        Rage covers a wide area — fewer, spaced taps beat stacking on the troop line.
-        For a left-edge deploy that means a bit to the right of the troops.
+        Rage covers a wide area — place them far apart vertically so AoEs
+        barely overlap. For a left-edge deploy that means well to the right
+        of the troops.
         """
         if not troop_points:
             return []
@@ -181,23 +182,16 @@ class EdgeDeployer:
         inward = int(w * float(self.config.farm_rage_inward_frac))
         # Toward the village from the deploy edge (rightward when deploying left).
         rx = troop_x + inward if side == "left" else troop_x - inward
-        rx = max(int(w * 0.06), min(int(w * 0.94), rx))
+        rx = max(int(w * 0.08), min(int(w * 0.92), rx))
 
-        y0 = min(p[1] for p in troop_points)
-        y1 = max(p[1] for p in troop_points)
-        if y1 <= y0:
-            y0, y1 = int(h * 0.20), int(h * 0.65)
+        # Use most of the playfield height so drops sit far apart.
+        y0, y1 = int(h * 0.12), int(h * 0.74)
 
         if count == 1:
             points = [(rx, (y0 + y1) // 2)]
         else:
-            # Keep drops away from the extreme ends so AoE sits on the push path.
-            margin = 0.12
             points = [
-                (
-                    rx,
-                    int(y0 + (y1 - y0) * (margin + (1.0 - 2 * margin) * i / (count - 1))),
-                )
+                (rx, int(y0 + (y1 - y0) * i / (count - 1)))
                 for i in range(count)
             ]
 

@@ -55,4 +55,4 @@ farm:
   activate_hero_abilities: true   # re-tap each hero icon after placing to fire ability
   deploy_rage: true               # drop rage spells after troops/heroes
   rage_count: 5                   # how many rage drops (select once, then tap the map)
-  rage_inward_frac: 0.10          # how far toward the base from the troop line (screen fraction)
+  rage_inward_frac: 0.22          # how far toward the base from the troop line (screen fraction)

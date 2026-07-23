@@ -261,8 +261,8 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "farm_rage_inward_frac",
         "Rage inward offset",
-        "How far toward the village from the troop column (screen fraction, e.g. 0.08). "
-        "On a left deploy this is slightly to the right of the troops.",
+        "How far toward the village from the troop column (screen fraction, e.g. 0.22). "
+        "On a left deploy this is well to the right of the troops.",
         "float",
         lambda c: c.farm_rage_inward_frac,
         "Farm",
@@ -371,8 +371,8 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
             parsed = float(str(raw).strip())
             if field.key == "farm_pan_swipes" and parsed < 0:
                 raise ValueError("Camera pan swipes cannot be negative")
-            if field.key == "farm_rage_inward_frac" and (parsed < 0 or parsed > 0.25):
-                raise ValueError("Rage inward offset must be between 0 and 0.25")
+            if field.key == "farm_rage_inward_frac" and (parsed < 0 or parsed > 0.45):
+                raise ValueError("Rage inward offset must be between 0 and 0.45")
         elif field.kind == "int_pair":
             parsed = parse_int_pair(str(raw))
         else:

@@ -503,6 +503,18 @@ class AttackNavigator:
                     continue
                 return True
 
+            # Defeat/victory card often still looks like a battle tray. If the green
+            # Return Home CTA is visible, leave — do not sit in the "still in battle" wait.
+            if self.classifier.find_return_home_button(frame) is not None:
+                logger.info(
+                    "Return Home button visible (screen={}) — tapping to leave",
+                    screen.value,
+                )
+                self._tap_return_home(frame)
+                if self._sleep(1.6):
+                    return False
+                continue
+
             results = screen == ScreenType.BATTLE_RESULTS or self.classifier._looks_like_battle_results(  # noqa: SLF001
                 frame
             )

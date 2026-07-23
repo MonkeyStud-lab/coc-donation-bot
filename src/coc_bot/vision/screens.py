@@ -85,23 +85,40 @@ class ScreenClassifier:
         return self._template_visible(frame, "clan_chat")
 
     def _in_clan_chat_context(self, frame: np.ndarray) -> bool:
-        """Chat UI is on screen (panel open or closed). Not true on the village/home screen."""
+        """
+        Chat panel area looks filled (clan chat open).
+
+        Village home often paints busy scenery into the chat ROI — never treat
+        home (chat bubble / Attack!) as clan-chat context.
+        """
+        if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
+            return False
         chat_std = self._roi_std(frame, "chat_panel")
-        return chat_std is not None and chat_std > 15
+        return chat_std is not None and chat_std > 22
 
     def _donation_panel_heuristic(self, frame: np.ndarray) -> bool:
-        """Fallback when clan_chat anchor is obscured by the donation popup."""
+        """
+        Donation popup over clan chat (troop + spell bars).
+
+        Must not fire on village home or plain clan chat — those ROIs are often busy.
+        """
+        if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
+            return False
         if self._template_visible(frame, "donation_panel"):
             return True
 
         troop_std = self._roi_std(frame, "donation_troop_bar")
         spell_std = self._roi_std(frame, "donation_spell_bar")
 
-        # Require both bars — a single busy ROI false-matches on home/chat backgrounds.
-        if troop_std is not None and spell_std is not None:
-            return troop_std > 20 and spell_std > 20
-
-        return False
+        # Both bars must look very structured; raise bar so chat/home chrome does not match.
+        if troop_std is None or spell_std is None:
+            return False
+        if troop_std < 38 or spell_std < 38:
+            return False
+        # Strong match, or modal dimming typical of the donate popup.
+        if troop_std > 50 and spell_std > 50:
+            return True
+        return self._has_dimmed_modal_overlay(frame)
 
     def is_home_screen(self, frame: np.ndarray) -> bool:
         return self._is_home_screen(frame)
@@ -372,7 +389,17 @@ class ScreenClassifier:
         ):
             return ScreenType.BATTLE_RESULTS
 
-        # Prefer chat/donation before home/battle — donation bars look busy.
+        # Chat bubble / Attack! on village ⇒ home BEFORE donation/chat ROI heuristics
+        # (those ROIs false-match busy village scenery).
+        if self._open_chat_icon_visible(frame):
+            return ScreenType.HOME
+
+        if self._home_attack_chip_visible(frame) and not self._looks_like_battle(frame):
+            if self._looks_like_attack_menu(frame):
+                return ScreenType.ATTACK_MENU
+            return ScreenType.HOME
+
+        # Prefer chat/donation — donation bars only after home is ruled out.
         if self._clan_chat_anchor_visible(frame):
             return ScreenType.CLAN_CHAT
 
@@ -381,18 +408,6 @@ class ScreenClassifier:
 
         if self._in_clan_chat_context(frame):
             return ScreenType.CLAN_CHAT
-
-        # Chat bubble on screen ⇒ village home (not battle / not attack menu).
-        if self._open_chat_icon_visible(frame):
-            return ScreenType.HOME
-
-        # Village Attack! chip (no open_chat template) — still home unless battle chrome.
-        if self._home_attack_chip_visible(frame):
-            if self._looks_like_attack_menu(frame):
-                return ScreenType.ATTACK_MENU
-            if self._looks_like_battle(frame):
-                return ScreenType.BATTLE
-            return ScreenType.HOME
 
         if self._is_home_screen(frame):
             return ScreenType.HOME

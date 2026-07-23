@@ -97,8 +97,9 @@ class EdgeDeployer:
         ]
 
     def _army_bar_point(self, frame: np.ndarray, nx: float) -> tuple[int, int]:
+        """Troop/hero cards sit on the bottom army bar during battle (not the top HUD)."""
         h, w = frame.shape[:2]
-        return int(w * nx), int(h * 0.91)
+        return int(w * nx), int(h * 0.93)
 
     def select_edrag_slot(self, frame: np.ndarray) -> None:
         """Tap the first troop card (e-drags expected as the active army)."""
@@ -107,12 +108,12 @@ class EdgeDeployer:
             self.input.tap(int(point[0]), int(point[1]))
         else:
             x, y = self._army_bar_point(frame, 0.10)
-            logger.info("Selecting e-drag slot at fallback ({}, {})", x, y)
+            logger.info("Selecting e-drag slot at bottom bar ({}, {})", x, y)
             self.input.tap(x, y)
         time.sleep(0.25)
 
     def hero_slot_points(self, frame: np.ndarray) -> list[tuple[int, int]]:
-        """Return up to 4 hero card centers on the army bar."""
+        """Return up to 4 hero card centers on the bottom army bar."""
         count = max(0, min(4, int(self.config.farm_hero_count)))
         points: list[tuple[int, int]] = []
         for i in range(1, count + 1):
@@ -124,9 +125,9 @@ class EdgeDeployer:
             return points[:count]
 
         h, w = frame.shape[:2]
-        y = int(h * 0.91)
+        y = int(h * 0.93)
         xs = [0.52, 0.58, 0.64, 0.70][:count]
-        logger.info("Using default hero slot x positions {}", xs)
+        logger.info("Using default bottom-bar hero slot x positions {}", xs)
         return [(int(w * nx), y) for nx in xs]
 
     def dump_army_along_edge(

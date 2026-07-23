@@ -129,6 +129,7 @@ class CalibrationWizard:
         self.client = AdbClient(device=self.config.adb_device)
         self.capture = ScreenCapture(self.client)
         self.input = InputController(self.client, dry_run=False)
+        self.capture.bind_input(self.input)
         self.templates_dir = self.config.templates_dir
         self.templates_dir.mkdir(parents=True, exist_ok=True)
         if self.config.calibrated:

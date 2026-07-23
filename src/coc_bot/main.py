@@ -68,6 +68,8 @@ class DonationBot:
             delay_ms=self.config.action_delay_ms,
             dry_run=dry_run,
         )
+        self.capture.bind_input(self.nav_input)
+        self.capture.bind_input(self.donation_input)
         self.app = AppController(self.client, self.config, self.capture)
         self.matcher = TemplateMatcher(
             threshold=self.config.template_threshold,

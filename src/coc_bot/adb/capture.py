@@ -51,6 +51,15 @@ class ScreenCapture:
         self.client = client
         self.max_retries = max_retries
         self._last_size: tuple[int, int] | None = None
+        # InputControllers kept in sync so taps match screencap pixels.
+        self._inputs: list = []
+
+    def bind_input(self, input_ctrl) -> None:
+        """Link an InputController so its tap coords track screencap resolution."""
+        if input_ctrl not in self._inputs:
+            self._inputs.append(input_ctrl)
+        if self._last_size is not None:
+            input_ctrl.set_frame_size(*self._last_size)
 
     @property
     def last_size(self) -> tuple[int, int] | None:
@@ -97,6 +106,8 @@ class ScreenCapture:
                         continue
                     h, w = frame.shape[:2]
                     self._last_size = (w, h)
+                    for inp in self._inputs:
+                        inp.set_frame_size(w, h)
                     if attempt > 1 or method_name != "exec-out png":
                         logger.info("Screencap OK via {} ({}x{})", method_name, w, h)
                     return frame

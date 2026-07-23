@@ -145,22 +145,39 @@ class ScreenClassifier:
         """
         Multiplayer Attack picker (Ranked / Battle) without requiring a template.
 
-        Looks for a dimmed village + a large center card with a green Battle-style button.
+        Modern CoC shows a large center card with green action buttons after Attack!.
         """
         if self._template_visible(frame, "attack_menu") or self._template_visible(
             frame, "unranked_battle"
         ):
             return True
-        if not self._has_dimmed_modal_overlay(frame):
-            return False
+
         h, w = frame.shape[:2]
-        # Battle / Find-a-Match green sits in the lower half of the modal, often right side.
-        crop = frame[int(h * 0.48) : int(h * 0.82), int(w * 0.35) : int(w * 0.78)]
-        if crop.size == 0:
+        # Home Attack! chip lives bottom-left — if that warm rectangle is gone and a
+        # bright center card + green button appear, the picker is open.
+        bl = frame[int(h * 0.78) : h, 0 : int(w * 0.14)]
+        attack_chip = False
+        if bl.size:
+            hsv_bl = cv2.cvtColor(bl, cv2.COLOR_BGR2HSV)
+            warm = cv2.inRange(hsv_bl, (5, 70, 70), (35, 255, 255))
+            attack_chip = float(warm.mean()) / 255.0 > 0.08
+
+        center = frame[int(h * 0.18) : int(h * 0.82), int(w * 0.18) : int(w * 0.82)]
+        if center.size == 0:
             return False
-        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-        green = cv2.inRange(hsv, (35, 90, 80), (90, 255, 255))
-        return float(green.mean()) / 255.0 > 0.04
+        gray = cv2.cvtColor(center, cv2.COLOR_BGR2GRAY)
+        bright_frac = float((gray > 200).mean())
+        hsv = cv2.cvtColor(center, cv2.COLOR_BGR2HSV)
+        green = cv2.inRange(hsv, (35, 70, 70), (95, 255, 255))
+        green_frac = float(green.mean()) / 255.0
+
+        # Strict path: dimmed modal (legacy heuristic).
+        if self._has_dimmed_modal_overlay(frame) and green_frac > 0.03:
+            return True
+        # Loose path: Attack chip gone + bright card + green CTA (new UI / Waydroid).
+        if (not attack_chip) and bright_frac > 0.10 and green_frac > 0.025:
+            return True
+        return False
 
     def _looks_like_matchmaking(self, frame: np.ndarray) -> bool:
         """Cloud search screen — optional template, else soft blue-sky heuristic."""

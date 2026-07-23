@@ -22,6 +22,39 @@ class InputController:
         self.jitter_px = jitter_px
         self.delay_ms = delay_ms
         self.dry_run = dry_run
+        # Screencap size of the last mapped frame (width, height).
+        self._frame_size: tuple[int, int] | None = None
+        self._touch_size: tuple[int, int] | None = None
+        self._touch_size_checked = False
+
+    def set_frame_size(self, width: int, height: int) -> None:
+        """Tell the input layer the current screencap resolution for tap scaling."""
+        self._frame_size = (int(width), int(height))
+
+    def _ensure_touch_size(self) -> None:
+        if self._touch_size_checked:
+            return
+        self._touch_size_checked = True
+        self._touch_size = self.client.wm_size()
+        if self._touch_size and self._frame_size and self._touch_size != self._frame_size:
+            logger.warning(
+                "Scaling taps: screencap {}x{} → touch {}x{}",
+                self._frame_size[0],
+                self._frame_size[1],
+                self._touch_size[0],
+                self._touch_size[1],
+            )
+
+    def _to_touch(self, x: int, y: int) -> tuple[int, int]:
+        """Map screencap pixel coords to ``input tap`` coords when sizes differ."""
+        self._ensure_touch_size()
+        if not self._frame_size or not self._touch_size:
+            return x, y
+        fw, fh = self._frame_size
+        tw, th = self._touch_size
+        if fw <= 0 or fh <= 0 or (fw, fh) == (tw, th):
+            return x, y
+        return int(round(x * tw / fw)), int(round(y * th / fh))
 
     def _sleep(self) -> None:
         lo, hi = self.delay_ms
@@ -31,6 +64,7 @@ class InputController:
         j = self.jitter_px if jitter is None else max(0, int(jitter))
         tx = x + (random.randint(-j, j) if j else 0)
         ty = y + (random.randint(-j, j) if j else 0)
+        tx, ty = self._to_touch(tx, ty)
         if self.dry_run:
             logger.info("[DRY-RUN] tap ({}, {})", tx, ty)
         else:
@@ -38,6 +72,8 @@ class InputController:
         self._sleep()
 
     def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300) -> None:
+        x1, y1 = self._to_touch(x1, y1)
+        x2, y2 = self._to_touch(x2, y2)
         if self.dry_run:
             logger.info("[DRY-RUN] swipe ({},{}) -> ({},{}), {}ms", x1, y1, x2, y2, duration_ms)
         else:

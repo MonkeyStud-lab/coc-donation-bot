@@ -567,6 +567,7 @@ class BotControlApp(tk.Tk):
                     delay_ms=cfg.action_delay_ms,
                     dry_run=False,
                 )
+                capture.bind_input(inp)
                 matcher = TemplateMatcher(
                     threshold=cfg.template_threshold,
                     scale_range=cfg.scale_range,

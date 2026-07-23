@@ -35,6 +35,7 @@ class DebugSession:
             delay_ms=self.config.action_delay_ms,
             dry_run=False,
         )
+        self.capture.bind_input(self.input)
         self.matcher = TemplateMatcher(
             threshold=self.config.template_threshold,
             scale_range=self.config.scale_range,

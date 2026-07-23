@@ -97,6 +97,40 @@ class AdbClient:
             time.sleep(self.backoff_seconds * attempt)
         raise AdbError(f"Unable to connect to ADB device {self.device}")
 
+    def wm_size(self) -> tuple[int, int] | None:
+        """
+        Return the touch/display size Android uses for ``input tap`` (width, height).
+
+        Prefers Override size when set, else Physical size. Screencap can differ
+        from this on some Waydroid setups — taps must be scaled accordingly.
+        """
+        try:
+            result = self.run_shell("wm size", check=False)
+        except (AdbError, FileNotFoundError):
+            return None
+        text = (result.stdout or "") + "\n" + (result.stderr or "")
+        override: tuple[int, int] | None = None
+        physical: tuple[int, int] | None = None
+        for line in text.splitlines():
+            line = line.strip()
+            if "Override size:" in line:
+                part = line.split(":", 1)[-1].strip()
+                if "x" in part:
+                    a, b = part.lower().split("x", 1)
+                    try:
+                        override = (int(a.strip()), int(b.strip()))
+                    except ValueError:
+                        pass
+            elif "Physical size:" in line or "size:" in line.lower():
+                part = line.split(":", 1)[-1].strip()
+                if "x" in part:
+                    a, b = part.lower().split("x", 1)
+                    try:
+                        physical = (int(a.strip()), int(b.strip()))
+                    except ValueError:
+                        pass
+        return override or physical
+
     def health_check(self) -> tuple[int, int]:
         """Verify device is reachable and screencap works. Returns (width, height)."""
         self.ensure_connected()
@@ -107,5 +141,15 @@ class AdbClient:
         h, w = frame.shape[:2]
         if w <= 0 or h <= 0:
             raise AdbError("Screencap returned invalid frame dimensions")
-        logger.info("ADB health check OK: {}x{}", w, h)
+        touch = self.wm_size()
+        if touch and touch != (w, h):
+            logger.warning(
+                "ADB health check: screencap {}x{} but wm size {}x{} — taps will be scaled",
+                w,
+                h,
+                touch[0],
+                touch[1],
+            )
+        else:
+            logger.info("ADB health check OK: {}x{}", w, h)
         return w, h

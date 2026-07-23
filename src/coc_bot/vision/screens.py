@@ -256,6 +256,11 @@ class ScreenClassifier:
         Prefer template / \"Donation Resource\" title. A white card alone is not
         enough (clan chat light areas false-positive). Troop+spell bars confirm.
         """
+        # Battle results silhouettes / card — never a donation panel.
+        if self.looks_like_results_side_silhouettes(frame):
+            return False
+        if self._looks_like_battle_results(frame):
+            return False
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
             return False
         # Clan-chat anchor is covered by the popup — if it is still visible, we
@@ -575,10 +580,13 @@ class ScreenClassifier:
         Used to veto false \"Return Home\" / results detections mid-fight.
         Never true when village home anchors are visible (Attack! / open chat) —
         home scenery (red roofs, orange UI) otherwise false-triggers this.
+        Never true on battle-results side silhouettes.
         """
         if self._home_attack_chip_visible(frame) or self._open_chat_icon_visible(frame):
             return False
         if self._clan_chat_anchor_visible(frame):
+            return False
+        if self.looks_like_results_side_silhouettes(frame):
             return False
 
         h, w = frame.shape[:2]
@@ -688,7 +696,9 @@ class ScreenClassifier:
             return True
         if self._clan_chat_anchor_visible(frame):
             return False
-        # Victory/defeat summary can show a troop icon — never treat as live battle.
+        # Victory/defeat summary — side silhouettes / results card, not live fight.
+        if self.looks_like_results_side_silhouettes(frame):
+            return False
         if self._looks_like_battle_results(frame):
             return False
         # Village home anchors / quiet chat panel — never battle.
@@ -738,24 +748,53 @@ class ScreenClassifier:
         dark_tray = dark_frac > 0.25
         return structured or dark_tray
 
+    def looks_like_results_side_silhouettes(self, frame: np.ndarray) -> bool:
+        """
+        Huge near-black character silhouettes on the left and right of battle results.
+
+        Defeat/Victory screens frame the loot card with opaque black Archer/Wizard
+        (etc.) cutouts. Donation panels and live battles do not have these.
+        """
+        h, w = frame.shape[:2]
+        y0, y1 = int(h * 0.22), int(h * 0.96)
+        left = frame[y0:y1, 0 : int(w * 0.14)]
+        right = frame[y0:y1, int(w * 0.86) : w]
+        if left.size == 0 or right.size == 0:
+            return False
+
+        def _near_black_frac(crop: np.ndarray) -> float:
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            # Solid silhouette ink — very dark, low variance blobs.
+            return float((gray < 45).mean())
+
+        left_frac = _near_black_frac(left)
+        right_frac = _near_black_frac(right)
+        # Both edges must be heavily inked (one side alone can be night scenery).
+        return left_frac > 0.28 and right_frac > 0.28
+
     def _looks_like_battle_results(self, frame: np.ndarray) -> bool:
         """
         End-of-attack screen with a large green Return Home / OK button.
 
         Distinct from live scout/battle: no Next, no End Battle, big green CTA.
         Must NOT match clan chat / Donate button screens.
+        Side silhouettes are a strong modern CoC results cue.
         """
-        # Still fighting — never results.
-        if self._live_battle_chrome_visible(frame):
-            return False
+        # Still fighting — never results (unless silhouettes prove results card).
         if self.looks_like_live_replay(frame):
             return False
-        # Real chat/donate UI — never Return Home.
+        # Real chat/donate / home UI — never Return Home.
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
             return False
         if self._clan_chat_anchor_visible(frame):
             return False
         if self._template_visible(frame, "donate_button"):
+            return False
+
+        if self.looks_like_results_side_silhouettes(frame):
+            return True
+
+        if self._live_battle_chrome_visible(frame):
             return False
 
         if self._template_visible(frame, "return_home") or self._template_visible(
@@ -807,6 +846,11 @@ class ScreenClassifier:
             return ScreenType.LIVE_REPLAY
         if self._home_blocking_popup(frame):
             return ScreenType.POPUP
+        # Farm leave can land here with results still up — never treat as donate UI.
+        if self._looks_like_battle_results(frame) or self.looks_like_results_side_silhouettes(
+            frame
+        ):
+            return ScreenType.BATTLE_RESULTS
         if self._donation_panel_heuristic(frame):
             return ScreenType.DONATION_PANEL
         if self._clan_chat_anchor_visible(frame):
@@ -837,15 +881,20 @@ class ScreenClassifier:
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
             return ScreenType.HOME
 
-        # Live End Battle / Next wins over any false Return Home green blob.
-        if self._live_battle_chrome_visible(frame):
-            return ScreenType.BATTLE
-        if self._looks_like_battle_results(frame):
+        # Side silhouettes / results card before live-battle chrome (Defeat red text
+        # and troop icons otherwise look like a live fight).
+        if self._looks_like_battle_results(frame) or self.looks_like_results_side_silhouettes(
+            frame
+        ):
             return ScreenType.BATTLE_RESULTS
         if self._template_visible(frame, "return_home") or self._template_visible(
             frame, "battle_end"
         ):
             return ScreenType.BATTLE_RESULTS
+
+        # Live End Battle / Next wins over any false Return Home green blob.
+        if self._live_battle_chrome_visible(frame):
+            return ScreenType.BATTLE
         if self._looks_like_battle(frame):
             return ScreenType.BATTLE
         if self._looks_like_matchmaking(frame):
@@ -876,6 +925,17 @@ class ScreenClassifier:
                 return ScreenType.ATTACK_MENU
             return ScreenType.HOME
 
+        # Battle results (silhouettes) before donation panel — results loot card
+        # otherwise looks like a white donation popup.
+        if self._looks_like_battle_results(frame) or self.looks_like_results_side_silhouettes(
+            frame
+        ):
+            return ScreenType.BATTLE_RESULTS
+        if self._template_visible(frame, "return_home") or self._template_visible(
+            frame, "battle_end"
+        ):
+            return ScreenType.BATTLE_RESULTS
+
         # Donation popup before clan_chat anchor.
         if self._donation_panel_heuristic(frame):
             return ScreenType.DONATION_PANEL
@@ -888,17 +948,6 @@ class ScreenClassifier:
 
         if self._live_battle_chrome_visible(frame):
             return ScreenType.BATTLE
-
-        if self.looks_like_live_replay(frame):
-            return ScreenType.LIVE_REPLAY
-
-        if self._looks_like_battle_results(frame):
-            return ScreenType.BATTLE_RESULTS
-
-        if self._template_visible(frame, "return_home") or self._template_visible(
-            frame, "battle_end"
-        ):
-            return ScreenType.BATTLE_RESULTS
 
         if self._in_clan_chat_context(frame):
             return ScreenType.CLAN_CHAT

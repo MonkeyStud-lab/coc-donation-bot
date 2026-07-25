@@ -348,9 +348,14 @@ def pick_deploy_sequence(
     initial_points: list[tuple[int, int]] | None = None,
     refresh_cb: Callable[[], np.ndarray] | None = None,
     title: str = "Program farm deploy taps",
+    master=None,
 ) -> tuple[list[tuple[int, int]] | None, int, np.ndarray]:
     """
-    Open the sequence editor.
+    Open the sequence editor on the Tk main thread.
+
+    Pass ``master`` (the BotControlApp window) when launching from the GUI so we
+    use a ``Toplevel`` instead of a second ``Tk()`` — required because Tools run
+    ADB work off-thread and the editor must open on the UI thread.
 
     Returns ``(points_or_None_if_cancelled, jitter_px, frame_used)``.
     """
@@ -360,18 +365,38 @@ def pick_deploy_sequence(
         logger.error("tkinter not available — cannot open sequence picker")
         return None, jitter_px, frame
 
-    root = tk.Tk()
-    picker = SequencePicker(
-        root,
-        frame,
-        title=title,
-        jitter_px=jitter_px,
-        initial_points=initial_points,
-        on_jitter_change=persist_farm_deploy_jitter,
-    )
+    if master is not None:
+        root = tk.Toplevel(master)
+        root.transient(master)
+        root.grab_set()
+    else:
+        root = tk.Tk()
+
+    try:
+        picker = SequencePicker(
+            root,
+            frame,
+            title=title,
+            jitter_px=jitter_px,
+            initial_points=initial_points,
+            on_jitter_change=persist_farm_deploy_jitter,
+        )
+    except Exception:
+        logger.exception("Failed to build sequence picker window")
+        try:
+            root.destroy()
+        except Exception:  # noqa: BLE001
+            pass
+        return None, jitter_px, frame
+
     if refresh_cb is not None:
         picker.set_refresh_callback(refresh_cb)
-    root.mainloop()
+
+    if master is not None:
+        master.wait_window(root)
+    else:
+        root.mainloop()
+
     if not picker.saved or picker.result is None:
         return None, picker.jitter_px, picker.frame_bgr
     return picker.result, picker.jitter_px, picker.frame_bgr

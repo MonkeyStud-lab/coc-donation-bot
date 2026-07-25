@@ -239,14 +239,13 @@ class DebugSession:
             f"Full ladder has {len(points)} points."
         )
 
-    def farm_program_deploy_sequence(self) -> str:
+    def prepare_farm_program_deploy(self) -> dict:
         """
-        Pan on the current battle view, then open the ordered-tap editor.
+        ADB-only prep for the deploy editor (safe on a worker thread).
 
-        User must already be on the battlefield (after Find a Match).
+        Returns side/pan_swipes/frame/initial taps for ``finish_farm_program_deploy``.
         """
-        from coc_bot.calibration.sequence_picker import pick_deploy_sequence
-        from coc_bot.config import load_config, normalize_farm_deploy_sequence, save_calibrated
+        from coc_bot.config import normalize_farm_deploy_sequence
 
         self.client.health_check()
         side = self.config.farm_deploy_side
@@ -260,16 +259,34 @@ class DebugSession:
         self.deployer.pan_to_deploy_side(frame, side=side, pan_swipes=pans)
         time.sleep(0.5)
         frame = self.capture.screenshot()
-
         existing = normalize_farm_deploy_sequence(self.config.farm_deploy_sequence)
         initial = [(int(x), int(y)) for x, y in existing.get("taps") or []]
+        return {
+            "side": side,
+            "pan_swipes": pans,
+            "frame": frame,
+            "initial": initial,
+            "jitter_px": int(self.config.farm_deploy_jitter_px),
+        }
 
+    def finish_farm_program_deploy(self, prep: dict, *, master=None) -> str:
+        """
+        Open the click editor (must run on the Tk UI thread) and save the sequence.
+        """
+        from coc_bot.calibration.sequence_picker import pick_deploy_sequence
+        from coc_bot.config import load_config, save_calibrated
+
+        side = prep["side"]
+        pans = float(prep["pan_swipes"])
+        frame = prep["frame"]
+        initial = prep.get("initial") or []
         points, jitter, used = pick_deploy_sequence(
             frame,
-            jitter_px=self.config.farm_deploy_jitter_px,
+            jitter_px=int(prep.get("jitter_px", 6)),
             initial_points=initial or None,
             refresh_cb=self.capture.screenshot,
             title="Program farm deploy taps",
+            master=master,
         )
         if points is None:
             return "Program farm deploy cancelled — sequence unchanged."
@@ -295,6 +312,16 @@ class DebugSession:
             "Farm attacks will replay this instead of the built-in e-drag recipe. "
             "Stop/Start the bot if it is already running."
         )
+
+    def farm_program_deploy_sequence(self) -> str:
+        """
+        Pan then open editor — for CLI / non-GUI callers only.
+
+        From the BotControlApp Tools/Setup buttons, use prepare + finish on the
+        UI thread (Tk cannot open windows from a worker thread).
+        """
+        prep = self.prepare_farm_program_deploy()
+        return self.finish_farm_program_deploy(prep, master=None)
 
     def farm_clear_deploy_sequence(self) -> str:
         """Remove the programmed deploy sequence (revert to built-in recipe)."""

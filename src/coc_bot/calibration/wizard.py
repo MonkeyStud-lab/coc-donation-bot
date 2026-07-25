@@ -562,9 +562,9 @@ class CalibrationWizard:
                 if only_part == "deploy_sequence":
                     print(
                         "\nDeploy tap sequence is programmed from the GUI:\n"
-                        "  Setup → Program farm deploy sequence\n"
+                        "  Setup → Farm → Deploy tap sequence → Recalibrate Selected\n"
                         "  (or Tools → Farm: program deploy sequence)\n"
-                        "Enter an unranked battle first, then run that button.\n"
+                        "Enter an unranked battle first.\n"
                     )
                     continue
             title = STEPS[step_id].title
@@ -920,7 +920,7 @@ class CalibrationWizard:
                 "\n=== Farm / unranked attack ===\n"
                 "IMPORTANT: Leave your electro dragon army as the ACTIVE army preset.\n"
                 "The bot does not train troops or switch armies.\n"
-                "Deploy tap sequence: use Setup → Program farm deploy sequence.\n"
+                "Deploy tap sequence: Setup → Farm → Deploy tap sequence.\n"
             )
 
         if self._want_part("attack_button"):
@@ -1045,8 +1045,8 @@ class CalibrationWizard:
 
         if self._only_part is None:
             print(
-                "\nFarm calibration done. Program deploy taps via Setup → "
-                "Program farm deploy sequence when ready.\n"
+                "\nFarm calibration done. Program deploy taps via Setup → Farm → "
+                "Deploy tap sequence when ready.\n"
             )
 
     def step_optional(self) -> None:

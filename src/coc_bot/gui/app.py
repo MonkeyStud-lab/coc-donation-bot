@@ -385,53 +385,15 @@ class BotControlApp(tk.Tk):
             page,
             text="Calibration teaches the bot where buttons and bars are on your screen. "
             "Select a step or a single part below, then Recalibrate Selected "
-            "(parts skip the rest of that step). Open Waydroid and Clash first.",
+            "(parts skip the rest of that step). Open Waydroid and Clash first. "
+            "Farm deploy sequence: Farm → Deploy tap sequence (be in battle first).",
             bg=BG,
             fg=TEXT_SECONDARY,
             font=ui_font(10),
             wraplength=720,
             justify=tk.LEFT,
             anchor="w",
-        ).pack(fill=tk.X, pady=(0, 8))
-
-        farm_card = self._card(page, pady=(0, 10))
-        farm_pad = tk.Frame(farm_card, bg=SURFACE_2)
-        farm_pad.pack(fill=tk.X, padx=14, pady=12)
-        tk.Label(
-            farm_pad,
-            text="Farm deploy sequence",
-            bg=SURFACE_2,
-            fg=TEXT,
-            font=ui_font(12, "bold"),
-            anchor="w",
-        ).pack(fill=tk.X)
-        tk.Label(
-            farm_pad,
-            text="Enter an unranked battle first, then Program. The bot pans your "
-            "deploy edge and opens a click editor — tap army-bar icons and map drops "
-            "in order. Clear removes the sequence (back to the built-in e-drag recipe). "
-            "Also listed under Tools.",
-            bg=SURFACE_2,
-            fg=TEXT_SECONDARY,
-            font=ui_font(10),
-            wraplength=680,
-            justify=tk.LEFT,
-            anchor="w",
-        ).pack(fill=tk.X, pady=(4, 8))
-        farm_btns = tk.Frame(farm_pad, bg=SURFACE_2)
-        farm_btns.pack(fill=tk.X)
-        ttk.Button(
-            farm_btns,
-            text="Program farm deploy sequence",
-            style="Accent.TButton",
-            command=lambda: self._run_debug("farm_program_deploy"),
-        ).pack(side=tk.LEFT)
-        ttk.Button(
-            farm_btns,
-            text="Clear sequence",
-            style="Secondary.TButton",
-            command=lambda: self._run_debug("farm_clear_deploy"),
-        ).pack(side=tk.LEFT, padx=(8, 0))
+        ).pack(fill=tk.X, pady=(0, 12))
 
         card = self._card(page, pady=(0, 10))
         tree_wrap = tk.Frame(card, bg=SURFACE_2)
@@ -550,6 +512,11 @@ class BotControlApp(tk.Tk):
         self._debug_result.set(f"Running {action_id}…")
         self._append_log(f"==> Tool: {action_id}")
 
+        # Click editor needs the Tk UI thread — pan on a worker, then open here.
+        if action_id == "farm_program_deploy":
+            self._run_farm_program_deploy_tool()
+            return
+
         def worker() -> None:
             result = run_debug_action(action_id)
             logger.info("Tool {}: {}", action_id, result)
@@ -560,6 +527,45 @@ class BotControlApp(tk.Tk):
                 self._append_log(result)
 
             self.after(0, done)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _run_farm_program_deploy_tool(self) -> None:
+        """Pan via ADB off-thread, then open the sequence editor on the UI thread."""
+
+        def worker() -> None:
+            try:
+                session = DebugSession()
+                prep = session.prepare_farm_program_deploy()
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Farm program deploy prepare failed")
+
+                def fail() -> None:
+                    self._debug_busy = False
+                    msg = f"Error preparing farm deploy editor: {exc}"
+                    self._debug_result.set(msg)
+                    self._append_log(msg)
+
+                self.after(0, fail)
+                return
+
+            def open_editor() -> None:
+                try:
+                    result = session.finish_farm_program_deploy(prep, master=self)
+                    logger.info("Tool farm_program_deploy: {}", result)
+                    self._debug_result.set(result)
+                    self._append_log(result)
+                    self._refresh_calib_status()
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("Farm program deploy editor failed")
+                    msg = f"Error opening farm deploy editor: {exc}"
+                    self._debug_result.set(msg)
+                    self._append_log(msg)
+                    messagebox.showerror("Farm deploy editor", msg)
+                finally:
+                    self._debug_busy = False
+
+            self.after(0, open_editor)
 
         threading.Thread(target=worker, daemon=True).start()
 

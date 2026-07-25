@@ -150,7 +150,9 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "farm_interval_seconds",
         "Farm interval (seconds)",
-        "Minimum time between successful auto farm attacks (3600 = one per hour).",
+        "Minimum time between auto farm attacks after a battle is fought "
+        "(7200 = every 2 hours). Applies even if Return Home / chat confirm fails. "
+        "Stop and Start the bot after saving so the running loop picks this up.",
         "int",
         lambda c: c.farm_interval_seconds,
         "Farm",
@@ -197,7 +199,8 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "farm_retry_cooldown_seconds",
         "Farm failure cooldown (seconds)",
-        "After a failed farm, wait this long before retrying (success-only hourly clock).",
+        "Only used when a farm fails before deploy (e.g. could not open Attack). "
+        "After a fought battle, the Farm interval above applies instead.",
         "int",
         lambda c: c.farm_retry_cooldown_seconds,
         "Farm",

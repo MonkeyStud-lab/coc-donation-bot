@@ -86,12 +86,13 @@ class RuntimeTracker:
             return None
 
     def mark_farm_success(self) -> None:
+        """Record that a farm battle was fought (success or post-deploy leave fail)."""
         self.state.last_farm_at = datetime.now(timezone.utc).isoformat()
         save_runtime_state(self.state_path, self.state)
-        logger.info("Recorded successful farm at {}", self.state.last_farm_at)
+        logger.info("Recorded farm interval clock at {}", self.state.last_farm_at)
 
     def seconds_since_last_farm(self) -> float | None:
-        """Seconds since last successful farm, or None if never farmed."""
+        """Seconds since last fought farm battle, or None if never farmed."""
         last = self.last_farm_at()
         if last is None:
             return None

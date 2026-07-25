@@ -152,7 +152,7 @@ Leaving after a fight used to rely heavily on vision mid-battle; that was flaky.
 
 1. **Timer** from first troop deploy (`farm.battle_timeout_seconds`, default **210** = 3m30s)
 2. When the timer ends, **always** tap calibrated **Return Home** coordinates — no vision, no skip
-3. Then confirm village (clan chat / leave rules). Results / green CTA win over a false Attack! chip
+3. Then only look for **home village** (Attack! / open chat / clan chat) and open chat. Do not re-check results/battle heuristics (they false-trigger on home)
 4. Never press Android **BACK** mid-battle (opens Surrender). On the Surrender dialog, tap **Cancel**
 
 False “battle results” during search are ignored unless real side silhouettes appear.
@@ -176,7 +176,7 @@ Dry-run mode still navigates but skips donation taps (navigation input stays liv
 
 - **Stop** sets a cooperative flag. Long sleeps use `interrupted_sleep` ([`src/coc_bot/stop.py`](../src/coc_bot/stop.py)). Clash stays open unless you use **Close Waydroid + Clash**.
 - **Breaks** ([`runtime/breaks.py`](../src/coc_bot/runtime/breaks.py)): after enough active time, force-stop CoC, wait a random break window, relaunch, reopen chat. State lives in `data/runtime_state.json`.
-- **Farm clock:** successful farms advance `last_farm_at`; failures use a shorter retry cooldown.
+- **Farm clock:** any fought battle (deploy happened) advances `last_farm_at` for the interval, even if leave/chat confirm fails. Failures *before* deploy use the shorter retry cooldown.
 
 GUI one-shot farm (**Farm attack now** without Start) wires the same stop flag into the farmer/navigator/deployer.
 

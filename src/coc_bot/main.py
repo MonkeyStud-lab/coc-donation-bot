@@ -269,7 +269,14 @@ class DonationBot:
             return False
         since = self.tracker.seconds_since_last_farm()
         interval = max(60, int(self.config.farm_interval_seconds))
-        return since is None or since >= interval
+        due = since is None or since >= interval
+        if due and since is not None:
+            logger.debug(
+                "Farm due: {:.0f}s since last fight (interval {}s)",
+                since,
+                interval,
+            )
+        return due
 
     def _maybe_run_farm(self) -> bool:
         """Run one farm cycle if due. Returns True if farm work was attempted."""
@@ -286,7 +293,11 @@ class DonationBot:
         if not manual and not self.config.farm_enabled:
             return False
 
-        logger.info("Pausing donations for farm attack (manual={})", manual)
+        logger.info(
+            "Pausing donations for farm attack (manual={}, interval={}s)",
+            manual,
+            max(60, int(self.config.farm_interval_seconds)),
+        )
         self._set_state("farm")
         self.set_mode(BotMode.HOME)
         result = self.farmer.run_one_attack()
@@ -294,14 +305,23 @@ class DonationBot:
             self.set_mode(BotMode.DONATE)
             self._set_state("scan_chat")
             return True
-        if result.success:
+        # Interval clock advances after a fought battle even if leave/chat fails.
+        # Otherwise leave bugs retry every farm_retry_cooldown_seconds (~minutes).
+        if result.success or result.counts_toward_interval:
             self.tracker.mark_farm_success()
             self._farm_fail_cooldown_until = 0.0
+            if not result.success:
+                logger.warning(
+                    "Farm leave/chat failed ({}) — still advancing interval clock "
+                    "({}s until next auto farm)",
+                    result.reason,
+                    max(60, int(self.config.farm_interval_seconds)),
+                )
         else:
             cooldown = max(60, int(self.config.farm_retry_cooldown_seconds))
             self._farm_fail_cooldown_until = time.monotonic() + cooldown
             logger.warning(
-                "Farm failed ({}) — retry cooldown {}s",
+                "Farm failed before deploy ({}) — retry cooldown {}s",
                 result.reason,
                 cooldown,
             )

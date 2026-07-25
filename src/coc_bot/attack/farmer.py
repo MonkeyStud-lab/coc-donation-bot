@@ -20,6 +20,9 @@ from coc_bot.vision.screens import BotMode, ScreenType
 class FarmResult:
     success: bool
     reason: str
+    # True once troops were deployed — advances the auto-farm interval clock even
+    # if leave/chat confirm fails (otherwise failures retry every fail-cooldown).
+    counts_toward_interval: bool = False
 
 
 class AttackFarmer:
@@ -136,25 +139,30 @@ class AttackFarmer:
         deploy_started = time.time()
         taps = self.deployer.dump_army_along_edge(frame)
         logger.info("Deploy finished — {} map taps", taps)
+        # From here on, this attempt counts toward the farm interval clock.
 
         if self._stopping():
-            return FarmResult(False, "stopped")
+            return FarmResult(False, "stopped", counts_toward_interval=True)
 
         # Wait remaining of the fixed battle window, tap Return Home coords, then
         # confirm village with existing Attack!/chat leave rules.
         end_screen = self.attack_nav.wait_for_battle_end(since=deploy_started)
         if self._stopping() or end_screen == ScreenType.UNKNOWN:
-            return FarmResult(False, "stopped")
+            return FarmResult(False, "stopped", counts_toward_interval=True)
 
         logger.info("Confirming leave after battle timer (screen={})", end_screen.value)
         if not self.attack_nav.return_home_from_attack():
             if self._stopping():
-                return FarmResult(False, "stopped")
+                return FarmResult(False, "stopped", counts_toward_interval=True)
             self._abort_to_chat()
-            return FarmResult(False, "could not confirm home after Return Home tap")
+            return FarmResult(
+                False,
+                "could not confirm home after Return Home tap",
+                counts_toward_interval=True,
+            )
 
         if self._stopping():
-            return FarmResult(False, "stopped")
+            return FarmResult(False, "stopped", counts_toward_interval=True)
 
         # Star Bonus / news modals after Return Home — corner-tap dismiss.
         if self.donation_nav is not None:
@@ -168,12 +176,16 @@ class AttackFarmer:
         if self.donation_nav is not None:
             ok = self.donation_nav.ensure_clan_chat()
             if self._stopping():
-                return FarmResult(False, "stopped")
+                return FarmResult(False, "stopped", counts_toward_interval=True)
             if not ok:
-                return FarmResult(False, "attack finished but could not reopen clan chat")
+                return FarmResult(
+                    False,
+                    "attack finished but could not reopen clan chat",
+                    counts_toward_interval=True,
+                )
 
         logger.info("Farm attack completed successfully")
-        return FarmResult(True, "ok")
+        return FarmResult(True, "ok", counts_toward_interval=True)
 
     def _abort_to_chat(self) -> None:
         if self._stopping():

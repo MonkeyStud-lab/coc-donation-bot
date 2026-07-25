@@ -43,12 +43,12 @@ clan:
 # Unranked Battle farming (electro dragons along one edge). Requires farm calibration.
 farm:
   enabled: false
-  interval_seconds: 3600          # auto one attack per hour when enabled
+  interval_seconds: 3600          # min seconds between fought auto farms (even if leave fails)
   deploy_side: left               # left or right side of the defending village
   pan_swipes: 3                   # camera pans toward deploy edge (decimals ok, e.g. 1.25)
   match_timeout_seconds: 120      # clouds / Find a Match
   battle_timeout_seconds: 210     # after first deploy: wait this long, then tap Return Home (3m30s)
-  retry_cooldown_seconds: 300     # wait after a failed farm before retrying
+  retry_cooldown_seconds: 300     # only when farm fails before deploy (menu/matchmaking)
   edrag_deploy_taps: 14           # map taps while e-drags selected (11 troops + spare)
   hero_count: 4                   # heroes to select + place after e-drags
   deploy_siege: true              # select + drop siege machine after e-drags

@@ -453,6 +453,9 @@ class DonationBot:
             if self._stop_requested:
                 return
             self.chat_monitor.open_donation(self._pending_request)
+            from coc_bot.stop import interrupted_sleep
+            if interrupted_sleep(0.5, self.should_stop):
+                return
             if classifier.wait_for_donation_panel(
                 self.capture,
                 timeout_seconds=self.config.donation_panel_wait_seconds,

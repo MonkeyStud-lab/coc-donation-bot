@@ -80,16 +80,27 @@ class SlotColorDetector:
         if colored_hsv is not None and grey_hsv is not None:
             d_color = hsv_distance(sample, colored_hsv)
             d_grey = hsv_distance(sample, grey_hsv)
-            if d_color <= d_grey:
+
+            # Definitively grey: low saturation.  This is the primary gate —
+            # a slot with sat < 15 is always grey regardless of HSV distance,
+            # because the calibrated colour reference itself may have low
+            # saturation (mis-calibration).
+            if sat < 15.0:
+                return False
+
+            # Vividly saturated cells that are clearly NOT grey are donatable
+            # even when the color reference doesn't match exactly (many hues).
+            if sat >= self.saturation_threshold and d_grey >= 25.0:
                 return True
-            # Requested spells/troops use many hues (Lightning blue vs Freeze cyan).
-            # If the cell is vividly saturated and clearly not grey, treat as donatable.
-            if sat >= self.saturation_threshold and d_grey >= 28.0:
+
+            # Close to the calibrated color AND has meaningful saturation.
+            if d_color <= 40.0 and d_color <= d_grey and sat >= 20.0:
                 return True
+
             return False
 
         if colored_hsv is not None:
-            if hsv_distance(sample, colored_hsv) <= 45.0:
+            if hsv_distance(sample, colored_hsv) <= 40.0:
                 return True
             return sat >= self.saturation_threshold
 

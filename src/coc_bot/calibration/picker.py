@@ -1,4 +1,4 @@
-"""Interactive screenshot picker for calibration points and ROIs."""
+"""Seletor interativo de screenshot para pontos e ROIs de calibracao."""
 
 from __future__ import annotations
 
@@ -43,11 +43,11 @@ class InteractivePicker:
         toolbar = ttk.Frame(self.root, padding=6)
         toolbar.pack(side=tk.TOP, fill=tk.X)
 
-        ttk.Button(toolbar, text="New screenshot (r)", command=self.refresh).pack(side=tk.LEFT, padx=4)
-        ttk.Button(toolbar, text="Clear (c)", command=self.clear_points).pack(side=tk.LEFT, padx=4)
-        self.confirm_btn = ttk.Button(toolbar, text="Confirm (Enter)", command=self.confirm)
+        ttk.Button(toolbar, text="Novo screenshot (r)", command=self.refresh).pack(side=tk.LEFT, padx=4)
+        ttk.Button(toolbar, text="Limpar (c)", command=self.clear_points).pack(side=tk.LEFT, padx=4)
+        self.confirm_btn = ttk.Button(toolbar, text="Confirmar (Enter)", command=self.confirm)
         self.confirm_btn.pack(side=tk.LEFT, padx=4)
-        ttk.Button(toolbar, text="Cancel (Esc)", command=self.cancel).pack(side=tk.LEFT, padx=4)
+        ttk.Button(toolbar, text="Cancelar (Esc)", command=self.cancel).pack(side=tk.LEFT, padx=4)
 
         self.status = ttk.Label(toolbar, text=self._hint())
         self.status.pack(side=tk.LEFT, padx=12)
@@ -62,7 +62,7 @@ class InteractivePicker:
 
         ttk.Label(
             self.root,
-            text=f"Image: {self.img_w}x{self.img_h}  |  {self._hint()}",
+            text=f"Imagem: {self.img_w}x{self.img_h}  |  {self._hint()}",
             padding=6,
         ).pack()
 
@@ -76,8 +76,8 @@ class InteractivePicker:
 
     def _hint(self) -> str:
         if self.mode == "point":
-            return "Click once on the target, then Confirm."
-        return "Click top-left, then bottom-right of the region, then Confirm."
+            return "Clique uma vez no alvo, depois Confirmar."
+        return "Clique no canto superior esquerdo, depois no canto inferior direito da regiao, depois Confirmar."
 
     def _set_image(self, pil_image: Image.Image) -> None:
         self.pil_image = pil_image
@@ -119,7 +119,7 @@ class InteractivePicker:
     def on_motion(self, event) -> None:
         x, y = self._to_image_coords(event.x, event.y)
         needed = 1 if self.mode == "point" else 2
-        self.status.config(text=f"Cursor: ({x}, {y})   |   Clicks: {len(self.points)}/{needed}")
+        self.status.config(text=f"Cursor: ({x}, {y})   |   Cliques: {len(self.points)}/{needed}")
 
     def on_click(self, event) -> None:
         x, y = self._to_image_coords(event.x, event.y)
@@ -142,7 +142,7 @@ class InteractivePicker:
             sx1, sy1 = int(rx * self.scale), int(ry * self.scale)
             sx2, sy2 = int((rx + rw) * self.scale), int((ry + rh) * self.scale)
             self.rect_id = self.canvas.create_rectangle(sx1, sy1, sx2, sy2, outline="lime", width=2)
-            self.status.config(text=f"ROI: {rx} {ry} {rw} {rh} — click Confirm")
+            self.status.config(text=f"ROI: {rx} {ry} {rw} {rh} — clique em Confirmar")
 
         self._update_confirm_state()
 
@@ -181,11 +181,11 @@ class InteractivePicker:
 
     def refresh(self) -> None:
         if self._refresh_cb is None:
-            self.status.config(text="Screenshot refresh not available in this context.")
+            self.status.config(text="Atualizacao de screenshot nao disponivel neste contexto.")
             return
         frame = self._refresh_cb()
         self.set_frame(frame)
-        self.status.config(text="Screenshot updated. " + self._hint())
+        self.status.config(text="Screenshot atualizado. " + self._hint())
 
     def set_frame(self, frame_bgr: np.ndarray) -> None:
         self.frame_bgr = frame_bgr
@@ -213,30 +213,30 @@ def pick_interactive(
     refresh_cb=None,
 ) -> tuple[tuple[int, ...] | None, np.ndarray | None]:
     """
-    Open picker over a screenshot.
+    Abre seletor sobre um screenshot.
 
-    Returns ``(selection, frame_used)`` where selection is a point ``(x, y)``
-    or ROI ``(x, y, w, h)``. Selection is ``None`` if cancelled / unavailable.
+    Retorna ``(selecao, frame_usado)`` onde selecao e um ponto ``(x, y)``
+    ou ROI ``(x, y, w, h)``. Selecao e ``None`` se cancelado/indisponivel.
     """
     try:
         import tkinter as tk
     except ImportError:
-        print("tkinter not available (sudo apt install python3-tk). Falling back to typed input.")
+        print("tkinter indisponivel. Usando entrada por digitacao.")
         return None, frame
 
     if frame is None:
-        print("Capturing screenshot from ADB…")
+        print("Capturando screenshot via ADB...")
         frame = _screenshot_from_adb()
 
     if refresh_cb is None:
         refresh_cb = _screenshot_from_adb
 
-    title = f"Calibrate: {label}"
-    print(f"\nOpening picker for: {label}")
+    title = f"Calibrar: {label}"
+    print(f"\nAbrindo seletor para: {label}")
     if mode == "point":
-        print("  Click the target once, then Confirm (Enter).")
+        print("  Clique uma vez no alvo, depois Confirmar (Enter).")
     else:
-        print("  Click two corners of the region, then Confirm (Enter).")
+        print("  Clique nos dois cantos da regiao, depois Confirmar (Enter).")
 
     root = tk.Tk()
     picker = InteractivePicker(root, frame, mode=mode, title=title)

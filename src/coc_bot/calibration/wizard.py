@@ -58,191 +58,202 @@ class CalibrationStep:
 STEPS: dict[str, CalibrationStep] = {
     "home": CalibrationStep(
         "home",
-        "Home screen",
-        "Frame size, optional home anchor, open-chat button/tap point",
+        "Tela inicial",
+        "Tamanho da tela, ancora home (opcional), botao abrir chat",
         ("frame_width", "open_chat"),
         (
-            CalibrationPart("frame_width", "Screen size", "meta", description="Captured from ADB screenshot"),
-            CalibrationPart("home", "Home anchor", "template", optional=True, description="Optional village/home template"),
+            CalibrationPart("frame_width", "Tamanho da tela", "meta", description="Capturado automaticamente do screenshot"),
+            CalibrationPart("home", "Ancora home", "template", optional=True, description="Foto de algo fixo na tela da vila (ex: edificio, botao Atacar)"),
             CalibrationPart(
                 "open_chat",
-                "Open chat (chat bubble)",
+                "Botao abrir chat",
                 "tap",
-                description="Chat bubble image on home — used to detect village vs battle",
+                description="A bolha/aba '>' que abre o chat do clan — fica na lateral esquerda da vila",
             ),
         ),
     ),
     "clan_chat": CalibrationStep(
         "clan_chat",
-        "Clan chat",
-        "Chat ROIs, clan_chat anchor, close-chat tab, jump icons",
+        "Chat do clan",
+        "Areas do chat, ancora clan_chat, aba fechar, icones de pular",
         ("chat_panel", "chat_requests", "clan_chat", "chat_scroll_down", "chat_request_jump"),
         (
-            CalibrationPart("chat_panel", "Chat panel ROI", "roi"),
-            CalibrationPart("chat_requests", "Chat requests ROI", "roi"),
-            CalibrationPart("clan_chat", "Clan chat anchor", "template"),
+            CalibrationPart("chat_panel", "ROI de todo o chat aberto", "roi", description="Retangulo cobrindo toda a area do chat aberto (de cima ate baixo)"),
+            CalibrationPart("chat_requests", "ROI dos pedidos de doacao", "roi", description="Area onde aparecem as msgs 'Precisamos de...' com botao Doar"),
+            CalibrationPart("clan_chat", "Ancora do chat", "template", description="Algo fixo visivel no chat aberto que some quando o painel de doacao abre"),
             CalibrationPart(
                 "close_chat",
-                "Close chat tab",
+                "Aba fechar chat '<'",
                 "tap",
                 optional=True,
-                description="Orange < tab on the right edge of open chat",
+                description="A tab laranja '<' na borda direita do chat aberto",
             ),
             CalibrationPart(
                 "chat_request_jump",
-                "Request jump icon",
+                "Icone de exclamacao '!'",
                 "template",
                 optional=True,
-                description="Exclamation at top or bottom of chat",
+                description="Icone ! que aparece no topo ou rodape do chat quando tem pedido",
             ),
             CalibrationPart(
                 "chat_scroll_down",
-                "Scroll-down icon",
+                "Icone seta pra baixo",
                 "template",
                 optional=True,
-                description="Legacy bottom jump icon",
+                description="Seta pra baixo no chat (seta pra cima quando ha msgs acima)",
             ),
         ),
     ),
     "donation_request": CalibrationStep(
         "donation_request",
-        "Donation request",
-        "Donate button template in clan chat",
+        "Botao Doar",
+        "Template do botao 'Doar' que aparece nas msgs do chat do clan",
         ("donate_button",),
-        (CalibrationPart("donate_button", "Donate button", "template"),),
+        (
+            CalibrationPart(
+                "donate_button",
+                "Botao Doar",
+                "template",
+                description="O botao verde/amarelo 'Doar' dentro de uma mensagem de pedido no chat",
+            ),
+        ),
     ),
     "donation_panel": CalibrationStep(
         "donation_panel",
-        "Donation panel",
-        "Optional Donation Resource title, troop+siege/spell bars, tap-outside close",
+        "Painel de doacao",
+        "Titulo, barras de tropas/magias, toque fora pra fechar",
         ("donation_troop_bar", "donation_spell_bar", "tap_outside_donation"),
         (
             CalibrationPart(
                 "donation_panel",
-                "Donation Resource title",
+                "Titulo 'Doar Recurso'",
                 "template",
                 optional=True,
-                description="Crop of the unique “Donation Resource” header on the white panel",
+                description="Texto 'Doar Recurso' no topo do painel branco de doacao",
             ),
-            CalibrationPart("donation_troop_bar", "Troop + siege bar ROI", "roi"),
-            CalibrationPart("donation_spell_bar", "Spell bar ROI", "roi"),
+            CalibrationPart("donation_troop_bar", "ROI da barra de tropas + cerco", "roi", description="Retangulo na barra horizontal de tropas (inclui maquinas de cerco)"),
+            CalibrationPart("donation_spell_bar", "ROI da barra de magias", "roi", description="Retangulo na barra horizontal de magias abaixo da barra de tropas"),
             CalibrationPart(
                 "tap_outside_donation",
-                "Tap outside to close",
+                "Toque fora pra fechar",
                 "tap",
-                description="Safe empty spot to dismiss the donation panel",
+                description="Ponto na area escura (fora do painel branco) pra fechar o painel",
             ),
         ),
     ),
     "slot_colors": CalibrationStep(
         "slot_colors",
-        "Slot colors",
-        "Colored vs grey troop/spell slot samples in the donation panel bars",
+        "Cores dos slots",
+        "Amostras de cor de slots disponiveis e indisponiveis no painel de doacao",
         ("donatable_troop", "disabled_troop", "donatable_spell", "disabled_spell"),
         (
-            CalibrationPart("donatable_troop", "Donatable troop color", "color"),
-            CalibrationPart("disabled_troop", "Grey troop color", "color"),
-            CalibrationPart("donatable_spell", "Donatable spell color", "color"),
-            CalibrationPart("disabled_spell", "Grey spell color", "color"),
+            CalibrationPart("donatable_troop", "Cor slot tropa disponivel", "color", description="Cor de uma barra de tropa colorida (pode receber doacao)"),
+            CalibrationPart("disabled_troop", "Cor slot tropa indisponivel", "color", description="Cor de uma barra de tropa cinza/escura (nao pode receber)"),
+            CalibrationPart("donatable_spell", "Cor slot magia disponivel", "color", description="Cor de uma barra de magia colorida (pode receber doacao)"),
+            CalibrationPart("disabled_spell", "Cor slot magia indisponivel", "color", description="Cor de uma barra de magia cinza/escura (nao pode receber)"),
         ),
     ),
     "grid": CalibrationStep(
         "grid",
-        "Grid layout",
-        "Draw visible troop/spell slot grid (pick_grid.py) or enter rows/cols",
+        "Grade de slots",
+        "Quantas colunas/linhas de slots sao visiveis no painel de doacao",
         ("grid",),
         (
-            CalibrationPart("troop_bar", "Troop + siege grid", "grid"),
-            CalibrationPart("spell_bar", "Spell grid", "grid"),
+            CalibrationPart("troop_bar", "Grade tropas + cerco", "grid", description="Linhas x colunas visiveis na barra de tropas"),
+            CalibrationPart("spell_bar", "Grade magias", "grid", description="Linhas x colunas visiveis na barra de magias"),
         ),
     ),
     "farm": CalibrationStep(
         "farm",
-        "Farm / unranked attack",
-        "Attack button, unranked Battle, Find a Match, Return Home, optional hero slots",
+        "Farm / ataque sem rank",
+        "Botao Atacar, Batalha sem rank, Encontrar oponente, Voltar, slots de tropas/heroi",
         ("attack_button", "unranked_battle", "return_home"),
         (
             CalibrationPart(
                 "attack_button",
-                "Attack! button",
+                "Botao Atacar!",
                 "tap",
-                description="Bottom-left Attack! on home village",
+                description="O botao 'Atacar!' no canto inferior esquerdo da tela HOME",
             ),
             CalibrationPart(
                 "unranked_battle",
-                "Unranked Battle",
+                "Batalha sem rank",
                 "tap",
-                description="Battle (not Ranked) in the Attack menu",
+                description="O botao 'Batalha' (sem classificacao) dentro do menu Atacar",
             ),
             CalibrationPart(
                 "find_match",
-                "Find a Match / start search",
+                "Encontrar oponente",
                 "tap",
                 optional=True,
-                description="Commence opponent search if separate from Battle",
+                description="Botao 'Encontrar Oponente' (se aparecer separado da Batalha)",
             ),
             CalibrationPart(
                 "return_home",
-                "Return Home",
+                "Voltar pra vila",
                 "tap",
-                description="End-of-battle Return Home / OK",
+                description="Botao 'Voltar' / 'OK' no fim da batalha (tela de resultado)",
             ),
             CalibrationPart(
                 "edrag_slot",
-                "E-drag army slot",
+                "Slot electro dragon",
                 "tap",
                 optional=True,
-                description="First troop card on the bottom battle bar",
+                description="Centro da primeira carta de tropa (e-drag) na barra de batalha",
             ),
             CalibrationPart(
                 "siege_slot",
-                "Siege machine slot",
+                "Slot maquina de cerco",
                 "tap",
                 optional=True,
-                description="Siege card on the bottom battle bar",
+                description="Centro da carta de cerco na barra de batalha",
             ),
             CalibrationPart(
                 "rage_slot",
-                "Rage spell slot",
+                "Slot magia furia",
                 "tap",
                 optional=True,
-                description="Rage spell card on the bottom battle bar",
+                description="Centro da carta de furia na barra de batalha",
             ),
             CalibrationPart(
                 "hero_1",
-                "Hero 1 slot",
+                "Slot heroi 1 (esquerda)",
                 "tap",
                 optional=True,
+                description="Centro da 1a carta de heroi (mais a esquerda)",
             ),
             CalibrationPart(
                 "hero_2",
-                "Hero 2 slot",
+                "Slot heroi 2",
                 "tap",
                 optional=True,
+                description="Centro da 2a carta de heroi",
             ),
             CalibrationPart(
                 "hero_3",
-                "Hero 3 slot",
+                "Slot heroi 3",
                 "tap",
                 optional=True,
+                description="Centro da 3a carta de heroi",
             ),
             CalibrationPart(
                 "hero_4",
-                "Hero 4 slot",
+                "Slot heroi 4 (direita)",
                 "tap",
                 optional=True,
+                description="Centro da 4a carta de heroi (mais a direita)",
             ),
         ),
     ),
     "optional": CalibrationStep(
         "optional",
-        "Optional UI",
-        "Loading screen and popup dismiss templates",
+        "UI opcional",
+        "Tela de loading e popup pra dispensar automaticamente",
         ("loading",),
         (
-            CalibrationPart("loading", "Loading screen", "template", optional=True),
-            CalibrationPart("popup_dismiss", "Popup dismiss", "template", optional=True),
-            CalibrationPart("popup", "Popup anchor", "template", optional=True),
+            CalibrationPart("loading", "Tela de loading", "template", optional=True, description="Tela de carregamento que aparece ao abrir o CoC"),
+            CalibrationPart("popup_dismiss", "Botao dispensar popup", "template", optional=True, description="Botao X ou 'Fechar' de popups/events"),
+            CalibrationPart("popup", "Ancora do popup", "template", optional=True, description="Algo fixo nos popups pra detecta-los"),
         ),
     ),
 }
@@ -288,28 +299,30 @@ def _roi_list(coords: tuple[int, int, int, int], w: int, h: int) -> list[float]:
     return [nr.x, nr.y, nr.w, nr.h]
 
 
-def _press_enter(message: str = "Press Enter when ready...") -> None:
+def _press_enter(message: str = "Aperte Enter quando estiver pronto...") -> None:
     input(message)
 
 
 def _keeping(label: str) -> None:
-    print(f"Keeping existing {label}.")
+    print(f"Mantendo '{label}' existente (sem alterações).")
 
 
 def print_step_menu(status: dict[str, bool]) -> None:
-    print("\nCalibration steps:")
-    print("-" * 60)
-    for step_id in STEP_IDS:
+    print("\n============================================")
+    print("         ETAPAS DE CALIBRACAO               ")
+    print("============================================")
+    for idx, step_id in enumerate(STEPS, 1):
         step = STEPS[step_id]
-        mark = "[x]" if status.get(step_id) else "[ ]"
-        print(f"  {mark} {step_id:18} — {step.title}")
+        mark = "OK" if status.get(step_id) else "  "
+        print(f"\n  {idx}. [{mark}] {step.title}")
         print(f"      {step.summary}")
         for part in step.parts:
-            opt = " (optional)" if part.optional else ""
-            print(f"        · {part.label}{opt} [{part.key}]")
-    print("-" * 60)
-    print("Run:  python scripts/calibrate.py --step clan_chat")
-    print("      python scripts/calibrate.py --all")
+            opt = " (opcional)" if part.optional else ""
+            print(f"        - {part.label}{opt}")
+    print("\n--------------------------------------------")
+    print("  Digite o NUMERO da etapa (ex: 1, 2, 3)")
+    print("  Varios: 1,3,5  |  Todas: a  |  Sair: q")
+    print("--------------------------------------------")
 
 
 class CalibrationWizard:
@@ -343,12 +356,12 @@ class CalibrationWizard:
     def _should_update(self, label: str, *, exists: bool, optional: bool = False) -> bool:
         if not exists:
             if optional:
-                if prompt_yes_no(f"Capture {label}?"):
+                if prompt_yes_no(f"Deseja capturar '{label}' agora?"):
                     return True
-                print(f"Skipping {label}.")
+                print(f"Pulando '{label}' (não obrigatório).")
                 return False
             return True
-        if prompt_yes_no(f"Update {label}?"):
+        if prompt_yes_no(f"Atualizar '{label}'? (já existe uma calibração)"):
             return True
         _keeping(label)
         return False
@@ -494,42 +507,68 @@ class CalibrationWizard:
 
     def run_interactive(self) -> None:
         self._ensure_connected()
-        print("\n=== CoC Donation Bot — Calibration ===")
+        print("\n============================================")
+        print("   CoC Donation Bot - Calibracao (LDPlayer)")
+        print("============================================")
         if self.config.calibrated:
-            print("Existing calibration loaded. Re-run any step without losing the rest.\n")
+            print("\nCalibracao existente carregada.")
+            print("Voce pode reexecutar qualquer etapa sem perder as outras.\n")
 
         handlers = self._handlers()
+        step_list = list(STEP_IDS)
         while True:
             print_step_menu(self.step_status())
-            print("\nEnter step name (e.g. clan_chat), comma-separated list, 'all', or 'q' to quit:")
+            print("\nDigite o numero da etapa (ex: 1), varias (ex: 1,3,5), 'a' pra todas ou 'q' pra sair:")
             raw = input("> ").strip().lower()
             if raw in ("q", "quit", "exit"):
-                print("Done.")
+                print("Saindo da calibracao.")
                 break
-            if raw == "all":
-                self.run_steps(list(STEP_IDS))
+            if raw in ("a", "all"):
+                self.run_steps(step_list)
                 continue
             if not raw:
                 continue
-            selected = [s.strip() for s in raw.replace(" ", ",").split(",") if s.strip()]
-            invalid = [s for s in selected if s not in STEP_IDS]
+            # Parse numbers or names
+            selected: list[str] = []
+            invalid: list[str] = []
+            for part in raw.replace(" ", ",").split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                # Try number
+                if part.isdigit():
+                    num = int(part)
+                    if 1 <= num <= len(step_list):
+                        selected.append(step_list[num - 1])
+                    else:
+                        invalid.append(part)
+                # Try name
+                elif part in STEP_IDS:
+                    selected.append(part)
+                else:
+                    invalid.append(part)
             if invalid:
-                print(f"Unknown step(s): {', '.join(invalid)}")
+                print(f"Opcao(s) invalida(s): {', '.join(invalid)}")
                 continue
-            self.run_steps(selected)
+            if selected:
+                self.run_steps(selected)
 
     def run_steps(self, step_ids: list[str]) -> None:
         self._ensure_connected()
         handlers = self._handlers()
         for step_id in step_ids:
             if step_id not in handlers:
-                logger.error("Unknown step: {}", step_id)
+                logger.error("Etapa desconhecida: {}", step_id)
                 continue
-            print(f"\n{'=' * 60}\n  STEP: {STEPS[step_id].title}\n{'=' * 60}")
+            print(f"\n{'=' * 50}")
+            print(f"  ETAPA: {STEPS[step_id].title}")
+            print(f"{'=' * 50}")
             handlers[step_id]()
             self._save()
-            print(f"\n✓ Step '{step_id}' saved.\n")
-        print("Calibration update complete.")
+            print(f"\n✓ Etapa '{step_id}' salva com sucesso!\n")
+        print("\n============================================")
+        print("        Calibracao concluida com sucesso!   ")
+        print("============================================")
 
     def _handlers(self) -> dict[str, Callable[[], None]]:
         return {
@@ -544,8 +583,10 @@ class CalibrationWizard:
         }
 
     def step_home(self) -> None:
-        print("Go to your village/HOME screen (not in chat).")
-        _press_enter()
+        print("=== ETAPA 1: TELA HOME ===\n")
+        print("Vá para a tela INICIAL da sua vila (onde aparecem os edifícios).")
+        print("NÃO abra o chat nem nenhum painel. Deixe a tela limpa.")
+        _press_enter("Quando estiver na tela HOME, aperte Enter...")
         frame = self.capture.screenshot()
         h, w = frame.shape[:2]
         self.config.frame_width = w
@@ -554,32 +595,32 @@ class CalibrationWizard:
 
         self._maybe_update_template(
             "home",
-            "home anchor template",
+            "Ancora da tela HOME (algo fixo que aparece sempre na vila)",
             "ui/home.png",
             frame,
             optional=True,
         )
 
-        print("\n--- Open chat button (must be captured from HOME screen) ---")
+        print("\n--- Botão ABRIR CHAT (bolha `>` na lateral esquerda) ---")
         print(
-            "This is the chat bubble / ``>`` tab that OPENS clan chat from home.\n"
-            "Capture it as an IMAGE (recommended): the bot uses that picture to tell\n"
-            "home apart from battle. Closing chat uses a different orange ``<`` tab\n"
-            "(Clan chat step)."
+            "Essa é a BOLHA/ABA `>` que abre o chat do clan.\n"
+            "Fica na LATERAL ESQUERDA da tela da vila, geralmente no meio.\n"
+            "Capture como IMAGEM: arraste um retângulo ao redor da bolha `>`.\n"
+            "\n"
+            "IMPORTANTE: Não confunda com a aba `<` (fechar chat) — essa é OUTRA coisa!"
         )
         has_tpl = self._has_template("open_chat")
         has_tap = self._has_tap("open_chat")
-        if not has_tpl or prompt_yes_no("Update open_chat chat-bubble image?"):
+        if not has_tpl or prompt_yes_no("Atualizar imagem da bolha open_chat?"):
             coords, picked = self._pick_roi(
-                "Drag a box tightly around the chat bubble on HOME", frame
+                "Arraste um retângulo ao redor da bolha de chat `>` na lateral esquerda da HOME", frame
             )
             self._save_template_from_frame(picked, coords, "ui/open_chat.png", "open_chat")
-            # Also store center as tap point for opening chat.
             x, y, bw, bh = coords
             self.config.tap_points["open_chat"] = [int(x + bw / 2), int(y + bh / 2)]
             logger.info("Saved open_chat template + tap at center")
-        elif not has_tap or prompt_yes_no("Update open_chat tap point only?"):
-            pt = self._pick_point("Tap point at CENTER of open-chat control", frame)
+        elif not has_tap or prompt_yes_no("Atualizar só o ponto de toque open_chat?"):
+            pt = self._pick_point("Toque no CENTRO da bolha de chat `>` na lateral esquerda", frame)
             self.config.tap_points["open_chat"] = list(pt)
             logger.info("Saved tap point open_chat")
         else:
@@ -587,82 +628,91 @@ class CalibrationWizard:
 
     def step_clan_chat(self) -> None:
         w, h = self._frame_size()
-        print("Open clan chat. Do NOT open the donation panel.")
-        _press_enter()
+        print("=== ETAPA 2: CHAT DO CLAN ===\n")
+        print("Abra o chat do clan (toque na bolha `>` da HOME).")
+        print("NÃO abra o painel de doação — apenas veja as mensagens do chat.")
+        _press_enter("Quando o chat estiver aberto, aperte Enter...")
         frame = self.capture.screenshot()
 
-        self._maybe_update_roi("chat_panel", "chat panel ROI", w, h)
-        self._maybe_update_roi("chat_requests", "chat requests ROI", w, h)
+        self._maybe_update_roi(
+            "chat_panel",
+            "ROI de TODO o chat aberto (cima pra baixo, lateral esquerda)",
+            w, h
+        )
+        self._maybe_update_roi(
+            "chat_requests",
+            "ROI dos PEDIDOS DE DOAÇÃO (onde aparece 'Precisamos de...' com botão Doar)",
+            w, h
+        )
 
         print(
-            "\n--- clan_chat anchor ---\n"
-            "Pick UI that is visible in clan chat but HIDDEN when the donation panel is open.\n"
-            "Good: selected Clan tab, chat header. Bad: anything covered by the donate popup."
+            "\n--- Âncora clan_chat (algo fixo no chat que some quando painel abre) ---\n"
+            "Escolha algo visível no chat aberto que FIQUE ESCONDIDO quando o painel de doação abre.\n"
+            "Bom: aba 'Clan' selecionada, cabeçalho do chat, ícone de clan.\n"
+            "Ruim: qualquer coisa coberta pelo popup de doação."
         )
         self._maybe_update_template(
             "clan_chat",
-            "clan_chat anchor template",
+            "Âncora do chat (algo fixo que some quando painel de doação abre)",
             "ui/clan_chat.png",
             frame,
         )
 
         print(
-            "\n--- Close chat tab (orange ``<`` on the right edge of the open chat panel) ---\n"
-            "This is DIFFERENT from the open-chat bubble on home.\n"
-            "With clan chat OPEN, tap the small orange tab with the left arrow."
+            "\n--- Aba fechar chat (`<` laranja na borda DIREITA do chat aberto) ---\n"
+            "Com o chat do clan ABERTO, toque na ABA LARANJA `<` na borda direita.\n"
+            "Essa aba fecha o chat. NÃO confunda com a bolha `>` que ABRE o chat!"
         )
         has_close = self._has_tap("close_chat") or self._has_template("close_chat")
-        if not has_close or prompt_yes_no("Update close_chat control?"):
-            if prompt_yes_no("Capture close_chat as image template?"):
-                coords, picked = self._pick_roi("Orange < close-chat tab", frame)
+        if not has_close or prompt_yes_no("Atualizar controle close_chat?"):
+            if prompt_yes_no("Capturar close_chat como template de imagem?"):
+                coords, picked = self._pick_roi("Aba laranja `<` de fechar chat (borda direita)", frame)
                 self._save_template_from_frame(picked, coords, "ui/close_chat.png", "close_chat")
-            pt = self._pick_point("Tap point at CENTER of the orange < close tab", frame)
+            pt = self._pick_point("Toque no CENTRO da aba laranja `<` de fechar chat", frame)
             self.config.tap_points["close_chat"] = list(pt)
             logger.info("Saved tap point close_chat")
         else:
             _keeping("close_chat")
 
         print(
-            "\n--- Scroll-down / jump icon at bottom (optional legacy template) ---\n"
-            "If you already captured the bottom exclamation as chat_scroll_down, you can skip this.\n"
-            "Otherwise scroll chat UP until the bottom icon appears, then capture it."
+            "\n--- Ícone de EXCLAMAÇÃO `!` no topo ou rodapé do chat ---\n"
+            "Quando tem pedido de doação acima ou abaixo da visão atual, aparece um `!`.\n"
+            "Toque nele pula direto pro pedido. Capture UMA vez — o bot busca dos dois lados.\n"
+            "Dica: role o chat até o `!` aparecer na borda, e capture."
         )
         self._maybe_update_template_after_setup(
-            "chat_scroll_down",
-            "bottom chat jump icon (optional if chat_request_jump captured)",
-            "ui/chat_scroll_down.png",
-            "When the bottom icon is visible, press Enter...",
+            "chat_request_jump",
+            "Ícone de exclamação `!` (topo ou rodapé do chat)",
+            "ui/chat_request_jump.png",
+            "Quando o `!` estiver visível no topo ou rodapé do chat, aperte Enter...",
             optional=True,
         )
 
         print(
-            "\n--- Exclamation jump icon (top OR bottom of chat log) ---\n"
-            "Same icon appears at the TOP when a request is above the current view,\n"
-            "or at the BOTTOM when a request is below. Tapping either jumps to a request.\n"
-            "Capture once — the bot searches both ends. (Your chat_scroll_down template\n"
-            "at the bottom also works as a fallback.)\n"
-            "Tip: scroll until the icon is visible at whichever edge applies, then capture it."
+            "\n--- Ícone seta pra BAIXO (legado) ---\n"
+            "Se já capturou o `!` como chat_request_jump, pode PULAR.\n"
+            "Caso role o chat pra CIMA até aparecer uma seta no rodapé, capture."
         )
         self._maybe_update_template_after_setup(
-            "chat_request_jump",
-            "exclamation jump icon (top or bottom of chat log)",
-            "ui/chat_request_jump.png",
-            "When the exclamation is visible at the top or bottom, press Enter...",
+            "chat_scroll_down",
+            "Ícone seta pra baixo no rodapé do chat (legado)",
+            "ui/chat_scroll_down.png",
+            "Quando a seta pra baixo estiver visível no rodapé, aperte Enter...",
             optional=True,
         )
 
     def step_donation_request(self) -> None:
         w, h = self._frame_size()
-        print(
-            "Show a donation request with a visible Donate button in clan chat.\n"
-            "Requested troops/spells appear in the chat message only — NOT in the donation panel."
-        )
-        _press_enter()
+        print("=== ETAPA 3: BOTÃO DOAR ===\n")
+        print("Mostre um PEDIDO DE DOAÇÃO no chat do clan com o botão DOAR visível.")
+        print("Esse é o botão verde/amarelo 'Doar' que aparece DENTRO da mensagem do chat.")
+        print("NÃO confunda com o painel de doação — aqui é só a mensagem do chat!")
+        _press_enter("Quando o botão 'Doar' estiver visível no chat, aperte Enter...")
         frame = self.capture.screenshot()
 
         self._maybe_update_template(
             "donate_button",
-            "donate button template",
+            "Template do botão 'Doar' (verde/amarelo, dentro da mensagem do chat)",
             "ui/donate_button.png",
             frame,
         )
@@ -670,89 +720,99 @@ class CalibrationWizard:
 
     def step_donation_panel(self) -> None:
         w, h = self._frame_size()
-        print("Tap Donate on a request to OPEN the donation panel, then continue.")
-        _press_enter("With donation panel open, press Enter...")
+        print("=== ETAPA 4: PAINEL DE DOAÇÃO ===\n")
+        print("Toque no botão 'Doar' (etapa anterior) para ABRIR o painel de doação.")
+        print("Esse painel mostra as barras de tropas e magias que podem ser doadas.")
+        _press_enter("Com o painel de doação ABERTO, aperte Enter...")
         frame = self.capture.screenshot()
 
         print(
-            "\n--- Donation Resource title (optional but recommended) ---\n"
-            "Crop tightly around the unique “Donation Resource” text at the top of\n"
-            "the white panel. The bot also detects the white card automatically."
+            "\n--- Título 'Doar Recurso' (no topo do painel branco) ---\n"
+            "Recorte bem de perto o texto 'Doar Recurso' no topo do painel branco.\n"
+            "Opcional mas recomendado — ajuda a confirmar que o painel está aberto."
         )
         self._maybe_update_template(
             "donation_panel",
-            "Donation Resource title template",
+            "Título 'Doar Recurso' (topo do painel branco)",
             "ui/donation_panel.png",
             frame,
             optional=True,
         )
 
         print(
-            "\nThe troop bar holds regular troops AND siege machines in the same area."
+            "\nA barra de tropas contém tropas normais E máquinas de cerco na mesma área."
         )
-        self._maybe_update_roi("donation_troop_bar", "troop donation bar ROI (troops + siege)", w, h)
-        self._maybe_update_roi("donation_spell_bar", "spell donation bar ROI", w, h)
+        self._maybe_update_roi(
+            "donation_troop_bar",
+            "ROI da barra de TROPAS + CERCO (barra horizontal no meio do painel)",
+            w, h
+        )
+        self._maybe_update_roi(
+            "donation_spell_bar",
+            "ROI da barra de MAGIAS (barra horizontal abaixo da tropa)",
+            w, h
+        )
 
         # Legacy — siege shared troop bar in current CoC UI
         self.config.rois.pop("donation_siege_bar", None)
 
         print(
-            "\n--- Close donation panel ---\n"
-            "CoC has no X button. Tap OUTSIDE the panel (dimmed chat/background) to close it."
+            "\n--- Fechar painel de doação (toque FORA do painel branco) ---\n"
+            "O CoC não tem botão X para fechar. Toque na área ESCURA (fundo do chat) para fechar."
         )
         self._maybe_update_tap_point(
             "tap_outside_donation",
-            "Tap point OUTSIDE the donation panel (dimmed area)",
+            "Ponto na área ESCURA (fora do painel branco) para fechar o painel",
         )
 
     def step_slot_colors(self) -> None:
-        print(
-            "Open the donation panel.\n"
-            "Colored slots can be donated; grey slots cannot (wrong type or won't fit).\n"
-            "For best results, show BOTH a colored and a grey troop slot, and both spell slots."
-        )
-        _press_enter()
+        print("=== ETAPA 5: CORES DOS SLOTS ===\n")
+        print("Abra o painel de doação (toque em 'Doar' no chat).")
+        print("Cada barra de tropa/magia tem uma cor: COLORIDA = pode receber doação, CINZA = não pode.")
+        print("Para melhores resultados, mostre UM slot colorido E um cinza de cada tipo.")
+        _press_enter("Com o painel de doação aberto, aperte Enter...")
         frame = self.capture.screenshot()
 
         self._maybe_update_color(
             "donatable_troop",
-            "COLORED troop/siege slot (can be donated)",
+            "COR de uma barra de TROPA/CERCO COLORIDA (pode receber doação) — clique nela",
             frame,
         )
         self._maybe_update_color(
             "disabled_troop",
-            "GREY troop/siege slot (cannot be donated)",
+            "COR de uma barra de TROPA/CERCO CINZA (não pode receber) — clique nela",
             frame,
         )
         self._maybe_update_color(
             "donatable_spell",
-            "COLORED spell slot (can be donated)",
+            "COR de uma barra de MAGIA COLORIDA (pode receber doação) — clique nela",
             frame,
         )
         self._maybe_update_color(
             "disabled_spell",
-            "GREY spell slot (cannot be donated)",
+            "COR de uma barra de MAGIA CINZA (não pode receber) — clique nela",
             frame,
         )
 
     def step_grid(self) -> None:
-        if self.config.grid and not prompt_yes_no("Update grid layout?"):
+        if self.config.grid and not prompt_yes_no("Atualizar layout da grade?"):
             _keeping("grid")
             return
 
-        print(
-            "\nRecommended: draw the grid on screen (covers all visible slot cells exactly).\n"
-            "  python scripts/pick_grid.py\n"
-        )
-        if prompt_yes_no("Launch grid picker now (needs display / RustDesk)?"):
+        print("=== ETAPA 6: GRADE DE SLOTS ===\n")
+        print("Quantas colunas/linhas de slots são visíveis no painel de doação?")
+        print("Exemplo: 2 linhas x 7 colunas de tropas visíveis antes de rolar.")
+        print("\nRecomendado: use o seletor gráfico para desenhar a grade na tela:")
+        print("  python scripts/pick_grid.py\n")
+        if prompt_yes_no("Iniciar o seletor de grade agora (precisa de tela / RustDesk)?"):
             import subprocess
             import sys
 
             subprocess.run([sys.executable, str(Path(__file__).resolve().parents[3] / "scripts" / "pick_grid.py")])
             return
 
-        if not prompt_yes_no("Enter column/row counts manually instead?"):
-            print("Run later: python scripts/pick_grid.py")
+        if not prompt_yes_no("Inserir contagem de colunas/linhas manualmente?"):
+            print("Execute depois: python scripts/pick_grid.py")
             return
 
         current = self.config.grid or {}
@@ -763,17 +823,16 @@ class CalibrationWizard:
         spell_cols_default = spell_bar.get("cols", 5)
         spell_rows_default = spell_bar.get("rows", 1)
 
-        print("Enter VISIBLE slot layout in the donation panel bars (Enter keeps default).")
-        print("Example: 2 rows x 7 columns of troops visible before scrolling horizontally.")
-        print("Requested troops are shown in clan chat only — no request-header setting needed.")
-        print("Troop bar includes regular troops and siege machines.")
-        raw = input(f"Troop+siege columns (slots per row) [{troop_cols_default}]: ").strip()
+        print("Insira o layout VISÍVEL dos slots nas barras do painel de doação (Enter mantém padrão).")
+        print("Exemplo: 2 linhas x 7 colunas de tropas visíveis antes de rolar horizontalmente.")
+        print("A barra de tropas inclui tropas normais e máquinas de cerco.")
+        raw = input(f"Colunas tropas+cerco (slots por linha) [{troop_cols_default}]: ").strip()
         troop_cols = int(raw) if raw else troop_cols_default
-        raw = input(f"Troop+siege rows [{troop_rows_default}]: ").strip()
+        raw = input(f"Linhas tropas+cerco [{troop_rows_default}]: ").strip()
         troop_rows = int(raw) if raw else troop_rows_default
-        raw = input(f"Spell columns (slots per row) [{spell_cols_default}]: ").strip()
+        raw = input(f"Colunas de magias (slots por linha) [{spell_cols_default}]: ").strip()
         spell_cols = int(raw) if raw else spell_cols_default
-        raw = input(f"Spell rows [{spell_rows_default}]: ").strip()
+        raw = input(f"Linhas de magias [{spell_rows_default}]: ").strip()
         spell_rows = int(raw) if raw else spell_rows_default
 
         self.config.grid = {
@@ -783,85 +842,85 @@ class CalibrationWizard:
 
     def step_farm(self) -> None:
         """
-        Calibrate unranked Battle farming taps.
+        Calibrar toques de farm de Batalha sem rank.
 
-        Leave your electro dragon army as the active preset before enabling farm.
+        Deixe seu exercito de electro dragon como o preset ativo antes de ativar o farm.
         """
         w, h = self._frame_size()
         print(
-            "\n=== Farm / unranked attack ===\n"
-            "IMPORTANT: Leave your electro dragon army as the ACTIVE army preset.\n"
-            "The bot does not train troops or switch armies.\n"
+            "\n=== ETAPA 7: FARM / ATAQUE SEM RANK ===\n"
+            "IMPORTANTE: Deixe seu exército de electro dragon como o preset ATIVO.\n"
+            "O bot não treina tropas nem troca exércitos — só usa o que já está pronto.\n"
         )
 
-        print("Go to your village HOME screen (chat closed).")
-        _press_enter()
+        print("Vá para a tela HOME da sua vila (chat fechado).")
+        _press_enter("Quando estiver na HOME, aperte Enter...")
         frame = self.capture.screenshot()
 
-        print("\n--- Attack button (bottom of home) ---")
+        print("\n--- Botão 'Atacar!' (canto inferior esquerdo da HOME) ---")
         has_attack = self._has_tap("attack_button") or self._has_template("attack_button")
-        if not has_attack or prompt_yes_no("Update attack_button?"):
-            if prompt_yes_no("Capture attack_button as image template?"):
-                coords, picked = self._pick_roi("Attack button", frame)
+        if not has_attack or prompt_yes_no("Atualizar attack_button?"):
+            if prompt_yes_no("Capturar attack_button como template de imagem?"):
+                coords, picked = self._pick_roi("Botão 'Atacar!' (inferior esquerdo da HOME)", frame)
                 self._save_template_from_frame(picked, coords, "ui/attack_button.png", "attack_button")
-            pt = self._pick_point("Tap point at CENTER of Attack button", frame)
+            pt = self._pick_point("Toque no CENTRO do botão 'Atacar!'", frame)
             self.config.tap_points["attack_button"] = list(pt)
             logger.info("Saved tap point attack_button")
         else:
             _keeping("attack_button")
 
         print(
-            "\nOpen the Attack menu so you see Ranked vs Battle (unranked).\n"
-            "You can tap Attack yourself, then press Enter."
+            "\nAbra o menu Atacar para ver Classificado vs Batalha (sem rank).\n"
+            "Toque em 'Atacar!' você mesmo, depois aperte Enter."
         )
-        _press_enter()
+        _press_enter("Com o menu Atacar aberto, aperte Enter...")
         frame = self.capture.screenshot()
 
-        print("\n--- Unranked Battle (NOT Ranked) ---")
+        print("\n--- Batalha sem rank (NAO 'Classificado') ---")
         has_battle = self._has_tap("unranked_battle") or self._has_template("unranked_battle")
-        if not has_battle or prompt_yes_no("Update unranked_battle?"):
-            if prompt_yes_no("Capture unranked_battle as image template?"):
-                coords, picked = self._pick_roi("Unranked Battle button", frame)
+        if not has_battle or prompt_yes_no("Atualizar unranked_battle?"):
+            if prompt_yes_no("Capturar unranked_battle como template de imagem?"):
+                coords, picked = self._pick_roi("Botão 'Batalha' (sem rank, NÃO 'Classificado')", frame)
                 self._save_template_from_frame(
                     picked, coords, "ui/unranked_battle.png", "unranked_battle"
                 )
-            pt = self._pick_point("Tap point at CENTER of unranked Battle (not Ranked)", frame)
+            pt = self._pick_point("Toque no CENTRO da 'Batalha' sem rank", frame)
             self.config.tap_points["unranked_battle"] = list(pt)
             logger.info("Saved tap point unranked_battle")
         else:
             _keeping("unranked_battle")
 
         print(
-            "\nIf Find a Match is a separate button after Battle, show that screen.\n"
-            "Otherwise skip Find a Match (Battle may start search immediately)."
+            "\nSe 'Encontrar Oponente' for um botão separado após 'Batalha', mostre essa tela.\n"
+            "Caso contrário, pule (a Batalha pode iniciar busca imediatamente)."
         )
-        if prompt_yes_no("Calibrate Find a Match / next button?"):
-            _press_enter()
+        if prompt_yes_no("Calibrar 'Encontrar Oponente' / próximo botão?"):
+            _press_enter("Com 'Encontrar Oponente' visível, aperte Enter...")
             frame = self.capture.screenshot()
-            if prompt_yes_no("Capture find_match as image template?"):
-                coords, picked = self._pick_roi("Find a Match button", frame)
+            if prompt_yes_no("Capturar find_match como template de imagem?"):
+                coords, picked = self._pick_roi("Botão 'Encontrar Oponente'", frame)
                 self._save_template_from_frame(picked, coords, "ui/find_match.png", "find_match")
-            pt = self._pick_point("Tap point at CENTER of Find a Match", frame)
+            pt = self._pick_point("Toque no CENTRO de 'Encontrar Oponente'", frame)
             self.config.tap_points["find_match"] = list(pt)
             logger.info("Saved tap point find_match")
         elif self._has_tap("find_match") or self._has_template("find_match"):
             _keeping("find_match")
 
         print(
-            "\n--- Return Home (after a finished attack) ---\n"
-            "Finish or wait for any battle end screen that shows Return Home / OK,\n"
-            "or skip and set a tap where that button usually appears."
+            "\n--- Voltar pra vila (após um ataque finalizado) ---\n"
+            "Finalize ou espere qualquer tela de fim de batalha que mostre 'Voltar' / 'OK'.\n"
+            "Ou pule e defina um ponto onde esse botão normalmente aparece."
         )
-        if prompt_yes_no("Update return_home now (recommended)?"):
-            _press_enter()
+        if prompt_yes_no("Atualizar return_home agora (recomendado)?"):
+            _press_enter("Na tela de resultado da batalha, aperte Enter...")
             frame = self.capture.screenshot()
-            if prompt_yes_no("Capture return_home / battle_end as image template?"):
-                coords, picked = self._pick_roi("Return Home button", frame)
+            if prompt_yes_no("Capturar return_home / battle_end como template de imagem?"):
+                coords, picked = self._pick_roi("Botão 'Voltar' / 'OK' da tela de resultado", frame)
                 self._save_template_from_frame(picked, coords, "ui/return_home.png", "return_home")
                 self.config.templates["battle_end"] = self.config.templates.get(
                     "return_home", "ui/return_home.png"
                 )
-            pt = self._pick_point("Tap point at CENTER of Return Home", frame)
+            pt = self._pick_point("Toque no CENTRO do botão 'Voltar' / 'OK'", frame)
             self.config.tap_points["return_home"] = list(pt)
             logger.info("Saved tap point return_home")
         elif not self._has_tap("return_home"):
@@ -881,36 +940,36 @@ class CalibrationWizard:
             logger.info("Removed obsolete deploy_strip ROI (not used anymore)")
 
         print(
-            "\n--- Army bar slots (optional but recommended) ---\n"
-            "On a BATTLE / scout screen with your army visible in the bottom bar:\n"
-            "  • e-drag / first troop card\n"
-            "  • siege machine card\n"
-            "  • rage spell card\n"
-            "  • each of the 4 hero cards (left → right)\n"
-            "Skip to use built-in default positions."
+            "\n--- Slots da barra de exército (Opcional mas recomendado) ---\n"
+            "Em uma tela de BATALHA com seu exército visível na barra inferior:\n"
+            "  • Carta de electro dragon (primeira tropa)\n"
+            "  • Carta de máquina de cerco\n"
+            "  • Carta de magia furia\n"
+            "  • Cada uma das 4 cartas de herói (esquerda → direita)\n"
+            "Pule para usar as posições padrão do sistema."
         )
-        if prompt_yes_no("Calibrate army-bar taps (e-drag, siege, rage, heroes) now?"):
-            print("Open any battle so the army bar is visible, then press Enter.")
-            _press_enter()
+        if prompt_yes_no("Calibrar toques da barra de exército (e-drag, cerco, furia, heróis) agora?"):
+            print("Abra qualquer batalha para que a barra de exército fique visível, depois aperte Enter.")
+            _press_enter("Com a barra de exército visível, aperte Enter...")
             frame = self.capture.screenshot()
-            pt = self._pick_point("CENTER of the electro dragon (first troop) card", frame)
+            pt = self._pick_point("CENTRO da carta de electro dragon (primeira tropa)", frame)
             self.config.tap_points["edrag_slot"] = list(pt)
             logger.info("Saved tap point edrag_slot")
-            if prompt_yes_no("Calibrate siege_slot?"):
+            if prompt_yes_no("Calibrar siege_slot?"):
                 frame = self.capture.screenshot()
-                pt = self._pick_point("CENTER of the siege machine card", frame)
+                pt = self._pick_point("CENTRO da carta de máquina de cerco", frame)
                 self.config.tap_points["siege_slot"] = list(pt)
                 logger.info("Saved tap point siege_slot")
-            if prompt_yes_no("Calibrate rage_slot?"):
+            if prompt_yes_no("Calibrar rage_slot?"):
                 frame = self.capture.screenshot()
-                pt = self._pick_point("CENTER of the rage spell card", frame)
+                pt = self._pick_point("CENTRO da carta de magia furia", frame)
                 self.config.tap_points["rage_slot"] = list(pt)
                 logger.info("Saved tap point rage_slot")
             for i in range(1, 5):
-                if not prompt_yes_no(f"Calibrate hero_{i}?"):
+                if not prompt_yes_no(f"Calibrar hero_{i}?"):
                     break
                 frame = self.capture.screenshot()
-                pt = self._pick_point(f"CENTER of hero card #{i} (left to right)", frame)
+                pt = self._pick_point(f"CENTRO da carta de herói #{i} (esquerda para direita)", frame)
                 self.config.tap_points[f"hero_{i}"] = list(pt)
                 logger.info("Saved tap point hero_{}", i)
         else:
@@ -919,33 +978,36 @@ class CalibrationWizard:
                     _keeping(key)
 
         print(
-            "\nFarm calibration saved. Enable farm in Settings after verifying.\n"
-            "Keep electro dragons as the active army preset (e-drags + heroes + rage)."
+            "\nCalibração de farm salva. Ative o farm nas Configurações após verificar.\n"
+            "Mantenha electro dragons como o preset de exército ativo (e-drags + heróis + furia)."
         )
 
     def step_optional(self) -> None:
+        print("=== ETAPA 8: UI OPCIONAL ===\n")
+        print("Essas capturas são OPCIONAIS — ajudam o bot a detectar telas de loading e popups.")
+
         self._maybe_update_template_after_setup(
             "loading",
-            "loading screen template",
+            "Tela de loading (tela preta/azul ao abrir o CoC)",
             "ui/loading.png",
-            "Relaunch CoC to show the loading screen.",
+            "Reabra o CoC para mostrar a tela de loading, depois aperte Enter...",
             optional=True,
         )
 
         self._maybe_update_template_after_setup(
             "popup_dismiss",
-            "popup dismiss button template",
+            "Botão 'X' ou 'Fechar' de popups/events",
             "ui/popup_dismiss.png",
-            "Show a dismissible popup/event.",
+            "Mostre um popup/evento dispensável, depois aperte Enter...",
             optional=True,
         )
 
 
 def main() -> None:
-    """CLI entry for calibration (used by scripts/calibrate.py and coc-bot-calibrate)."""
+    """CLI entry para calibracao (usado por scripts/calibrate.py e coc-bot-calibrate)."""
     setup_logging(debug=False)
     parser = argparse.ArgumentParser(
-        description="Calibrate CoC donation bot (full run or individual steps)",
+        description="Calibrar bot de doacao CoC (execucao completa ou etapas individuais)",
     )
     parser.add_argument(
         "--step",
@@ -953,17 +1015,17 @@ def main() -> None:
         dest="steps",
         choices=STEP_IDS,
         metavar="STEP",
-        help=f"Run one step only (repeatable). Choices: {', '.join(STEP_IDS)}",
+        help=f"Rodar uma etapa so (pode repetir). Opcoes: {', '.join(STEP_IDS)}",
     )
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Run all steps in order (same as legacy full calibration)",
+        help="Rodar todas as etapas em ordem",
     )
     parser.add_argument(
         "--list",
         action="store_true",
-        help="List steps and whether each appears configured",
+        help="Listar etapas e se estao configuradas",
     )
     args = parser.parse_args()
 

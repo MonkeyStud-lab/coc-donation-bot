@@ -119,6 +119,7 @@ class DonationExecutor:
         empty_limit = 1 if bar_roi_key == "donation_spell_bar" else 3
         made = False
         empty_streak = 0
+        same_view_taps = 0
 
         for scroll_i in range(max_scrolls + 1):
             if self._stopping():
@@ -138,6 +139,17 @@ class DonationExecutor:
                 if not slots:
                     break
 
+                # Detect infinite loop: same slots detected after multiple taps.
+                same_view_taps += 1
+                if same_view_taps >= 4:
+                    logger.warning(
+                        "{}: {} consecutive taps with slots still detected — "
+                        "color calibration may need recalibration. Stopping this view.",
+                        bar_roi_key,
+                        same_view_taps,
+                    )
+                    break
+
                 logger.info(
                     "{}: found {} colored slot(s) — tapping before scroll",
                     bar_roi_key,
@@ -151,8 +163,10 @@ class DonationExecutor:
 
             if tapped_this_view:
                 empty_streak = 0
+                same_view_taps = 0
             else:
                 empty_streak += 1
+                same_view_taps = 0
 
             if scroll_i >= max_scrolls:
                 break

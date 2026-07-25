@@ -78,6 +78,8 @@ class TemplateMatcher:
         gray_frame = self._to_gray(frame)
         gray_template = self._to_gray(template)
         th, tw = gray_template.shape[:2]
+        if tw > gray_frame.shape[1] or th > gray_frame.shape[0]:
+            return []
         result = cv2.matchTemplate(gray_frame, gray_template, cv2.TM_CCOEFF_NORMED)
         matches: list[MatchResult] = []
         working = result.copy()

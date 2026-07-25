@@ -30,6 +30,7 @@ class BotConfig:
     coc_package: str
     template_threshold: float
     donate_button_threshold: float
+    donation_panel_threshold: float
     scale_range: list[float]
     tap_jitter_px: int
     action_delay_ms: tuple[int, int]
@@ -194,6 +195,7 @@ def load_config(
         coc_package=adb.get("coc_package", "com.supercell.clashofclans"),
         template_threshold=vision.get("template_threshold", 0.82),
         donate_button_threshold=vision.get("donate_button_threshold", 0.78),
+        donation_panel_threshold=vision.get("donation_panel_threshold", 0.70),
         scale_range=vision.get("scale_range", [0.95, 1.0, 1.05]),
         tap_jitter_px=timing.get("tap_jitter_px", 6),
         action_delay_ms=tuple(timing.get("action_delay_ms", [120, 350])),

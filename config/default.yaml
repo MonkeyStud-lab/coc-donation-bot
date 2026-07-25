@@ -1,7 +1,7 @@
 adb:
-  # Waydroid ADB address — run `adb devices` to find yours.
-  # Common values: 127.0.0.1:5555 or a LAN IP like 192.168.240.112:5555
-  device: "192.168.240.112:5555"
+  # LDPlayer ADB address — run `adb devices` to find yours.
+  # LDPlayer default: emulator-5554 (first instance) or 127.0.0.1:5555
+  device: "emulator-5554"
   coc_package: "com.supercell.clashofclans"
   reconnect_max_attempts: 5
   reconnect_backoff_seconds: 2
@@ -9,6 +9,7 @@ adb:
 vision:
   template_threshold: 0.82
   donate_button_threshold: 0.78
+  donation_panel_threshold: 0.65
   scale_range: [0.95, 1.0, 1.05]
   ocr_confidence_threshold: 0.5
 
@@ -33,7 +34,7 @@ donation:
   spell_bar_max_scroll_attempts: 2 # spell bar needs fewer scrolls
   donate_open_requests: true      # fill open requests by tapping colored slots; specific still uses stop-at-grey
   parse_request_capacity: false   # optional EasyOCR of 0/35 bars (slow; not needed for simple fill)
-  donation_panel_wait_seconds: 3.0
+  donation_panel_wait_seconds: 5.0
 
 # Your clan's level — sets max housing/count YOU can donate per action.
 # Limits are loaded from config/clan_perks.yaml (March 2025 Clash Anytime values).

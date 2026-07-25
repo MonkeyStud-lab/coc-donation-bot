@@ -101,6 +101,7 @@ class ScreenClassifier:
     def __init__(self, config: BotConfig, matcher: TemplateMatcher | None = None) -> None:
         self.config = config
         self.matcher = matcher or TemplateMatcher(threshold=config.template_threshold)
+        self._donation_panel_matcher = TemplateMatcher(threshold=config.donation_panel_threshold)
         self._cache: dict[str, np.ndarray] = {}
 
     def _load(self, key: str) -> np.ndarray | None:
@@ -121,7 +122,11 @@ class ScreenClassifier:
 
     def _template_visible(self, frame: np.ndarray, key: str) -> bool:
         template = self._load(key)
-        return template is not None and self.matcher.find(frame, template) is not None
+        if template is None:
+            return False
+        if key == "donation_panel":
+            return self._donation_panel_matcher.find(frame, template) is not None
+        return self.matcher.find(frame, template) is not None
 
     def _roi_std(self, frame: np.ndarray, roi_key: str) -> float | None:
         if roi_key not in self.config.rois:
@@ -256,24 +261,41 @@ class ScreenClassifier:
         Prefer template / \"Donation Resource\" title. A white card alone is not
         enough (clan chat light areas false-positive). Troop+spell bars confirm.
         """
+        from loguru import logger as _log
         # Battle results silhouettes / card — never a donation panel.
         if self.looks_like_results_side_silhouettes(frame):
+            _log.debug("donation_panel_heuristic: vetoed by results silhouettes")
             return False
         if self._looks_like_battle_results(frame):
+            _log.debug("donation_panel_heuristic: vetoed by battle results")
             return False
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
+            _log.debug("donation_panel_heuristic: vetoed by home icons (open_chat or attack chip)")
             return False
+        # Check template / OCR BEFORE the clan-chat context veto.
+        # The donation panel opens as a modal OVER clan chat — the chat panel
+        # is still partially visible behind it, keeping chat_panel ROI std
+        # high.  Checking the template first avoids a false veto.
+        if self._template_visible(frame, "donation_panel"):
+            _log.debug("donation_panel_heuristic: DETECTED via donation_panel template")
+            return True
+        if self._donation_resource_title_visible(frame):
+            _log.debug("donation_panel_heuristic: DETECTED via Donation Resource OCR")
+            return True
         # Clan-chat anchor is covered by the popup — if it is still visible, we
         # are still in chat, not on the donation panel.
         if self._clan_chat_anchor_visible(frame):
+            _log.debug("donation_panel_heuristic: vetoed by clan_chat anchor template")
             return False
-        if self._template_visible(frame, "donation_panel"):
-            return True
-        if self._donation_resource_title_visible(frame):
-            return True
+        if self._in_clan_chat_context(frame):
+            _log.debug("donation_panel_heuristic: vetoed by clan_chat context (chat_panel ROI std > 22)")
+            return False
 
         troop_std = self._roi_std(frame, "donation_troop_bar")
         spell_std = self._roi_std(frame, "donation_spell_bar")
+        _log.debug("donation_panel_heuristic: bar ROIs troop_std={} spell_std={}",
+                    f"{troop_std:.1f}" if troop_std is not None else "None",
+                    f"{spell_std:.1f}" if spell_std is not None else "None")
         if troop_std is None or spell_std is None:
             return False
 
@@ -281,17 +303,22 @@ class ScreenClassifier:
 
         # White card + busy bars — real donation popup.
         if has_card and troop_std > 28 and spell_std > 28:
+            _log.debug("donation_panel_heuristic: DETECTED via white card + bars")
             return True
 
         # Strong dual-bar signal without relying on the white-card detector.
         if troop_std > 40 and spell_std > 40:
+            _log.debug("donation_panel_heuristic: DETECTED via strong dual-bar signal")
             return True
 
         # Weaker path: bars + dimmed overlay, and not a Return Home results card.
         if self.find_return_home_button(frame) is not None:
+            _log.debug("donation_panel_heuristic: vetoed by return_home button")
             return False
         if troop_std > 30 and spell_std > 30 and self._has_dimmed_modal_overlay(frame):
+            _log.debug("donation_panel_heuristic: DETECTED via bars + dimmed overlay")
             return True
+        _log.debug("donation_panel_heuristic: no signal — returning False")
         return False
 
     def is_home_screen(self, frame: np.ndarray) -> bool:
@@ -922,11 +949,11 @@ class ScreenClassifier:
         if self._template_visible(frame, "donate_button"):
             return ScreenType.CLAN_CHAT
 
-        if self._live_battle_chrome_visible(frame):
-            return ScreenType.BATTLE
-
         if self._in_clan_chat_context(frame):
             return ScreenType.CLAN_CHAT
+
+        if self._live_battle_chrome_visible(frame):
+            return ScreenType.BATTLE
 
         if self._is_home_screen(frame):
             return ScreenType.HOME

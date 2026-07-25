@@ -25,3 +25,12 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Debug scripts
+teste.bat
+
+# Debug / calibration screenshots
+data/debug_*.png
+data/screen_*.png
+data/annotated_screen.png
+data/current_screen.png

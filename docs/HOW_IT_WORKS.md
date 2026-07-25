@@ -134,7 +134,7 @@ Orchestrator: [`src/coc_bot/attack/farmer.py`](../src/coc_bot/attack/farmer.py).
 
 ```text
 leave clan chat → Attack! → unranked Battle → battlefield
-    → pan + dump e-drags → rage → siege → heroes
+    → pan + deploy army (custom tap sequence OR built-in e-drag recipe)
     → wait 3m30s from first deploy (configurable), then tap Return Home coords
     → confirm home (Attack! / clan chat) — no early surrender
     → reopen clan chat
@@ -144,7 +144,14 @@ leave clan chat → Attack! → unranked Battle → battlefield
 |-------|----------|
 | Navigation | `attack/navigator.py` |
 | Deploy recipe | `attack/deployer.py` |
+| Custom army taps | Tools → **Farm: program deploy sequence** → `farm_deploy_sequence` in `calibrated.yaml` |
 | Triggers | GUI **Farm attack now**, or auto when `farm.enabled` + interval elapsed |
+
+### Custom farm deploy sequence
+
+If `farm_deploy_sequence.taps` is non-empty, farm **replays those ordered taps** (army-bar selects + map drops) after panning with the **side / pan_swipes stored in the sequence**. The built-in e-drag / rage / siege / hero settings are unused until you **Tools → Farm: clear deploy sequence**.
+
+Program while already on the battlefield: the tool pans, shows a screenshot, and you click taps in order (numbered circles; radius = **farm deploy jitter** max axis offset). That jitter applies only to custom farm sequence taps — donations and other taps still use Timing → Tap jitter.
 
 ### Leave / Return Home safeguards
 

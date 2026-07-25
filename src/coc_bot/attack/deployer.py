@@ -41,6 +41,7 @@ class EdgeDeployer:
         frame: np.ndarray,
         *,
         side: str | None = None,
+        pan_swipes: float | None = None,
     ) -> None:
         """
         Pan from the centered matchmaking view toward the deploy edge.
@@ -51,9 +52,12 @@ class EdgeDeployer:
         """
         h, w = frame.shape[:2]
         side = self._resolve_side(side)
-        total = max(0.0, float(self.config.farm_pan_swipes))
+        if pan_swipes is None:
+            total = max(0.0, float(self.config.farm_pan_swipes))
+        else:
+            total = max(0.0, float(pan_swipes))
         if total <= 0:
-            logger.info("Camera pan skipped (farm_pan_swipes=0)")
+            logger.info("Camera pan skipped (pan_swipes=0)")
             return
 
         # Horizontal drag across the middle of the playfield (avoid army bar / UI).
@@ -263,6 +267,56 @@ class EdgeDeployer:
         logger.info("Using default bottom-bar hero slot x positions {}", xs)
         return [(int(w * nx), y) for nx in xs]
 
+    def _custom_sequence(self) -> dict:
+        from coc_bot.config import normalize_farm_deploy_sequence
+
+        return normalize_farm_deploy_sequence(self.config.farm_deploy_sequence)
+
+    def _custom_sequence_taps(self) -> list[tuple[int, int]]:
+        """Return programmed deploy taps, or empty if none saved."""
+        seq = self._custom_sequence()
+        return [(int(x), int(y)) for x, y in seq.get("taps") or []]
+
+    def _dump_custom_sequence(
+        self,
+        frame: np.ndarray,
+        taps: list[tuple[int, int]],
+        *,
+        tap_pause: float = 0.10,
+    ) -> int:
+        """Pan with stored sequence settings, then replay ordered taps."""
+        seq = self._custom_sequence()
+        side = self._resolve_side(str(seq.get("side") or "left"))
+        pan = float(seq.get("pan_swipes", self.config.farm_pan_swipes))
+        logger.info(
+            "Custom farm deploy sequence — {} taps (side={}, pan_swipes={})",
+            len(taps),
+            side,
+            pan,
+        )
+        self.pan_to_deploy_side(frame, side=side, pan_swipes=pan)
+        if self._stopping():
+            return 0
+        jitter = max(0, min(40, int(self.config.farm_deploy_jitter_px)))
+        total = 0
+        for i, (x, y) in enumerate(taps, start=1):
+            if self._stopping():
+                return total
+            logger.info(
+                "Sequence tap {}/{} at ({}, {}) jitter±{}",
+                i,
+                len(taps),
+                x,
+                y,
+                jitter,
+            )
+            self.input.tap(x, y, jitter=jitter)
+            total += 1
+            if tap_pause > 0 and self._sleep(tap_pause):
+                return total
+        logger.info("Custom deploy sequence complete — {} taps", total)
+        return total
+
     def dump_army_along_edge(
         self,
         frame: np.ndarray,
@@ -271,10 +325,18 @@ class EdgeDeployer:
         tap_pause: float = 0.10,
     ) -> int:
         """
-        Pan to the deploy edge, dump e-drags, then rage, then siege + heroes.
+        Pan to the deploy edge, then deploy army.
 
-        Returns total map taps (not including army-bar selection taps).
+        If a programmed ``farm_deploy_sequence`` exists, replay those taps
+        (army bar + map) after panning with the sequence's stored side/swipes.
+        Otherwise use the built-in e-drag → rage → siege → heroes recipe.
+
+        Returns total map/sequence taps (army-bar selects count in custom mode).
         """
+        custom = self._custom_sequence_taps()
+        if custom:
+            return self._dump_custom_sequence(frame, custom, tap_pause=tap_pause)
+
         side = self._resolve_side(side)
         self.pan_to_deploy_side(frame, side=side)
         if self._stopping():

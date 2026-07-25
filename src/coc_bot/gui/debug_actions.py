@@ -239,6 +239,76 @@ class DebugSession:
             f"Full ladder has {len(points)} points."
         )
 
+    def farm_program_deploy_sequence(self) -> str:
+        """
+        Pan on the current battle view, then open the ordered-tap editor.
+
+        User must already be on the battlefield (after Find a Match).
+        """
+        from coc_bot.calibration.sequence_picker import pick_deploy_sequence
+        from coc_bot.config import load_config, normalize_farm_deploy_sequence, save_calibrated
+
+        self.client.health_check()
+        side = self.config.farm_deploy_side
+        pans = float(self.config.farm_pan_swipes)
+        frame = self.capture.screenshot()
+        logger.info(
+            "Program farm deploy: panning side={} pan_swipes={} then opening editor",
+            side,
+            pans,
+        )
+        self.deployer.pan_to_deploy_side(frame, side=side, pan_swipes=pans)
+        time.sleep(0.5)
+        frame = self.capture.screenshot()
+
+        existing = normalize_farm_deploy_sequence(self.config.farm_deploy_sequence)
+        initial = [(int(x), int(y)) for x, y in existing.get("taps") or []]
+
+        points, jitter, used = pick_deploy_sequence(
+            frame,
+            jitter_px=self.config.farm_deploy_jitter_px,
+            initial_points=initial or None,
+            refresh_cb=self.capture.screenshot,
+            title="Program farm deploy taps",
+        )
+        if points is None:
+            return "Program farm deploy cancelled — sequence unchanged."
+
+        cfg = load_config()
+        cfg.farm_deploy_sequence = {
+            "side": side,
+            "pan_swipes": pans,
+            "taps": [[int(x), int(y)] for x, y in points],
+        }
+        cfg.farm_deploy_jitter_px = max(0, min(40, int(jitter)))
+        if used is not None and used.size:
+            h, w = used.shape[:2]
+            if cfg.frame_width <= 0:
+                cfg.frame_width = w
+            if cfg.frame_height <= 0:
+                cfg.frame_height = h
+        save_calibrated(cfg)
+        self.config = load_config()
+        return (
+            f"Saved farm deploy sequence: {len(points)} taps "
+            f"(side={side}, pan_swipes={pans}, farm deploy jitter±{jitter}px). "
+            "Farm attacks will replay this instead of the built-in e-drag recipe. "
+            "Stop/Start the bot if it is already running."
+        )
+
+    def farm_clear_deploy_sequence(self) -> str:
+        """Remove the programmed deploy sequence (revert to built-in recipe)."""
+        from coc_bot.config import load_config, save_calibrated
+
+        cfg = load_config()
+        cfg.farm_deploy_sequence = {"side": "left", "pan_swipes": 3.0, "taps": []}
+        save_calibrated(cfg)
+        self.config = load_config()
+        return (
+            "Cleared farm deploy sequence — farm will use the built-in "
+            "e-drag / rage / siege / hero recipe again. Stop/Start if the bot is running."
+        )
+
     def farm_one_shot(self, should_stop=None) -> tuple[bool, str]:
         """Run a full unranked farm attack once (leave chat → deploy → return home)."""
         from collections.abc import Callable
@@ -348,6 +418,17 @@ DEBUG_ACTIONS: list[tuple[str, str, str]] = [
         "Farm: deploy-edge dry taps",
         "A few taps along the configured deploy edge (no full attack wait).",
     ),
+    (
+        "farm_program_deploy",
+        "Farm: program deploy sequence",
+        "Be on the battlefield first. Pans with your Settings, then opens a click "
+        "editor — number army-bar + map taps in order. Overrides the built-in recipe.",
+    ),
+    (
+        "farm_clear_deploy",
+        "Farm: clear deploy sequence",
+        "Delete the programmed tap sequence and go back to the built-in e-drag recipe.",
+    ),
 ]
 
 
@@ -370,6 +451,8 @@ def run_debug_action(action_id: str) -> str:
         "farm_start_search": session.farm_start_unranked_search,
         "farm_classify": session.farm_classify_battle,
         "farm_deploy_dry": session.farm_deploy_dry_taps,
+        "farm_program_deploy": session.farm_program_deploy_sequence,
+        "farm_clear_deploy": session.farm_clear_deploy_sequence,
     }
     fn = mapping.get(action_id)
     if fn is None:

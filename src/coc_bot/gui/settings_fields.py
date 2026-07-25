@@ -57,7 +57,8 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "tap_jitter_px",
         "Tap jitter (pixels)",
-        "Random offset added to tap coordinates so taps are not pixel-perfect every time.",
+        "Random offset added to tap coordinates so taps are not pixel-perfect every time "
+        "(donations, navigation, etc.). Farm deploy sequence has its own jitter below.",
         "int",
         lambda c: c.tap_jitter_px,
         "Timing",
@@ -176,6 +177,17 @@ SETTINGS: list[SettingField] = [
         lambda c: c.farm_pan_swipes,
         "Farm",
         ("farm", "pan_swipes"),
+    ),
+    SettingField(
+        "farm_deploy_jitter_px",
+        "Farm deploy jitter (pixels)",
+        "Random offset for custom farm deploy sequence taps only (±N on X and Y). "
+        "Does not affect donations or other bot taps. Circle radius in the program-deploy "
+        "editor equals N (max axis offset). Keep ≤12 if you click small army-bar icons.",
+        "int",
+        lambda c: c.farm_deploy_jitter_px,
+        "Farm",
+        ("farm", "deploy_jitter_px"),
     ),
     SettingField(
         "farm_match_timeout_seconds",

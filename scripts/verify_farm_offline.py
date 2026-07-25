@@ -38,6 +38,12 @@ def main() -> int:
     assert "farm_enabled" in farm_keys
     assert "farm_deploy_side" in farm_keys
 
+    from coc_bot.config import normalize_farm_deploy_sequence
+
+    seq = normalize_farm_deploy_sequence(config.farm_deploy_sequence)
+    assert "taps" in seq and isinstance(seq["taps"], list)
+    assert seq["side"] in ("left", "right")
+
     frame = np.zeros((720, 1280, 3), dtype=np.uint8)
     deployer = EdgeDeployer(config, input_ctrl=None)  # type: ignore[arg-type]
     left = deployer.deploy_points(frame, side="left")

@@ -64,6 +64,7 @@ class BotConfig:
     farm_interval_seconds: int = 3600
     farm_deploy_side: str = "left"
     farm_pan_swipes: float = 3.0
+    farm_deploy_jitter_px: int = 6
     farm_match_timeout_seconds: int = 120
     farm_battle_timeout_seconds: int = 210
     farm_retry_cooldown_seconds: int = 300
@@ -74,6 +75,8 @@ class BotConfig:
     farm_deploy_rage: bool = True
     farm_rage_count: int = 5
     farm_rage_inward_frac: float = 0.22
+    # Ordered army+map taps after pan; when taps non-empty, overrides built-in recipe.
+    farm_deploy_sequence: dict[str, Any] = field(default_factory=dict)
     gui_show_debug_activity: bool = False
     data_dir: Path = field(default_factory=lambda: _project_root() / "data")
     templates_dir: Path = field(default_factory=lambda: _project_root() / "data" / "templates")
@@ -173,7 +176,16 @@ def load_config(
 
     merged: dict[str, Any] = dict(defaults)
     _deep_merge(merged, load_user_settings(user_settings_path(root)))
-    for key in ("frame_width", "frame_height", "rois", "tap_points", "templates", "colors", "grid"):
+    for key in (
+        "frame_width",
+        "frame_height",
+        "rois",
+        "tap_points",
+        "templates",
+        "colors",
+        "grid",
+        "farm_deploy_sequence",
+    ):
         if key in calibrated:
             merged[key] = calibrated[key]
 
@@ -226,6 +238,7 @@ def load_config(
         farm_interval_seconds=int(farm.get("interval_seconds", 3600)),
         farm_deploy_side=deploy_side,
         farm_pan_swipes=max(0.0, float(farm.get("pan_swipes", 3))),
+        farm_deploy_jitter_px=max(0, min(40, int(farm.get("deploy_jitter_px", 6)))),
         farm_match_timeout_seconds=int(farm.get("match_timeout_seconds", 120)),
         farm_battle_timeout_seconds=int(farm.get("battle_timeout_seconds", 210)),
         farm_retry_cooldown_seconds=int(farm.get("retry_cooldown_seconds", 300)),
@@ -236,10 +249,35 @@ def load_config(
         farm_deploy_rage=bool(farm.get("deploy_rage", True)),
         farm_rage_count=max(0, min(20, int(farm.get("rage_count", 5)))),
         farm_rage_inward_frac=max(0.0, min(0.45, float(farm.get("rage_inward_frac", 0.22)))),
+        farm_deploy_sequence=normalize_farm_deploy_sequence(
+            merged.get("farm_deploy_sequence")
+        ),
         gui_show_debug_activity=bool((merged.get("gui") or {}).get("show_debug_activity", False)),
         data_dir=root / "data",
         templates_dir=root / "data" / "templates",
     )
+
+
+def normalize_farm_deploy_sequence(raw: Any) -> dict[str, Any]:
+    """Return a clean ``{side, pan_swipes, taps}`` dict (empty taps if invalid)."""
+    if not isinstance(raw, dict):
+        return {"side": "left", "pan_swipes": 3.0, "taps": []}
+    side = str(raw.get("side", "left")).strip().lower()
+    if side not in ("left", "right"):
+        side = "left"
+    try:
+        pan = max(0.0, float(raw.get("pan_swipes", 3.0)))
+    except (TypeError, ValueError):
+        pan = 3.0
+    taps: list[list[int]] = []
+    for item in raw.get("taps") or []:
+        if not isinstance(item, (list, tuple)) or len(item) < 2:
+            continue
+        try:
+            taps.append([int(item[0]), int(item[1])])
+        except (TypeError, ValueError):
+            continue
+    return {"side": side, "pan_swipes": pan, "taps": taps}
 
 
 def save_calibrated(config: BotConfig, path: Path | None = None) -> None:
@@ -254,6 +292,7 @@ def save_calibrated(config: BotConfig, path: Path | None = None) -> None:
         "templates": config.templates,
         "colors": config.colors,
         "grid": config.grid,
+        "farm_deploy_sequence": normalize_farm_deploy_sequence(config.farm_deploy_sequence),
     }
     with open(path, "w", encoding="utf-8") as f:
         yaml.safe_dump(payload, f, default_flow_style=False, sort_keys=False)

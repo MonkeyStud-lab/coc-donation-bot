@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+import platform
+import shutil
 import subprocess
 import time
+from pathlib import Path
 from typing import Sequence
 
 from loguru import logger
@@ -12,9 +15,75 @@ class AdbError(RuntimeError):
     pass
 
 
+def _find_ldplayer_adb() -> str | None:
+    """Auto-detect LDPlayer's bundled adb.exe on Windows."""
+    if platform.system() != "Windows":
+        return None
+
+    env_path = os.environ.get("ADB_PATH", "").strip()
+    if env_path and Path(env_path).is_file():
+        return env_path
+
+    common_roots = [
+        Path(os.environ.get("LOCALAPPDATA", "")) / "LDPlayer" / "LDPlayer9",
+        Path(os.environ.get("PROGRAMFILES", "")) / "LDPlayer" / "LDPlayer9",
+        Path(os.environ.get("PROGRAMFILES(X86)", "")) / "LDPlayer" / "LDPlayer9",
+        Path("C:/LDPlayer/LDPlayer9"),
+        Path("D:/LDPlayer/LDPlayer9"),
+        Path("C:/LDPlayer/LDPlayer4.0"),
+        Path("D:/LDPlayer/LDPlayer4.0"),
+    ]
+    for root in common_roots:
+        adb = root / "adb.exe"
+        if adb.is_file():
+            return str(adb)
+
+    # Fallback: find adb on PATH
+    which = shutil.which("adb")
+    if which:
+        return which
+
+    return None
+
+
+def _ensure_adb_on_path() -> None:
+    """Add LDPlayer's ADB directory to PATH so subprocess calls work."""
+    adb = _find_ldplayer_adb()
+    if adb:
+        adb_dir = str(Path(adb).parent)
+        if adb_dir not in os.environ.get("PATH", ""):
+            os.environ["PATH"] = adb_dir + os.pathsep + os.environ.get("PATH", "")
+            logger.info("Added LDPlayer ADB to PATH: {}", adb_dir)
+
+
+_ensure_adb_on_path()
+
+
 def default_adb_device() -> str:
-    """Resolve ADB device from ADB_DEVICE env var or Waydroid default."""
-    return os.environ.get("ADB_DEVICE", "127.0.0.1:5555")
+    """Resolve ADB device from ADB_DEVICE env var or auto-detect LDPlayer device."""
+    env_device = os.environ.get("ADB_DEVICE", "").strip()
+    if env_device:
+        return env_device
+
+    # Try to auto-detect the first LDPlayer device
+    try:
+        result = subprocess.run(
+            ["adb", "devices"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        for line in result.stdout.splitlines()[1:]:
+            line = line.strip()
+            if line and "\tdevice" in line:
+                device_id = line.split("\t")[0]
+                logger.info("Auto-detected ADB device: {}", device_id)
+                return device_id
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    return "127.0.0.1:5555"
 
 
 class AdbClient:
@@ -70,6 +139,19 @@ class AdbClient:
     def connect(self) -> bool:
         if ":" in self.device:
             host_port = self.device
+            # Start LDPlayer server first if available
+            ld_adb = _find_ldplayer_adb()
+            if ld_adb:
+                try:
+                    subprocess.run(
+                        [ld_adb, "start-server"],
+                        capture_output=True,
+                        text=True,
+                        timeout=15,
+                        check=False,
+                    )
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
             result = subprocess.run(
                 ["adb", "connect", host_port],
                 capture_output=True,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import platform
 import shlex
 import shutil
 import subprocess
@@ -15,7 +16,17 @@ def calibrate_script() -> Path:
 
 
 def open_in_terminal(command: str) -> bool:
-    """Run an interactive command in a new terminal window (Linux)."""
+    """Run an interactive command in a new terminal window."""
+    if platform.system() == "Windows":
+        # Use cmd /k to open a new terminal and keep it open
+        cmd_list = ["cmd", "/k", "title CoC Bot Setup && " + command]
+        try:
+            subprocess.Popen(cmd_list, cwd=str(project_root()))
+            return True
+        except OSError:
+            return False
+
+    # Linux: try known terminal emulators
     wrapped = f"{command}; echo; read -r -p 'Press Enter to close…'"
     candidates = [
         ["gnome-terminal", "--", "bash", "-lc", wrapped],
@@ -29,7 +40,7 @@ def open_in_terminal(command: str) -> bool:
         if shutil.which(argv[0]) is None:
             continue
         try:
-            subprocess.Popen(argv, cwd=str(project_root()))  # noqa: S603
+            subprocess.Popen(argv, cwd=str(project_root()))
             return True
         except OSError:
             continue

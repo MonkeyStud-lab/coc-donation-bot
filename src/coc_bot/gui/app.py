@@ -77,7 +77,7 @@ class BotControlApp(tk.Tk):
         self._page_title = tk.StringVar(value="Home")
         self._page_subtitle = tk.StringVar(value=PAGES[0][2])
         self._status = tk.StringVar(
-            value="Ready — open Waydroid and Clash of Clans, then press Start"
+            value="Ready — open LDPlayer and Clash of Clans, then press Start"
         )
 
         shell = ttk.Frame(self)
@@ -135,7 +135,7 @@ class BotControlApp(tk.Tk):
         ).pack(fill=tk.X)
         tk.Label(
             brand,
-            text="Clash of Clans · Waydroid",
+            text="Clash of Clans · LDPlayer",
             bg=SIDEBAR,
             fg=TEXT_SECONDARY,
             font=ui_font(9),
@@ -230,9 +230,9 @@ class BotControlApp(tk.Tk):
         ).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(
             secondary,
-            text="Close Waydroid + Clash",
+            text="Close Clash of Clans",
             style="Danger.TButton",
-            command=self.close_waydroid_and_coc,
+            command=self.close_coc,
         ).pack(side=tk.RIGHT)
 
         self._farm_status = tk.StringVar(value="Farm: —")
@@ -384,7 +384,7 @@ class BotControlApp(tk.Tk):
             page,
             text="Calibration teaches the bot where buttons and bars are on your screen. "
             "It opens in a separate terminal with click-to-pick tools. "
-            "Open Waydroid and Clash of Clans first.",
+            "Open LDPlayer and Clash of Clans first.",
             bg=BG,
             fg=TEXT_SECONDARY,
             font=ui_font(10),
@@ -776,31 +776,28 @@ class BotControlApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def _on_bot_stopped(self) -> None:
-        self._status.set("Ready — open Waydroid and Clash of Clans, then press Start")
+        self._status.set("Ready — open LDPlayer and Clash of Clans, then press Start")
         self._start_btn.configure(state=tk.NORMAL)
         self._stop_btn.configure(state=tk.DISABLED)
         self._bot_thread = None
 
-    def close_waydroid_and_coc(self) -> None:
+    def close_coc(self) -> None:
         if not messagebox.askyesno(
-            "Close Waydroid + Clash",
-            "Stop the bot (if running), force-stop Clash of Clans, and stop the Waydroid session?",
+            "Close Clash of Clans",
+            "Stop the bot (if running) and force-stop Clash of Clans?",
         ):
             return
         self.stop_bot()
-        self._append_log("==> Closing Clash of Clans and Waydroid session")
-        threading.Thread(target=self._close_waydroid_worker, daemon=True).start()
+        self._append_log("==> Closing Clash of Clans")
+        threading.Thread(target=self._close_coc_worker, daemon=True).start()
 
-    def _close_waydroid_worker(self) -> None:
+    def _close_coc_worker(self) -> None:
         config = load_config()
         device = config.adb_device
         pkg = config.coc_package
         env = os.environ.copy()
-        env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:" + env.get(
-            "PATH", ""
-        )
         try:
-            subprocess.run(  # noqa: S603
+            subprocess.run(
                 ["adb", "-s", device, "shell", f"am force-stop {pkg}"],
                 check=False,
                 env=env,
@@ -809,17 +806,7 @@ class BotControlApp(tk.Tk):
             logger.info("Force-stopped {}", pkg)
         except (OSError, subprocess.TimeoutExpired) as exc:
             logger.warning("Could not force-stop CoC: {}", exc)
-        try:
-            subprocess.run(  # noqa: S603
-                ["waydroid", "session", "stop"],
-                check=False,
-                env=env,
-                timeout=60,
-            )
-            logger.info("Waydroid session stop requested")
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            logger.warning("Could not stop Waydroid session: {}", exc)
-        self.after(0, lambda: self._status.set("Waydroid / Clash close requested"))
+        self.after(0, lambda: self._status.set("Clash of Clans close requested"))
 
     def _refresh_calib_status(self) -> None:
         for item in self._calib_tree.get_children():

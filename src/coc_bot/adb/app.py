@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import shutil
-import subprocess
 import time
 
 import cv2
@@ -33,28 +31,12 @@ class AppController:
 
     def launch(self) -> None:
         """
-        Start Clash of Clans inside the Waydroid Android UI.
+        Start Clash of Clans inside the LDPlayer Android session.
 
-        Uses ADB only (am start / monkey). Avoids `waydroid app launch`, which
-        opens CoC as a separate Linux window/dock icon instead of inside
-        show-full-ui.
+        Uses ADB only (am start / monkey).
         """
         pkg = self.config.coc_package
-        logger.info("Launching {} inside Waydroid session", pkg)
-
-        # Make sure the full Android UI window is up (not multi-window app mode).
-        if shutil.which("waydroid"):
-            try:
-                subprocess.Popen(  # noqa: S603
-                    ["waydroid", "show-full-ui"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True,
-                )
-                logger.info("Ensured waydroid show-full-ui")
-                time.sleep(1.5)
-            except OSError as exc:
-                logger.warning("Could not run show-full-ui: {}", exc)
+        logger.info("Launching {} inside LDPlayer", pkg)
 
         resolve = self.client.run_shell(
             f"cmd package resolve-activity --brief {pkg}",

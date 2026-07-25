@@ -1,53 +1,677 @@
-# Bundled unit housing data — run `python scripts/sync_game_data.py --force` to refresh.
-# coc.guide homepage may fail in browser; the sync script uses direct static JSON URLs.
-updated_at: "2026-07-21T00:00:00Z"
+updated_at: '2026-07-24T18:47:49Z'
 sources:
-  - bundled-seed
-note: Run scripts/sync_game_data.py on Ubuntu to pull full list from coc.guide/static/json/
+- https://coc.guide/static/json/characters.json
+- https://coc.guide/static/json/supers.json
+- config\game_spells_seed.yaml
+note: Siege donation uses count limits, not housing. housing=1 in game files.
 units:
-  barbarian: { name: Barbarian, category: troop, housing: 1 }
-  archer: { name: Archer, category: troop, housing: 1 }
-  goblin: { name: Goblin, category: troop, housing: 1 }
-  giant: { name: Giant, category: troop, housing: 5 }
-  wall_breaker: { name: Wall Breaker, category: troop, housing: 2 }
-  balloon: { name: Balloon, category: troop, housing: 5 }
-  wizard: { name: Wizard, category: troop, housing: 4 }
-  healer: { name: Healer, category: troop, housing: 14 }
-  dragon: { name: Dragon, category: troop, housing: 20 }
-  pekka: { name: P.E.K.K.A, category: troop, housing: 25 }
-  minion: { name: Minion, category: troop, housing: 2 }
-  hog_rider: { name: Hog Rider, category: troop, housing: 5 }
-  valkyrie: { name: Valkyrie, category: troop, housing: 8 }
-  golem: { name: Golem, category: troop, housing: 30 }
-  witch: { name: Witch, category: troop, housing: 12 }
-  lava_hound: { name: Lava Hound, category: troop, housing: 30 }
-  bowler: { name: Bowler, category: troop, housing: 6 }
-  baby_dragon: { name: Baby Dragon, category: troop, housing: 10 }
-  miner: { name: Miner, category: troop, housing: 6 }
-  headhunter: { name: Headhunter, category: troop, housing: 6 }
-  yeti: { name: Yeti, category: troop, housing: 18 }
-  ice_golem: { name: Ice Golem, category: troop, housing: 15 }
-  electro_dragon: { name: Electro Dragon, category: troop, housing: 30 }
-  dragon_rider: { name: Dragon Rider, category: troop, housing: 25 }
-  electro_titan: { name: Electro Titan, category: troop, housing: 32 }
-  root_rider: { name: Root Rider, category: troop, housing: 20 }
-  furnace: { name: Furnace, category: troop, housing: 18 }
-  log_launcher: { name: Siege Log Launcher, category: siege, housing: 1 }
-  wall_wrecker: { name: Wall Wrecker, category: siege, housing: 1 }
-  battle_blimp: { name: Battle Blimp, category: siege, housing: 1 }
-  stone_slammer: { name: Stone Slammer, category: siege, housing: 1 }
-  siege_barracks: { name: Siege Barracks, category: siege, housing: 1 }
-  flame_flinger: { name: Flame Flinger, category: siege, housing: 1 }
-  battle_drill: { name: Battle Drill, category: siege, housing: 1 }
-  troop_launcher: { name: Troop Launcher, category: siege, housing: 1 }
-  lightning_spell: { name: Lightning Spell, category: spell, housing: 1 }
-  healing_spell: { name: Healing Spell, category: spell, housing: 2 }
-  rage_spell: { name: Rage Spell, category: spell, housing: 2 }
-  jump_spell: { name: Jump Spell, category: spell, housing: 2 }
-  freeze_spell: { name: Freeze Spell, category: spell, housing: 1 }
-  clone_spell: { name: Clone Spell, category: spell, housing: 3 }
-  poison_spell: { name: Poison Spell, category: spell, housing: 1 }
-  earthquake_spell: { name: Earthquake Spell, category: spell, housing: 1 }
-  haste_spell: { name: Haste Spell, category: spell, housing: 1 }
-  skeleton_spell: { name: Skeleton Spell, category: spell, housing: 1 }
-  bat_spell: { name: Bat Spell, category: spell, housing: 1 }
+  airdefenceseeker:
+    name: AirDefenceSeeker
+    category: troop
+    housing: 30
+    source: characters.json
+  airdefenceseeker_def:
+    name: AirDefenceSeeker_DEF
+    category: troop
+    housing: 30
+    source: characters.json
+  apprentice_warden:
+    name: Apprentice Warden
+    category: troop
+    housing: 20
+    source: characters.json
+  archer:
+    name: Archer
+    category: troop
+    housing: 1
+    source: characters.json
+  archer2:
+    name: Archer2
+    category: troop
+    housing: 3
+    source: characters.json
+  babydragon:
+    name: BabyDragon
+    category: troop
+    housing: 10
+    source: characters.json
+  babydragon2:
+    name: BabyDragon2
+    category: troop
+    housing: 12
+    source: characters.json
+  balloon:
+    name: Balloon
+    category: troop
+    housing: 5
+    source: characters.json
+  balloon2:
+    name: Balloon2
+    category: troop
+    housing: 15
+    source: characters.json
+  barbarian:
+    name: Barbarian
+    category: troop
+    housing: 1
+    source: characters.json
+  barbarian2:
+    name: Barbarian2
+    category: troop
+    housing: 4
+    source: characters.json
+  barbarian_ram:
+    name: Barbarian_RAM
+    category: troop
+    housing: 1
+    source: characters.json
+  barcher:
+    name: Barcher
+    category: troop
+    housing: 3
+    source: characters.json
+  bat_spell:
+    name: Bat Spell
+    category: spell
+    housing: 1
+    source: game_spells_seed.yaml
+  battle_drill:
+    name: Battle Drill
+    category: siege
+    housing: 1
+    source: characters.json
+  battleram:
+    name: BattleRam
+    category: troop
+    housing: 4
+    source: characters.json
+  boar_rider:
+    name: Boar Rider
+    category: troop
+    housing: 5
+    source: characters.json
+  bomber2:
+    name: Bomber2
+    category: troop
+    housing: 12
+    source: characters.json
+  bowler:
+    name: Bowler
+    category: troop
+    housing: 6
+    source: characters.json
+  bowler_balloon:
+    name: Siege Bowler Balloon
+    category: siege
+    housing: 1
+    source: characters.json
+  catapult:
+    name: Siege Catapult
+    category: siege
+    housing: 1
+    source: characters.json
+  clone_spell:
+    name: Clone Spell
+    category: spell
+    housing: 3
+    source: game_spells_seed.yaml
+  commander:
+    name: Commander
+    category: troop
+    housing: 36
+    source: characters.json
+  commandtower:
+    name: CommandTower
+    category: siege
+    housing: 1
+    source: characters.json
+  cookie:
+    name: COOKIE
+    category: troop
+    housing: 10
+    source: characters.json
+  courier:
+    name: Courier
+    category: troop
+    housing: 20
+    source: characters.json
+  dark_witch:
+    name: Dark Witch
+    category: troop
+    housing: 14
+    source: characters.json
+  destroyer:
+    name: Destroyer
+    category: siege
+    housing: 1
+    source: characters.json
+  destroyerflying:
+    name: DestroyerFlying
+    category: siege
+    housing: 1
+    source: characters.json
+  dragon:
+    name: Dragon
+    category: troop
+    housing: 20
+    source: characters.json
+  dragon_rider:
+    name: Dragon Rider
+    category: troop
+    housing: 25
+    source: characters.json
+  druid_healer:
+    name: Druid_Healer
+    category: troop
+    housing: 16
+    source: characters.json
+  earthquake_spell:
+    name: Earthquake Spell
+    category: spell
+    housing: 1
+    source: game_spells_seed.yaml
+  electro_dragon:
+    name: Electro Dragon
+    category: troop
+    housing: 30
+    source: characters.json
+  electro_titan:
+    name: Electro Titan
+    category: troop
+    housing: 32
+    source: characters.json
+  electrofire_wizard:
+    name: Electrofire Wizard
+    category: troop
+    housing: 14
+    source: characters.json
+  elitearcher:
+    name: EliteArcher
+    category: troop
+    housing: 12
+    source: characters.json
+  elitebarbarian:
+    name: EliteBarbarian
+    category: troop
+    housing: 5
+    source: characters.json
+  elitegiant:
+    name: EliteGiant
+    category: troop
+    housing: 10
+    source: characters.json
+  elitegoblin:
+    name: EliteGoblin
+    category: troop
+    housing: 3
+    source: characters.json
+  elitevalkyrie:
+    name: EliteValkyrie
+    category: troop
+    housing: 20
+    source: characters.json
+  elitewallbreaker:
+    name: EliteWallBreaker
+    category: troop
+    housing: 8
+    source: characters.json
+  elprimo:
+    name: ElPrimo
+    category: troop
+    housing: 10
+    source: characters.json
+  firecracker:
+    name: Firecracker
+    category: troop
+    housing: 10
+    source: characters.json
+  firemite:
+    name: Firemite
+    category: troop
+    housing: 2
+    source: characters.json
+  flying_invisi_siege:
+    name: Flying Invisi Siege
+    category: siege
+    housing: 1
+    source: characters.json
+  free_kicker:
+    name: Free Kicker
+    category: troop
+    housing: 12
+    source: characters.json
+  freeze_spell:
+    name: Freeze Spell
+    category: spell
+    housing: 1
+    source: game_spells_seed.yaml
+  gargoyle:
+    name: Gargoyle
+    category: troop
+    housing: 2
+    source: characters.json
+  gargoyle2:
+    name: Gargoyle2
+    category: troop
+    housing: 3
+    source: characters.json
+  gargoyletrap:
+    name: GargoyleTrap
+    category: troop
+    housing: 2
+    source: characters.json
+  giant:
+    name: Giant
+    category: troop
+    housing: 5
+    source: characters.json
+  giant2:
+    name: Giant2
+    category: troop
+    housing: 18
+    source: characters.json
+  giant_pekka:
+    name: Giant PEKKA
+    category: troop
+    housing: 100
+    source: characters.json
+  giant_skeleton:
+    name: Giant Skeleton
+    category: troop
+    housing: 20
+    source: characters.json
+  goblin:
+    name: Goblin
+    category: troop
+    housing: 1
+    source: characters.json
+  goblindragon:
+    name: GoblinDragon
+    category: troop
+    housing: 50
+    source: characters.json
+  golem:
+    name: Golem
+    category: troop
+    housing: 30
+    source: characters.json
+  grave_golem:
+    name: Grave Golem
+    category: troop
+    housing: 41
+    source: characters.json
+  gw_equipment_lavaloon:
+    name: GW equipment Lavaloon
+    category: troop
+    housing: 23
+    source: characters.json
+  haste_spell:
+    name: Haste Spell
+    category: spell
+    housing: 1
+    source: game_spells_seed.yaml
+  hastyballoon:
+    name: HastyBalloon
+    category: troop
+    housing: 8
+    source: characters.json
+  head_witch:
+    name: Head Witch
+    category: troop
+    housing: 40
+    source: characters.json
+  head_witch_skeleton:
+    name: Head Witch Skeleton
+    category: troop
+    housing: 20
+    source: characters.json
+  headhunter:
+    name: Headhunter
+    category: troop
+    housing: 6
+    source: characters.json
+  healer:
+    name: Healer
+    category: troop
+    housing: 14
+    source: characters.json
+  healing_spell:
+    name: Healing Spell
+    category: spell
+    housing: 2
+    source: game_spells_seed.yaml
+  hog_glider:
+    name: Hog Glider
+    category: troop
+    housing: 12
+    source: characters.json
+  hog_rider:
+    name: Hog Rider
+    category: troop
+    housing: 12
+    source: characters.json
+  hog_wizard:
+    name: Hog Wizard
+    category: troop
+    housing: 7
+    source: characters.json
+  hogless_rider:
+    name: Hogless Rider
+    category: troop
+    housing: 5
+    source: characters.json
+  ice_block_spell:
+    name: Ice Block Spell
+    category: spell
+    housing: 1
+    source: game_spells_seed.yaml
+  ice_golem:
+    name: Ice Golem
+    category: troop
+    housing: 15
+    source: characters.json
+  ice_golem_def:
+    name: Ice Golem_DEF
+    category: troop
+    housing: 15
+    source: characters.json
+  ice_hound:
+    name: Ice Hound
+    category: troop
+    housing: 40
+    source: characters.json
+  ice_hound_def:
+    name: Ice Hound_DEF
+    category: troop
+    housing: 40
+    source: characters.json
+  ice_minion:
+    name: Ice Minion
+    category: troop
+    housing: 4
+    source: characters.json
+  ice_wizard_xmas:
+    name: Ice Wizard_xmas
+    category: troop
+    housing: 4
+    source: characters.json
+  infernodragon:
+    name: InfernoDragon
+    category: troop
+    housing: 15
+    source: characters.json
+  invisi_siege:
+    name: Invisi Siege
+    category: siege
+    housing: 1
+    source: characters.json
+  invisibility_spell:
+    name: Invisibility Spell
+    category: spell
+    housing: 1
+    source: game_spells_seed.yaml
+  jump_spell:
+    name: Jump Spell
+    category: spell
+    housing: 2
+    source: game_spells_seed.yaml
+  lavaloon:
+    name: Lavaloon
+    category: troop
+    housing: 23
+    source: characters.json
+  lightning_spell:
+    name: Lightning Spell
+    category: spell
+    housing: 1
+    source: game_spells_seed.yaml
+  log_launcher:
+    name: Siege Log Launcher
+    category: siege
+    housing: 1
+    source: characters.json
+  machine_carrier:
+    name: Siege Machine Carrier
+    category: siege
+    housing: 1
+    source: characters.json
+  machine_flyer:
+    name: Siege Machine Flyer
+    category: siege
+    housing: 1
+    source: characters.json
+  machine_ram:
+    name: Siege Machine Ram
+    category: siege
+    housing: 1
+    source: characters.json
+  mega_cookie:
+    name: Mega COOKIE
+    category: troop
+    housing: 100
+    source: characters.json
+  miner:
+    name: Miner
+    category: troop
+    housing: 6
+    source: characters.json
+  miner_def:
+    name: Miner_DEF
+    category: troop
+    housing: 6
+    source: characters.json
+  moving_cannon:
+    name: Moving Cannon
+    category: troop
+    housing: 16
+    source: characters.json
+  movingcannonsecondary:
+    name: MovingCannonSecondary
+    category: troop
+    housing: 16
+    source: characters.json
+  overgrowth_spell:
+    name: Overgrowth Spell
+    category: spell
+    housing: 1
+    source: game_spells_seed.yaml
+  party_wizard:
+    name: Party_Wizard
+    category: troop
+    housing: 4
+    source: characters.json
+  pekka:
+    name: PEKKA
+    category: troop
+    housing: 25
+    source: characters.json
+  pekka2:
+    name: PEKKA2
+    category: troop
+    housing: 22
+    source: characters.json
+  poison_spell:
+    name: Poison Spell
+    category: spell
+    housing: 1
+    source: game_spells_seed.yaml
+  prototype3:
+    name: Prototype3
+    category: troop
+    housing: 1
+    source: characters.json
+  pumpkin_barbarian_armored:
+    name: Pumpkin Barbarian Armored
+    category: troop
+    housing: 1
+    source: characters.json
+  pumpkin_barbarian_bare:
+    name: Pumpkin Barbarian Bare
+    category: troop
+    housing: 1
+    source: characters.json
+  rage_spell:
+    name: Rage Spell
+    category: spell
+    housing: 2
+    source: game_spells_seed.yaml
+  ram_rider:
+    name: Ram Rider
+    category: troop
+    housing: 12
+    source: characters.json
+  recall_spell:
+    name: Recall Spell
+    category: spell
+    housing: 1
+    source: game_spells_seed.yaml
+  reviving_spell:
+    name: Reviving Spell
+    category: spell
+    housing: 2
+    source: game_spells_seed.yaml
+  riderless_hog:
+    name: Riderless Hog
+    category: troop
+    housing: 5
+    source: characters.json
+  root_rider:
+    name: Root Rider
+    category: troop
+    housing: 20
+    source: characters.json
+  royal_ghost:
+    name: Royal_Ghost
+    category: troop
+    housing: 8
+    source: characters.json
+  side_thrower:
+    name: Side Thrower
+    category: troop
+    housing: 15
+    source: characters.json
+  skeleton_barrel:
+    name: Skeleton Barrel
+    category: troop
+    housing: 5
+    source: characters.json
+  skeleton_spell:
+    name: Skeleton Spell
+    category: spell
+    housing: 1
+    source: game_spells_seed.yaml
+  snake_barrel:
+    name: Snake Barrel
+    category: troop
+    housing: 8
+    source: characters.json
+  super_bowler:
+    name: Super Bowler
+    category: troop
+    housing: 30
+    source: characters.json
+  super_dragon:
+    name: Super Dragon
+    category: troop
+    housing: 40
+    source: characters.json
+  super_hog_rider:
+    name: Super Hog Rider
+    category: troop
+    housing: 12
+    source: characters.json
+  super_miner:
+    name: Super Miner
+    category: troop
+    housing: 24
+    source: characters.json
+  super_minion:
+    name: Super Minion
+    category: troop
+    housing: 12
+    source: characters.json
+  super_wizard:
+    name: Super Wizard
+    category: troop
+    housing: 10
+    source: characters.json
+  tankyangel:
+    name: TankyAngel
+    category: troop
+    housing: 22
+    source: characters.json
+  tax_collector:
+    name: Tax Collector
+    category: troop
+    housing: 4
+    source: characters.json
+  thrower:
+    name: Thrower
+    category: troop
+    housing: 16
+    source: characters.json
+  torchthrowerb:
+    name: TorchThrowerB
+    category: troop
+    housing: 12
+    source: characters.json
+  trapskeletonair:
+    name: TrapSkeletonAir
+    category: troop
+    housing: 2
+    source: characters.json
+  troop_catapult_prototype:
+    name: Troop Catapult Prototype
+    category: siege
+    housing: 1
+    source: characters.json
+  troop_catapult_prototype_new:
+    name: Troop Catapult Prototype New
+    category: siege
+    housing: 1
+    source: characters.json
+  tutorialbarbarian:
+    name: TutorialBarbarian
+    category: troop
+    housing: 1
+    source: characters.json
+  tutorialgoblin:
+    name: TutorialGoblin
+    category: troop
+    housing: 1
+    source: characters.json
+  wall_breaker:
+    name: Wall Breaker
+    category: troop
+    housing: 2
+    source: characters.json
+  warlock:
+    name: Warlock
+    category: troop
+    housing: 12
+    source: characters.json
+  warrior_girl:
+    name: Warrior Girl
+    category: troop
+    housing: 8
+    source: characters.json
+  water_dragon:
+    name: Water Dragon
+    category: troop
+    housing: 40
+    source: characters.json
+  witch_golem_big_boy:
+    name: Witch Golem Big Boy
+    category: troop
+    housing: 20
+    source: characters.json
+  wizard:
+    name: Wizard
+    category: troop
+    housing: 4
+    source: characters.json
+  yeti:
+    name: Yeti
+    category: troop
+    housing: 18
+    source: characters.json

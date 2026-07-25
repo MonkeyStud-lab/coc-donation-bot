@@ -588,6 +588,7 @@ class ScreenClassifier:
         frame: np.ndarray,
         *,
         require_no_live_chrome: bool = True,
+        ignore_home_anchors: bool = False,
     ) -> tuple[int, int] | None:
         """
         Tap target for the green Return Home button on defeat/victory.
@@ -598,13 +599,17 @@ class ScreenClassifier:
         ``require_no_live_chrome=False`` when leave logic needs to see the CTA
         even if red/orange scenery falsely trips the chrome heuristic.
 
-        Never matches when village home anchors are visible — home greens
-        (buttons, grass, shops) often look like Return Home.
+        By default never matches when village home anchors are visible — home
+        greens (buttons, grass, shops) often look like Return Home. Pass
+        ``ignore_home_anchors=True`` after the farm battle timer: results-card
+        orange loot/UI often false-triggers the Attack! chip heuristic and would
+        otherwise hide the real green Return Home button.
         """
-        if self._home_attack_chip_visible(frame) or self._open_chat_icon_visible(frame):
-            return None
-        if self._clan_chat_anchor_visible(frame):
-            return None
+        if not ignore_home_anchors:
+            if self._home_attack_chip_visible(frame) or self._open_chat_icon_visible(frame):
+                return None
+            if self._clan_chat_anchor_visible(frame):
+                return None
         if require_no_live_chrome and self._live_battle_chrome_visible(frame):
             return None
         return self._find_return_home_green_cta(frame)

@@ -53,8 +53,9 @@ Prefer small, focused changes. Match existing naming and logging style (`loguru`
 | New tap targets | Wizard step `"farm"` |
 
 Keep the simple post-deploy timer in `wait_for_battle_end` (wait N seconds from first
-deploy, tap Return Home coords, then confirm home). Leave confirmation should stay
-failsafe-heavy (Attack! chip, clan-chat confirm).
+deploy, then **force-tap** calibrated `return_home` coords with no vision skip). Leave
+confirmation should prefer results / green Return Home over Attack!, then prove home
+by opening clan chat.
 
 ### 3. Change donation behavior
 

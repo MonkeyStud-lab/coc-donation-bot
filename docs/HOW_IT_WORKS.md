@@ -151,8 +151,8 @@ leave clan chat → Attack! → unranked Battle → battlefield
 Leaving after a fight used to rely heavily on vision mid-battle; that was flaky. The farm path is now intentionally simple:
 
 1. **Timer** from first troop deploy (`farm.battle_timeout_seconds`, default **210** = 3m30s)
-2. Tap calibrated **Return Home** coordinates (green CTA if seen)
-3. Confirm village with existing rules (Attack! chip, open clan chat)
+2. When the timer ends, **always** tap calibrated **Return Home** coordinates — no vision, no skip
+3. Then confirm village (clan chat / leave rules). Results / green CTA win over a false Attack! chip
 4. Never press Android **BACK** mid-battle (opens Surrender). On the Surrender dialog, tap **Cancel**
 
 False “battle results” during search are ignored unless real side silhouettes appear.

@@ -188,6 +188,13 @@ STEPS: dict[str, CalibrationStep] = {
                 description="End-of-battle Return Home / OK",
             ),
             CalibrationPart(
+                "deploy_sequence",
+                "Deploy tap sequence",
+                "meta",
+                optional=True,
+                description="Program army+map taps after pan (Setup button or Tools)",
+            ),
+            CalibrationPart(
                 "edrag_slot",
                 "E-drag army slot",
                 "tap",
@@ -254,6 +261,11 @@ def part_is_configured(config: BotConfig, part: CalibrationPart) -> bool:
     if part.kind == "meta":
         if key == "frame_width":
             return int(config.frame_width or 0) > 0 and int(config.frame_height or 0) > 0
+        if key == "deploy_sequence":
+            from coc_bot.config import normalize_farm_deploy_sequence
+
+            seq = normalize_farm_deploy_sequence(config.farm_deploy_sequence)
+            return bool(seq.get("taps"))
         return False
     if part.kind == "tap":
         if key == "tap_outside_donation":
@@ -309,11 +321,12 @@ def print_step_menu(status: dict[str, bool]) -> None:
             print(f"        · {part.label}{opt} [{part.key}]")
     print("-" * 60)
     print("Run:  python scripts/calibrate.py --step clan_chat")
+    print("      python scripts/calibrate.py --step farm --part return_home")
     print("      python scripts/calibrate.py --all")
 
 
 class CalibrationWizard:
-    """Interactive calibration with per-step re-run support."""
+    """Interactive calibration with per-step / per-part re-run support."""
 
     def __init__(self, config: BotConfig | None = None) -> None:
         self.config = config or load_config()
@@ -323,10 +336,16 @@ class CalibrationWizard:
         self.capture.bind_input(self.input)
         self.templates_dir = self.config.templates_dir
         self.templates_dir.mkdir(parents=True, exist_ok=True)
+        # When set, step_* methods only run the matching CalibrationPart key.
+        self._only_part: str | None = None
         if self.config.calibrated:
             logger.info("Loaded existing calibration from data/calibrated.yaml")
 
     # --- skip/update helpers (answer 'n' to keep existing values) ---
+
+    def _want_part(self, key: str) -> bool:
+        """True if we should run this part (full step, or this key alone)."""
+        return self._only_part is None or self._only_part == key
 
     def _has_roi(self, key: str) -> bool:
         return key in self.config.rois
@@ -341,13 +360,18 @@ class CalibrationWizard:
         return key in self.config.colors
 
     def _should_update(self, label: str, *, exists: bool, optional: bool = False) -> bool:
+        """Ask before changing anything — answer 'n' keeps or skips."""
         if not exists:
             if optional:
                 if prompt_yes_no(f"Capture {label}?"):
                     return True
                 print(f"Skipping {label}.")
                 return False
-            return True
+            # Required but missing: still allow skip so a part can be deferred.
+            if prompt_yes_no(f"{label} is missing — capture it now?"):
+                return True
+            print(f"Skipping {label} (still missing).")
+            return False
         if prompt_yes_no(f"Update {label}?"):
             return True
         _keeping(label)
@@ -518,17 +542,46 @@ class CalibrationWizard:
                 continue
             self.run_steps(selected)
 
-    def run_steps(self, step_ids: list[str]) -> None:
+    def run_steps(self, step_ids: list[str], *, only_part: str | None = None) -> None:
         self._ensure_connected()
         handlers = self._handlers()
         for step_id in step_ids:
             if step_id not in handlers:
                 logger.error("Unknown step: {}", step_id)
                 continue
-            print(f"\n{'=' * 60}\n  STEP: {STEPS[step_id].title}\n{'=' * 60}")
-            handlers[step_id]()
+            if only_part is not None:
+                valid = {p.key for p in STEPS[step_id].parts}
+                if only_part not in valid:
+                    logger.error(
+                        "Unknown part '{}' for step {} (valid: {})",
+                        only_part,
+                        step_id,
+                        ", ".join(sorted(valid)),
+                    )
+                    continue
+                if only_part == "deploy_sequence":
+                    print(
+                        "\nDeploy tap sequence is programmed from the GUI:\n"
+                        "  Setup → Program farm deploy sequence\n"
+                        "  (or Tools → Farm: program deploy sequence)\n"
+                        "Enter an unranked battle first, then run that button.\n"
+                    )
+                    continue
+            title = STEPS[step_id].title
+            if only_part:
+                print(f"\n{'=' * 60}\n  STEP: {title} → part: {only_part}\n{'=' * 60}")
+            else:
+                print(f"\n{'=' * 60}\n  STEP: {title}\n{'=' * 60}")
+            self._only_part = only_part
+            try:
+                handlers[step_id]()
+            finally:
+                self._only_part = None
             self._save()
-            print(f"\n✓ Step '{step_id}' saved.\n")
+            if only_part:
+                print(f"\n✓ Part '{step_id}::{only_part}' saved.\n")
+            else:
+                print(f"\n✓ Step '{step_id}' saved.\n")
         print("Calibration update complete.")
 
     def _handlers(self) -> dict[str, Callable[[], None]]:
@@ -544,97 +597,136 @@ class CalibrationWizard:
         }
 
     def step_home(self) -> None:
-        print("Go to your village/HOME screen (not in chat).")
-        _press_enter()
-        frame = self.capture.screenshot()
-        h, w = frame.shape[:2]
-        self.config.frame_width = w
-        self.config.frame_height = h
-        logger.info("Frame size: {}x{}", w, h)
-
-        self._maybe_update_template(
-            "home",
-            "home anchor template",
-            "ui/home.png",
-            frame,
-            optional=True,
+        need_home_screen = self._want_part("frame_width") or self._want_part("home") or self._want_part(
+            "open_chat"
         )
+        if need_home_screen:
+            print("Go to your village/HOME screen (not in chat).")
+            _press_enter()
+        frame = self.capture.screenshot() if need_home_screen else self._fresh_frame()
 
-        print("\n--- Open chat button (must be captured from HOME screen) ---")
-        print(
-            "This is the chat bubble / ``>`` tab that OPENS clan chat from home.\n"
-            "Capture it as an IMAGE (recommended): the bot uses that picture to tell\n"
-            "home apart from battle. Closing chat uses a different orange ``<`` tab\n"
-            "(Clan chat step)."
-        )
-        has_tpl = self._has_template("open_chat")
-        has_tap = self._has_tap("open_chat")
-        if not has_tpl or prompt_yes_no("Update open_chat chat-bubble image?"):
-            coords, picked = self._pick_roi(
-                "Drag a box tightly around the chat bubble on HOME", frame
+        if self._want_part("frame_width"):
+            has_size = int(self.config.frame_width or 0) > 0
+            if not has_size or prompt_yes_no("Update screen size from screenshot?"):
+                h, w = frame.shape[:2]
+                self.config.frame_width = w
+                self.config.frame_height = h
+                logger.info("Frame size: {}x{}", w, h)
+            else:
+                _keeping("frame_width")
+
+        if self._want_part("home"):
+            self._maybe_update_template(
+                "home",
+                "home anchor template",
+                "ui/home.png",
+                frame,
+                optional=True,
             )
-            self._save_template_from_frame(picked, coords, "ui/open_chat.png", "open_chat")
-            # Also store center as tap point for opening chat.
-            x, y, bw, bh = coords
-            self.config.tap_points["open_chat"] = [int(x + bw / 2), int(y + bh / 2)]
-            logger.info("Saved open_chat template + tap at center")
-        elif not has_tap or prompt_yes_no("Update open_chat tap point only?"):
-            pt = self._pick_point("Tap point at CENTER of open-chat control", frame)
-            self.config.tap_points["open_chat"] = list(pt)
-            logger.info("Saved tap point open_chat")
-        else:
-            _keeping("open_chat")
+
+        if self._want_part("open_chat"):
+            print("\n--- Open chat button (must be captured from HOME screen) ---")
+            print(
+                "This is the chat bubble / ``>`` tab that OPENS clan chat from home.\n"
+                "Capture it as an IMAGE (recommended): the bot uses that picture to tell\n"
+                "home apart from battle. Closing chat uses a different orange ``<`` tab\n"
+                "(Clan chat step)."
+            )
+            has_tpl = self._has_template("open_chat")
+            has_tap = self._has_tap("open_chat")
+            if self._should_update(
+                "open_chat chat-bubble image",
+                exists=has_tpl,
+                optional=False,
+            ):
+                coords, picked = self._pick_roi(
+                    "Drag a box tightly around the chat bubble on HOME", frame
+                )
+                self._save_template_from_frame(picked, coords, "ui/open_chat.png", "open_chat")
+                x, y, bw, bh = coords
+                self.config.tap_points["open_chat"] = [int(x + bw / 2), int(y + bh / 2)]
+                logger.info("Saved open_chat template + tap at center")
+            elif not has_tap and self._should_update(
+                "open_chat tap point", exists=False, optional=False
+            ):
+                pt = self._pick_point("Tap point at CENTER of open-chat control", frame)
+                self.config.tap_points["open_chat"] = list(pt)
+                logger.info("Saved tap point open_chat")
+            elif has_tap and not has_tpl and prompt_yes_no("Update open_chat tap point only?"):
+                pt = self._pick_point("Tap point at CENTER of open-chat control", frame)
+                self.config.tap_points["open_chat"] = list(pt)
+                logger.info("Saved tap point open_chat")
 
     def step_clan_chat(self) -> None:
+        need = any(
+            self._want_part(k)
+            for k in (
+                "chat_panel",
+                "chat_requests",
+                "clan_chat",
+                "close_chat",
+                "chat_scroll_down",
+                "chat_request_jump",
+            )
+        )
+        if not need:
+            return
         w, h = self._frame_size()
         print("Open clan chat. Do NOT open the donation panel.")
         _press_enter()
         frame = self.capture.screenshot()
 
-        self._maybe_update_roi("chat_panel", "chat panel ROI", w, h)
-        self._maybe_update_roi("chat_requests", "chat requests ROI", w, h)
+        if self._want_part("chat_panel"):
+            self._maybe_update_roi("chat_panel", "chat panel ROI", w, h)
+        if self._want_part("chat_requests"):
+            self._maybe_update_roi("chat_requests", "chat requests ROI", w, h)
 
-        print(
-            "\n--- clan_chat anchor ---\n"
-            "Pick UI that is visible in clan chat but HIDDEN when the donation panel is open.\n"
-            "Good: selected Clan tab, chat header. Bad: anything covered by the donate popup."
-        )
-        self._maybe_update_template(
-            "clan_chat",
-            "clan_chat anchor template",
-            "ui/clan_chat.png",
-            frame,
-        )
+        if self._want_part("clan_chat"):
+            print(
+                "\n--- clan_chat anchor ---\n"
+                "Pick UI that is visible in clan chat but HIDDEN when the donation panel is open.\n"
+                "Good: selected Clan tab, chat header. Bad: anything covered by the donate popup."
+            )
+            self._maybe_update_template(
+                "clan_chat",
+                "clan_chat anchor template",
+                "ui/clan_chat.png",
+                frame,
+            )
 
-        print(
-            "\n--- Close chat tab (orange ``<`` on the right edge of the open chat panel) ---\n"
-            "This is DIFFERENT from the open-chat bubble on home.\n"
-            "With clan chat OPEN, tap the small orange tab with the left arrow."
-        )
-        has_close = self._has_tap("close_chat") or self._has_template("close_chat")
-        if not has_close or prompt_yes_no("Update close_chat control?"):
-            if prompt_yes_no("Capture close_chat as image template?"):
-                coords, picked = self._pick_roi("Orange < close-chat tab", frame)
-                self._save_template_from_frame(picked, coords, "ui/close_chat.png", "close_chat")
-            pt = self._pick_point("Tap point at CENTER of the orange < close tab", frame)
-            self.config.tap_points["close_chat"] = list(pt)
-            logger.info("Saved tap point close_chat")
-        else:
-            _keeping("close_chat")
+        if self._want_part("close_chat"):
+            print(
+                "\n--- Close chat tab (orange ``<`` on the right edge of the open chat panel) ---\n"
+                "This is DIFFERENT from the open-chat bubble on home.\n"
+                "With clan chat OPEN, tap the small orange tab with the left arrow."
+            )
+            has_close = self._has_tap("close_chat") or self._has_template("close_chat")
+            if self._should_update("close_chat control", exists=has_close, optional=True):
+                if prompt_yes_no("Capture close_chat as image template?"):
+                    coords, picked = self._pick_roi("Orange < close-chat tab", frame)
+                    self._save_template_from_frame(
+                        picked, coords, "ui/close_chat.png", "close_chat"
+                    )
+                pt = self._pick_point("Tap point at CENTER of the orange < close tab", frame)
+                self.config.tap_points["close_chat"] = list(pt)
+                logger.info("Saved tap point close_chat")
 
-        print(
-            "\n--- Scroll-down / jump icon at bottom (optional legacy template) ---\n"
-            "If you already captured the bottom exclamation as chat_scroll_down, you can skip this.\n"
-            "Otherwise scroll chat UP until the bottom icon appears, then capture it."
-        )
-        self._maybe_update_template_after_setup(
-            "chat_scroll_down",
-            "bottom chat jump icon (optional if chat_request_jump captured)",
-            "ui/chat_scroll_down.png",
-            "When the bottom icon is visible, press Enter...",
-            optional=True,
-        )
+        if self._want_part("chat_scroll_down"):
+            print(
+                "\n--- Scroll-down / jump icon at bottom (optional legacy template) ---\n"
+                "If you already captured the bottom exclamation as chat_scroll_down, you can skip this.\n"
+                "Otherwise scroll chat UP until the bottom icon appears, then capture it."
+            )
+            self._maybe_update_template_after_setup(
+                "chat_scroll_down",
+                "bottom chat jump icon (optional if chat_request_jump captured)",
+                "ui/chat_scroll_down.png",
+                "When the bottom icon is visible, press Enter...",
+                optional=True,
+            )
 
+        if not self._want_part("chat_request_jump"):
+            return
         print(
             "\n--- Exclamation jump icon (top OR bottom of chat log) ---\n"
             "Same icon appears at the TOP when a request is above the current view,\n"
@@ -652,7 +744,8 @@ class CalibrationWizard:
         )
 
     def step_donation_request(self) -> None:
-        w, h = self._frame_size()
+        if not self._want_part("donate_button"):
+            return
         print(
             "Show a donation request with a visible Donate button in clan chat.\n"
             "Requested troops/spells appear in the chat message only — NOT in the donation panel."
@@ -669,43 +762,69 @@ class CalibrationWizard:
         self.config.rois.pop("request_header", None)
 
     def step_donation_panel(self) -> None:
+        need = any(
+            self._want_part(k)
+            for k in (
+                "donation_panel",
+                "donation_troop_bar",
+                "donation_spell_bar",
+                "tap_outside_donation",
+            )
+        )
+        if not need:
+            return
         w, h = self._frame_size()
         print("Tap Donate on a request to OPEN the donation panel, then continue.")
         _press_enter("With donation panel open, press Enter...")
         frame = self.capture.screenshot()
 
-        print(
-            "\n--- Donation Resource title (optional but recommended) ---\n"
-            "Crop tightly around the unique “Donation Resource” text at the top of\n"
-            "the white panel. The bot also detects the white card automatically."
-        )
-        self._maybe_update_template(
-            "donation_panel",
-            "Donation Resource title template",
-            "ui/donation_panel.png",
-            frame,
-            optional=True,
-        )
+        if self._want_part("donation_panel"):
+            print(
+                "\n--- Donation Resource title (optional but recommended) ---\n"
+                "Crop tightly around the unique “Donation Resource” text at the top of\n"
+                "the white panel. The bot also detects the white card automatically."
+            )
+            self._maybe_update_template(
+                "donation_panel",
+                "Donation Resource title template",
+                "ui/donation_panel.png",
+                frame,
+                optional=True,
+            )
 
-        print(
-            "\nThe troop bar holds regular troops AND siege machines in the same area."
-        )
-        self._maybe_update_roi("donation_troop_bar", "troop donation bar ROI (troops + siege)", w, h)
-        self._maybe_update_roi("donation_spell_bar", "spell donation bar ROI", w, h)
+        if self._want_part("donation_troop_bar") or self._want_part("donation_spell_bar"):
+            print(
+                "\nThe troop bar holds regular troops AND siege machines in the same area."
+            )
+        if self._want_part("donation_troop_bar"):
+            self._maybe_update_roi(
+                "donation_troop_bar", "troop donation bar ROI (troops + siege)", w, h
+            )
+        if self._want_part("donation_spell_bar"):
+            self._maybe_update_roi("donation_spell_bar", "spell donation bar ROI", w, h)
 
         # Legacy — siege shared troop bar in current CoC UI
         self.config.rois.pop("donation_siege_bar", None)
 
-        print(
-            "\n--- Close donation panel ---\n"
-            "CoC has no X button. Tap OUTSIDE the panel (dimmed chat/background) to close it."
-        )
-        self._maybe_update_tap_point(
-            "tap_outside_donation",
-            "Tap point OUTSIDE the donation panel (dimmed area)",
-        )
+        if self._want_part("tap_outside_donation"):
+            print(
+                "\n--- Close donation panel ---\n"
+                "CoC has no X button. Tap OUTSIDE the panel (dimmed chat/background) to close it."
+            )
+            self._maybe_update_tap_point(
+                "tap_outside_donation",
+                "Tap point OUTSIDE the donation panel (dimmed area)",
+            )
 
     def step_slot_colors(self) -> None:
+        color_keys = (
+            "donatable_troop",
+            "disabled_troop",
+            "donatable_spell",
+            "disabled_spell",
+        )
+        if not any(self._want_part(k) for k in color_keys):
+            return
         print(
             "Open the donation panel.\n"
             "Colored slots can be donated; grey slots cannot (wrong type or won't fit).\n"
@@ -714,238 +833,256 @@ class CalibrationWizard:
         _press_enter()
         frame = self.capture.screenshot()
 
-        self._maybe_update_color(
-            "donatable_troop",
-            "COLORED troop/siege slot (can be donated)",
-            frame,
-        )
-        self._maybe_update_color(
-            "disabled_troop",
-            "GREY troop/siege slot (cannot be donated)",
-            frame,
-        )
-        self._maybe_update_color(
-            "donatable_spell",
-            "COLORED spell slot (can be donated)",
-            frame,
-        )
-        self._maybe_update_color(
-            "disabled_spell",
-            "GREY spell slot (cannot be donated)",
-            frame,
-        )
+        if self._want_part("donatable_troop"):
+            self._maybe_update_color(
+                "donatable_troop",
+                "COLORED troop/siege slot (can be donated)",
+                frame,
+            )
+        if self._want_part("disabled_troop"):
+            self._maybe_update_color(
+                "disabled_troop",
+                "GREY troop/siege slot (cannot be donated)",
+                frame,
+            )
+        if self._want_part("donatable_spell"):
+            self._maybe_update_color(
+                "donatable_spell",
+                "COLORED spell slot (can be donated)",
+                frame,
+            )
+        if self._want_part("disabled_spell"):
+            self._maybe_update_color(
+                "disabled_spell",
+                "GREY spell slot (cannot be donated)",
+                frame,
+            )
 
     def step_grid(self) -> None:
-        if self.config.grid and not prompt_yes_no("Update grid layout?"):
-            _keeping("grid")
+        want_troop = self._want_part("troop_bar")
+        want_spell = self._want_part("spell_bar")
+        if not want_troop and not want_spell:
             return
+
+        # Full-step: one deny skips the whole grid. Part-only: ask that bar only.
+        if self._only_part is None and self.config.grid:
+            if not prompt_yes_no("Update grid layout?"):
+                _keeping("grid")
+                return
 
         print(
             "\nRecommended: draw the grid on screen (covers all visible slot cells exactly).\n"
             "  python scripts/pick_grid.py\n"
         )
-        if prompt_yes_no("Launch grid picker now (needs display / RustDesk)?"):
+        if self._only_part is None and prompt_yes_no(
+            "Launch grid picker now (needs display / RustDesk)?"
+        ):
             import subprocess
             import sys
 
-            subprocess.run([sys.executable, str(Path(__file__).resolve().parents[3] / "scripts" / "pick_grid.py")])
+            subprocess.run(
+                [sys.executable, str(Path(__file__).resolve().parents[3] / "scripts" / "pick_grid.py")]
+            )
             return
 
-        if not prompt_yes_no("Enter column/row counts manually instead?"):
-            print("Run later: python scripts/pick_grid.py")
+        if not prompt_yes_no("Enter column/row counts manually?"):
+            print("Skipped grid numbers. Run later: python scripts/pick_grid.py")
             return
 
-        current = self.config.grid or {}
-        troop_bar = current.get("troop_bar", {})
-        spell_bar = current.get("spell_bar", {})
+        current = dict(self.config.grid or {})
+        troop_bar = dict(current.get("troop_bar") or {})
+        spell_bar = dict(current.get("spell_bar") or {})
         troop_cols_default = troop_bar.get("cols", 7)
         troop_rows_default = troop_bar.get("rows", 1)
         spell_cols_default = spell_bar.get("cols", 5)
         spell_rows_default = spell_bar.get("rows", 1)
 
-        print("Enter VISIBLE slot layout in the donation panel bars (Enter keeps default).")
-        print("Example: 2 rows x 7 columns of troops visible before scrolling horizontally.")
-        print("Requested troops are shown in clan chat only — no request-header setting needed.")
-        print("Troop bar includes regular troops and siege machines.")
-        raw = input(f"Troop+siege columns (slots per row) [{troop_cols_default}]: ").strip()
-        troop_cols = int(raw) if raw else troop_cols_default
-        raw = input(f"Troop+siege rows [{troop_rows_default}]: ").strip()
-        troop_rows = int(raw) if raw else troop_rows_default
-        raw = input(f"Spell columns (slots per row) [{spell_cols_default}]: ").strip()
-        spell_cols = int(raw) if raw else spell_cols_default
-        raw = input(f"Spell rows [{spell_rows_default}]: ").strip()
-        spell_rows = int(raw) if raw else spell_rows_default
-
-        self.config.grid = {
-            "troop_bar": {"cols": troop_cols, "rows": troop_rows},
-            "spell_bar": {"cols": spell_cols, "rows": spell_rows},
-        }
+        print("Enter VISIBLE slot layout (Enter keeps default).")
+        if want_troop:
+            raw = input(f"Troop+siege columns [{troop_cols_default}]: ").strip()
+            troop_cols = int(raw) if raw else troop_cols_default
+            raw = input(f"Troop+siege rows [{troop_rows_default}]: ").strip()
+            troop_rows = int(raw) if raw else troop_rows_default
+            current["troop_bar"] = {"cols": troop_cols, "rows": troop_rows}
+        if want_spell:
+            raw = input(f"Spell columns [{spell_cols_default}]: ").strip()
+            spell_cols = int(raw) if raw else spell_cols_default
+            raw = input(f"Spell rows [{spell_rows_default}]: ").strip()
+            spell_rows = int(raw) if raw else spell_rows_default
+            current["spell_bar"] = {"cols": spell_cols, "rows": spell_rows}
+        self.config.grid = current
 
     def step_farm(self) -> None:
-        """
-        Calibrate unranked Battle farming taps.
-
-        Leave your electro dragon army as the active preset before enabling farm.
-        """
+        """Calibrate unranked Battle farming taps (each part can be skipped)."""
         w, h = self._frame_size()
-        print(
-            "\n=== Farm / unranked attack ===\n"
-            "IMPORTANT: Leave your electro dragon army as the ACTIVE army preset.\n"
-            "The bot does not train troops or switch armies.\n"
-        )
-
-        print("Go to your village HOME screen (chat closed).")
-        _press_enter()
-        frame = self.capture.screenshot()
-
-        print("\n--- Attack button (bottom of home) ---")
-        has_attack = self._has_tap("attack_button") or self._has_template("attack_button")
-        if not has_attack or prompt_yes_no("Update attack_button?"):
-            if prompt_yes_no("Capture attack_button as image template?"):
-                coords, picked = self._pick_roi("Attack button", frame)
-                self._save_template_from_frame(picked, coords, "ui/attack_button.png", "attack_button")
-            pt = self._pick_point("Tap point at CENTER of Attack button", frame)
-            self.config.tap_points["attack_button"] = list(pt)
-            logger.info("Saved tap point attack_button")
-        else:
-            _keeping("attack_button")
-
-        print(
-            "\nOpen the Attack menu so you see Ranked vs Battle (unranked).\n"
-            "You can tap Attack yourself, then press Enter."
-        )
-        _press_enter()
-        frame = self.capture.screenshot()
-
-        print("\n--- Unranked Battle (NOT Ranked) ---")
-        has_battle = self._has_tap("unranked_battle") or self._has_template("unranked_battle")
-        if not has_battle or prompt_yes_no("Update unranked_battle?"):
-            if prompt_yes_no("Capture unranked_battle as image template?"):
-                coords, picked = self._pick_roi("Unranked Battle button", frame)
-                self._save_template_from_frame(
-                    picked, coords, "ui/unranked_battle.png", "unranked_battle"
-                )
-            pt = self._pick_point("Tap point at CENTER of unranked Battle (not Ranked)", frame)
-            self.config.tap_points["unranked_battle"] = list(pt)
-            logger.info("Saved tap point unranked_battle")
-        else:
-            _keeping("unranked_battle")
-
-        print(
-            "\nIf Find a Match is a separate button after Battle, show that screen.\n"
-            "Otherwise skip Find a Match (Battle may start search immediately)."
-        )
-        if prompt_yes_no("Calibrate Find a Match / next button?"):
-            _press_enter()
-            frame = self.capture.screenshot()
-            if prompt_yes_no("Capture find_match as image template?"):
-                coords, picked = self._pick_roi("Find a Match button", frame)
-                self._save_template_from_frame(picked, coords, "ui/find_match.png", "find_match")
-            pt = self._pick_point("Tap point at CENTER of Find a Match", frame)
-            self.config.tap_points["find_match"] = list(pt)
-            logger.info("Saved tap point find_match")
-        elif self._has_tap("find_match") or self._has_template("find_match"):
-            _keeping("find_match")
-
-        print(
-            "\n--- Return Home (after a finished attack) ---\n"
-            "Finish or wait for any battle end screen that shows Return Home / OK,\n"
-            "or skip and set a tap where that button usually appears."
-        )
-        if prompt_yes_no("Update return_home now (recommended)?"):
-            _press_enter()
-            frame = self.capture.screenshot()
-            if prompt_yes_no("Capture return_home / battle_end as image template?"):
-                coords, picked = self._pick_roi("Return Home button", frame)
-                self._save_template_from_frame(picked, coords, "ui/return_home.png", "return_home")
-                self.config.templates["battle_end"] = self.config.templates.get(
-                    "return_home", "ui/return_home.png"
-                )
-            pt = self._pick_point("Tap point at CENTER of Return Home", frame)
-            self.config.tap_points["return_home"] = list(pt)
-            logger.info("Saved tap point return_home")
-        elif not self._has_tap("return_home"):
-            # Sensible default near bottom-center for end-of-battle UI.
-            self.config.tap_points["return_home"] = [int(w * 0.50), int(h * 0.85)]
-            logger.info(
-                "Saved default return_home tap ({}, {}) — recalibrate if needed",
-                self.config.tap_points["return_home"][0],
-                self.config.tap_points["return_home"][1],
+        if self._only_part is None:
+            print(
+                "\n=== Farm / unranked attack ===\n"
+                "IMPORTANT: Leave your electro dragon army as the ACTIVE army preset.\n"
+                "The bot does not train troops or switch armies.\n"
+                "Deploy tap sequence: use Setup → Program farm deploy sequence.\n"
             )
-        else:
-            _keeping("return_home")
 
-        # deploy_strip ROI removed — bot pans from center with fixed swipes instead.
+        if self._want_part("attack_button"):
+            print("Go to your village HOME screen (chat closed).")
+            _press_enter()
+            frame = self.capture.screenshot()
+            print("\n--- Attack button (bottom of home) ---")
+            has_attack = self._has_tap("attack_button") or self._has_template("attack_button")
+            if self._should_update("attack_button", exists=has_attack):
+                if prompt_yes_no("Capture attack_button as image template?"):
+                    coords, picked = self._pick_roi("Attack button", frame)
+                    self._save_template_from_frame(
+                        picked, coords, "ui/attack_button.png", "attack_button"
+                    )
+                pt = self._pick_point("Tap point at CENTER of Attack button", frame)
+                self.config.tap_points["attack_button"] = list(pt)
+                logger.info("Saved tap point attack_button")
+
+        if self._want_part("unranked_battle"):
+            print(
+                "\nOpen the Attack menu so you see Ranked vs Battle (unranked).\n"
+                "You can tap Attack yourself, then press Enter."
+            )
+            _press_enter()
+            frame = self.capture.screenshot()
+            print("\n--- Unranked Battle (NOT Ranked) ---")
+            has_battle = self._has_tap("unranked_battle") or self._has_template("unranked_battle")
+            if self._should_update("unranked_battle", exists=has_battle):
+                if prompt_yes_no("Capture unranked_battle as image template?"):
+                    coords, picked = self._pick_roi("Unranked Battle button", frame)
+                    self._save_template_from_frame(
+                        picked, coords, "ui/unranked_battle.png", "unranked_battle"
+                    )
+                pt = self._pick_point(
+                    "Tap point at CENTER of unranked Battle (not Ranked)", frame
+                )
+                self.config.tap_points["unranked_battle"] = list(pt)
+                logger.info("Saved tap point unranked_battle")
+
+        if self._want_part("find_match"):
+            print(
+                "\nIf Find a Match is a separate button after Battle, show that screen.\n"
+                "Otherwise skip Find a Match (Battle may start search immediately)."
+            )
+            has_fm = self._has_tap("find_match") or self._has_template("find_match")
+            if self._should_update("Find a Match / next button", exists=has_fm, optional=True):
+                _press_enter()
+                frame = self.capture.screenshot()
+                if prompt_yes_no("Capture find_match as image template?"):
+                    coords, picked = self._pick_roi("Find a Match button", frame)
+                    self._save_template_from_frame(
+                        picked, coords, "ui/find_match.png", "find_match"
+                    )
+                pt = self._pick_point("Tap point at CENTER of Find a Match", frame)
+                self.config.tap_points["find_match"] = list(pt)
+                logger.info("Saved tap point find_match")
+
+        if self._want_part("return_home"):
+            print(
+                "\n--- Return Home (after a finished attack) ---\n"
+                "Finish or wait for any battle end screen that shows Return Home / OK."
+            )
+            has_rh = self._has_tap("return_home")
+            if self._should_update("return_home", exists=has_rh):
+                _press_enter()
+                frame = self.capture.screenshot()
+                if prompt_yes_no("Capture return_home / battle_end as image template?"):
+                    coords, picked = self._pick_roi("Return Home button", frame)
+                    self._save_template_from_frame(
+                        picked, coords, "ui/return_home.png", "return_home"
+                    )
+                    self.config.templates["battle_end"] = self.config.templates.get(
+                        "return_home", "ui/return_home.png"
+                    )
+                pt = self._pick_point("Tap point at CENTER of Return Home", frame)
+                self.config.tap_points["return_home"] = list(pt)
+                logger.info("Saved tap point return_home")
+
         if "deploy_strip" in self.config.rois:
             del self.config.rois["deploy_strip"]
             logger.info("Removed obsolete deploy_strip ROI (not used anymore)")
 
-        print(
-            "\n--- Army bar slots (optional but recommended) ---\n"
-            "On a BATTLE / scout screen with your army visible in the bottom bar:\n"
-            "  • e-drag / first troop card\n"
-            "  • siege machine card\n"
-            "  • rage spell card\n"
-            "  • each of the 4 hero cards (left → right)\n"
-            "Skip to use built-in default positions."
+        army_keys = (
+            "edrag_slot",
+            "siege_slot",
+            "rage_slot",
+            "hero_1",
+            "hero_2",
+            "hero_3",
+            "hero_4",
         )
-        if prompt_yes_no("Calibrate army-bar taps (e-drag, siege, rage, heroes) now?"):
-            print("Open any battle so the army bar is visible, then press Enter.")
-            _press_enter()
-            frame = self.capture.screenshot()
-            pt = self._pick_point("CENTER of the electro dragon (first troop) card", frame)
-            self.config.tap_points["edrag_slot"] = list(pt)
-            logger.info("Saved tap point edrag_slot")
-            if prompt_yes_no("Calibrate siege_slot?"):
-                frame = self.capture.screenshot()
-                pt = self._pick_point("CENTER of the siege machine card", frame)
-                self.config.tap_points["siege_slot"] = list(pt)
-                logger.info("Saved tap point siege_slot")
-            if prompt_yes_no("Calibrate rage_slot?"):
-                frame = self.capture.screenshot()
-                pt = self._pick_point("CENTER of the rage spell card", frame)
-                self.config.tap_points["rage_slot"] = list(pt)
-                logger.info("Saved tap point rage_slot")
-            for i in range(1, 5):
-                if not prompt_yes_no(f"Calibrate hero_{i}?"):
-                    break
-                frame = self.capture.screenshot()
-                pt = self._pick_point(f"CENTER of hero card #{i} (left to right)", frame)
-                self.config.tap_points[f"hero_{i}"] = list(pt)
-                logger.info("Saved tap point hero_{}", i)
-        else:
-            for key in ("edrag_slot", "siege_slot", "rage_slot", "hero_1", "hero_2", "hero_3", "hero_4"):
-                if key in self.config.tap_points:
-                    _keeping(key)
+        want_army = [k for k in army_keys if self._want_part(k)]
+        if want_army:
+            if self._only_part is None:
+                print(
+                    "\n--- Army bar slots (optional) ---\n"
+                    "On a BATTLE screen with the army bar visible. Skip any you do not need."
+                )
+                if not prompt_yes_no("Calibrate any army-bar taps now?"):
+                    for key in army_keys:
+                        if key in self.config.tap_points:
+                            _keeping(key)
+                    want_army = []
+            if want_army:
+                print("Open any battle so the army bar is visible, then press Enter.")
+                _press_enter()
+                labels = {
+                    "edrag_slot": "electro dragon (first troop) card",
+                    "siege_slot": "siege machine card",
+                    "rage_slot": "rage spell card",
+                    "hero_1": "hero card #1",
+                    "hero_2": "hero card #2",
+                    "hero_3": "hero card #3",
+                    "hero_4": "hero card #4",
+                }
+                for key in want_army:
+                    if self._should_update(key, exists=self._has_tap(key), optional=True):
+                        frame = self.capture.screenshot()
+                        pt = self._pick_point(f"CENTER of the {labels[key]}", frame)
+                        self.config.tap_points[key] = list(pt)
+                        logger.info("Saved tap point {}", key)
 
-        print(
-            "\nFarm calibration saved. Enable farm in Settings after verifying.\n"
-            "Keep electro dragons as the active army preset (e-drags + heroes + rage)."
-        )
+        if self._only_part is None:
+            print(
+                "\nFarm calibration done. Program deploy taps via Setup → "
+                "Program farm deploy sequence when ready.\n"
+            )
 
     def step_optional(self) -> None:
-        self._maybe_update_template_after_setup(
-            "loading",
-            "loading screen template",
-            "ui/loading.png",
-            "Relaunch CoC to show the loading screen.",
-            optional=True,
-        )
+        if self._want_part("loading"):
+            self._maybe_update_template_after_setup(
+                "loading",
+                "loading screen template",
+                "ui/loading.png",
+                "Relaunch CoC to show the loading screen.",
+                optional=True,
+            )
 
-        self._maybe_update_template_after_setup(
-            "popup_dismiss",
-            "popup dismiss button template",
-            "ui/popup_dismiss.png",
-            "Show a dismissible popup/event.",
-            optional=True,
-        )
+        if self._want_part("popup_dismiss"):
+            self._maybe_update_template_after_setup(
+                "popup_dismiss",
+                "popup dismiss button template",
+                "ui/popup_dismiss.png",
+                "Show a dismissible popup/event.",
+                optional=True,
+            )
+
+        if self._want_part("popup"):
+            self._maybe_update_template_after_setup(
+                "popup",
+                "popup anchor template",
+                "ui/popup.png",
+                "Show a blocking popup/event card.",
+                optional=True,
+            )
 
 
 def main() -> None:
     """CLI entry for calibration (used by scripts/calibrate.py and coc-bot-calibrate)."""
     setup_logging(debug=False)
     parser = argparse.ArgumentParser(
-        description="Calibrate CoC donation bot (full run or individual steps)",
+        description="Calibrate CoC donation bot (full run, steps, or a single part)",
     )
     parser.add_argument(
         "--step",
@@ -954,6 +1091,12 @@ def main() -> None:
         choices=STEP_IDS,
         metavar="STEP",
         help=f"Run one step only (repeatable). Choices: {', '.join(STEP_IDS)}",
+    )
+    parser.add_argument(
+        "--part",
+        default=None,
+        metavar="PART",
+        help="With --step, run only this CalibrationPart key (e.g. return_home)",
     )
     parser.add_argument(
         "--all",
@@ -971,10 +1114,16 @@ def main() -> None:
     if args.list:
         print_step_menu(wizard.step_status())
     elif args.steps:
-        wizard.run_steps(args.steps)
+        if args.part and len(args.steps) != 1:
+            parser.error("--part requires exactly one --step")
+        wizard.run_steps(args.steps, only_part=args.part)
     elif args.all:
+        if args.part:
+            parser.error("--part cannot be used with --all")
         wizard.run_steps(list(STEP_IDS))
     else:
+        if args.part:
+            parser.error("--part requires --step")
         wizard.run_interactive()
 
 

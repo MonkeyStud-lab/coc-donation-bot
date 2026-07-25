@@ -182,8 +182,8 @@ SETTINGS: list[SettingField] = [
         "farm_deploy_jitter_px",
         "Farm deploy jitter (pixels)",
         "Random offset for custom farm deploy sequence taps only (±N on X and Y). "
-        "Does not affect donations or other bot taps. Circle radius in the program-deploy "
-        "editor equals N (max axis offset). Keep ≤12 if you click small army-bar icons.",
+        "Does not affect donations or other taps. Also adjustable in the program-deploy "
+        "editor (circle radius = N). Keep ≤12 for small army-bar icons.",
         "int",
         lambda c: c.farm_deploy_jitter_px,
         "Farm",

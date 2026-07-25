@@ -70,7 +70,6 @@ class BotControlApp(tk.Tk):
         self._farm_oneshot_stop = threading.Event()
         self._log_sink_id: int | None = None
         self._setting_vars: dict[str, tk.Variable] = {}
-        self._jitter_demo_canvas: tk.Canvas | None = None
         self._debug_busy = False
         self._page = "home"
         self._nav_buttons: dict[str, ttk.Button] = {}
@@ -329,9 +328,7 @@ class BotControlApp(tk.Tk):
                 anchor="w",
             ).pack(fill=tk.X, pady=(4, 8))
 
-            if field.key == "farm_deploy_jitter_px":
-                self._build_farm_deploy_jitter_setting(block, values)
-            elif field.kind == "bool":
+            if field.kind == "bool":
                 var: tk.Variable = tk.BooleanVar(value=bool(values[field.key]))
                 ttk.Checkbutton(block, text="Enabled", variable=var).pack(anchor=tk.W)
                 self._setting_vars[field.key] = var
@@ -352,78 +349,11 @@ class BotControlApp(tk.Tk):
 
         finish_scrollable(inner, canvas)
 
-    def _build_farm_deploy_jitter_setting(self, block: tk.Frame, values: dict) -> None:
-        """Slider + live demo for farm deploy sequence jitter only."""
-        from coc_bot.calibration.sequence_picker import draw_jitter_demo
-
-        try:
-            initial = max(0, min(40, int(values.get("farm_deploy_jitter_px", 6))))
-        except (TypeError, ValueError):
-            initial = 6
-        var = tk.IntVar(value=initial)
-        self._setting_vars["farm_deploy_jitter_px"] = var
-
-        row = tk.Frame(block, bg=SURFACE_2)
-        row.pack(fill=tk.X, pady=(0, 6))
-        value_lbl = tk.Label(
-            row,
-            text=str(initial),
-            bg=SURFACE_2,
-            fg=TEXT,
-            font=ui_font(11, "bold"),
-            width=4,
-            anchor="w",
-        )
-        value_lbl.pack(side=tk.LEFT)
-
-        demo = tk.Canvas(block, height=160, bg=SURFACE_2, highlightthickness=0)
-        demo.pack(fill=tk.X, pady=(4, 0))
-        self._jitter_demo_canvas = demo
-
-        def _refresh_demo(*_args) -> None:
-            j = max(0, min(40, int(round(float(var.get())))))
-            var.set(j)
-            value_lbl.config(text=str(j))
-            draw_jitter_demo(demo, jitter_px=j, width=max(320, demo.winfo_width() or 420))
-
-        def _on_scale(raw: str) -> None:
-            try:
-                j = max(0, min(40, int(round(float(raw)))))
-            except (TypeError, ValueError):
-                j = 0
-            var.set(j)
-            _refresh_demo()
-
-        scale = ttk.Scale(
-            row,
-            from_=0,
-            to=40,
-            orient=tk.HORIZONTAL,
-            command=_on_scale,
-        )
-        scale.set(initial)
-        scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
-        self.after(50, _refresh_demo)
-
     def _reload_settings_fields(self) -> None:
         values = current_setting_values()
         for field in SETTINGS:
             var = self._setting_vars[field.key]
-            if field.key == "farm_deploy_jitter_px":
-                try:
-                    j = max(0, min(40, int(values[field.key])))
-                except (TypeError, ValueError):
-                    j = 6
-                var.set(j)
-                if self._jitter_demo_canvas is not None:
-                    from coc_bot.calibration.sequence_picker import draw_jitter_demo
-
-                    draw_jitter_demo(
-                        self._jitter_demo_canvas,
-                        jitter_px=j,
-                        width=max(320, self._jitter_demo_canvas.winfo_width() or 420),
-                    )
-            elif field.kind == "bool":
+            if field.kind == "bool":
                 var.set(bool(values[field.key]))
             else:
                 var.set(str(values[field.key]))
@@ -435,12 +365,7 @@ class BotControlApp(tk.Tk):
             values: dict[str, str | bool] = {}
             for field in SETTINGS:
                 var = self._setting_vars[field.key]
-                if field.key == "farm_deploy_jitter_px":
-                    values[field.key] = str(int(round(float(var.get()))))
-                elif field.kind == "bool":
-                    values[field.key] = bool(var.get())
-                else:
-                    values[field.key] = str(var.get())
+                values[field.key] = bool(var.get()) if field.kind == "bool" else str(var.get())
             save_settings_from_gui(values)
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Invalid settings", str(exc))
@@ -459,15 +384,54 @@ class BotControlApp(tk.Tk):
         tk.Label(
             page,
             text="Calibration teaches the bot where buttons and bars are on your screen. "
-            "It opens in a separate terminal with click-to-pick tools. "
-            "Open Waydroid and Clash of Clans first.",
+            "Select a step or a single part below, then Recalibrate Selected "
+            "(parts skip the rest of that step). Open Waydroid and Clash first.",
             bg=BG,
             fg=TEXT_SECONDARY,
             font=ui_font(10),
             wraplength=720,
             justify=tk.LEFT,
             anchor="w",
-        ).pack(fill=tk.X, pady=(0, 12))
+        ).pack(fill=tk.X, pady=(0, 8))
+
+        farm_card = self._card(page, pady=(0, 10))
+        farm_pad = tk.Frame(farm_card, bg=SURFACE_2)
+        farm_pad.pack(fill=tk.X, padx=14, pady=12)
+        tk.Label(
+            farm_pad,
+            text="Farm deploy sequence",
+            bg=SURFACE_2,
+            fg=TEXT,
+            font=ui_font(12, "bold"),
+            anchor="w",
+        ).pack(fill=tk.X)
+        tk.Label(
+            farm_pad,
+            text="Enter an unranked battle first, then Program. The bot pans your "
+            "deploy edge and opens a click editor — tap army-bar icons and map drops "
+            "in order. Clear removes the sequence (back to the built-in e-drag recipe). "
+            "Also listed under Tools.",
+            bg=SURFACE_2,
+            fg=TEXT_SECONDARY,
+            font=ui_font(10),
+            wraplength=680,
+            justify=tk.LEFT,
+            anchor="w",
+        ).pack(fill=tk.X, pady=(4, 8))
+        farm_btns = tk.Frame(farm_pad, bg=SURFACE_2)
+        farm_btns.pack(fill=tk.X)
+        ttk.Button(
+            farm_btns,
+            text="Program farm deploy sequence",
+            style="Accent.TButton",
+            command=lambda: self._run_debug("farm_program_deploy"),
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            farm_btns,
+            text="Clear sequence",
+            style="Secondary.TButton",
+            command=lambda: self._run_debug("farm_clear_deploy"),
+        ).pack(side=tk.LEFT, padx=(8, 0))
 
         card = self._card(page, pady=(0, 10))
         tree_wrap = tk.Frame(card, bg=SURFACE_2)
@@ -943,8 +907,8 @@ class BotControlApp(tk.Tk):
                 )
         total = len(STEP_IDS)
         self._calib_detail.set(
-            f"{done}/{total} steps configured. Expand a step to see each part; "
-            "Recalibrate Selected runs that whole step."
+            f"{done}/{total} steps configured. Expand a step and select a part to "
+            "recalibrate only that item (answer n at prompts to keep existing values)."
         )
 
     def _on_calib_select(self, _event=None) -> None:
@@ -963,16 +927,27 @@ class BotControlApp(tk.Tk):
             status = self._calib_tree.set(iid, "status")
             extra = f"\n{part.description}" if part.description else ""
             opt = " (optional)" if part.optional else ""
+            if part_key == "deploy_sequence":
+                how = (
+                    "Recalibrate Selected opens the farm deploy click editor "
+                    "(be on the battlefield first)."
+                )
+            else:
+                how = (
+                    f"Recalibrate Selected runs only “{part.label}” "
+                    f"(not the whole “{step.title}” step)."
+                )
             self._calib_detail.set(
                 f"{step.title} → {part.label}{opt}\n"
                 f"Status: {status} · key: {part.key} · type: {part.kind}{extra}\n\n"
-                f"Recalibrate Selected runs the full “{step.title}” wizard step."
+                f"{how}"
             )
             return
         status = self._calib_tree.set(iid, "status")
         parts_line = ", ".join(p.label for p in step.parts) if step.parts else step.summary
         self._calib_detail.set(
-            f"{step.title} — {status}\n{step.summary}\nParts: {parts_line}"
+            f"{step.title} — {status}\n{step.summary}\nParts: {parts_line}\n\n"
+            "Recalibrate Selected runs this whole step (each item can still be denied)."
         )
 
     def _recalibrate_selected(self) -> None:
@@ -980,7 +955,21 @@ class BotControlApp(tk.Tk):
         if not sel:
             messagebox.showinfo("Select a step", "Select a setup step or part in the list first.")
             return
-        step_id = parent_step_id(sel[0])
+        iid = sel[0]
+        step_id = parent_step_id(iid)
+        if "::" in iid:
+            part_key = iid.split("::", 1)[1]
+            if part_key == "deploy_sequence":
+                if not messagebox.askyesno(
+                    "Program farm deploy",
+                    "Enter an unranked battle first, then continue.\n\n"
+                    "The bot will pan and open the tap editor. Proceed?",
+                ):
+                    return
+                self._run_debug("farm_program_deploy")
+                return
+            self._launch_calibrate(["--step", step_id, "--part", part_key])
+            return
         self._launch_calibrate(["--step", step_id])
 
     def _recalibrate_all(self) -> None:

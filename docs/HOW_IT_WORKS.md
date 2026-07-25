@@ -151,7 +151,7 @@ leave clan chat → Attack! → unranked Battle → battlefield
 
 If `farm_deploy_sequence.taps` is non-empty, farm **replays those ordered taps** (army-bar selects + map drops) after panning with the **side / pan_swipes stored in the sequence**. The built-in e-drag / rage / siege / hero settings are unused until you **Tools → Farm: clear deploy sequence**.
 
-Program while already on the battlefield: the tool pans, shows a screenshot, and you click taps in order (numbered circles; radius = **farm deploy jitter** max axis offset). That jitter applies only to custom farm sequence taps — donations and other taps still use Timing → Tap jitter.
+Program from **Setup → Program farm deploy sequence** (or Tools): be on the battlefield first; the bot pans, shows a screenshot, and you click taps in order (numbered circles; radius = **farm deploy jitter**). That jitter applies only to custom farm sequence taps — donations use Timing → Tap jitter. Jitter for farm deploy is also a number field under Settings → Farm (slider lives in the editor only).
 
 ### Leave / Return Home safeguards
 

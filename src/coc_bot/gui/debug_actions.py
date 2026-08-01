@@ -309,7 +309,7 @@ class DebugSession:
         return (
             f"Saved farm deploy sequence: {len(points)} taps "
             f"(side={side}, pan_swipes={pans}, farm deploy jitter±{jitter}px). "
-            "Farm attacks will replay this instead of the built-in e-drag recipe. "
+            "Farm attacks will replay this tap sequence. "
             "Stop/Start the bot if it is already running."
         )
 
@@ -324,7 +324,7 @@ class DebugSession:
         return self.finish_farm_program_deploy(prep, master=None)
 
     def farm_clear_deploy_sequence(self) -> str:
-        """Remove the programmed deploy sequence (revert to built-in recipe)."""
+        """Remove the programmed deploy sequence (farm cannot deploy until reprogrammed)."""
         from coc_bot.config import load_config, save_calibrated
 
         cfg = load_config()
@@ -332,8 +332,8 @@ class DebugSession:
         save_calibrated(cfg)
         self.config = load_config()
         return (
-            "Cleared farm deploy sequence — farm will use the built-in "
-            "e-drag / rage / siege / hero recipe again. Stop/Start if the bot is running."
+            "Cleared farm deploy sequence — program a new sequence before farming. "
+            "Stop/Start if the bot is running."
         )
 
     def farm_one_shot(self, should_stop=None) -> tuple[bool, str]:
@@ -449,12 +449,12 @@ DEBUG_ACTIONS: list[tuple[str, str, str]] = [
         "farm_program_deploy",
         "Farm: program deploy sequence",
         "Be on the battlefield first. Pans with your Settings, then opens a click "
-        "editor — number army-bar + map taps in order. Overrides the built-in recipe.",
+        "editor — number army-bar + map taps in order (required for farm deploy).",
     ),
     (
         "farm_clear_deploy",
         "Farm: clear deploy sequence",
-        "Delete the programmed tap sequence and go back to the built-in e-drag recipe.",
+        "Delete the programmed tap sequence (farm cannot deploy until you program a new one).",
     ),
 ]
 

@@ -325,120 +325,17 @@ class EdgeDeployer:
         tap_pause: float = 0.10,
     ) -> int:
         """
-        Pan to the deploy edge, then deploy army.
+        Pan using the programmed sequence, then replay its ordered taps.
 
-        If a programmed ``farm_deploy_sequence`` exists, replay those taps
-        (army bar + map) after panning with the sequence's stored side/swipes.
-        Otherwise use the built-in e-drag → rage → siege → heroes recipe.
-
-        Returns total map/sequence taps (army-bar selects count in custom mode).
+        Returns total sequence taps, or 0 if no sequence is programmed.
+        The built-in e-drag recipe was removed — farm requires a tap sequence.
         """
+        del side  # sequence stores its own deploy side
         custom = self._custom_sequence_taps()
-        if custom:
-            return self._dump_custom_sequence(frame, custom, tap_pause=tap_pause)
-
-        side = self._resolve_side(side)
-        self.pan_to_deploy_side(frame, side=side)
-        if self._stopping():
-            return 0
-        points = self.deploy_points(frame, side=side)
-        if not points:
-            logger.warning("No deploy points — skipping dump")
-            return 0
-
-        self.select_edrag_slot(frame)
-        if self._stopping():
-            return 0
-
-        edrag_taps = max(len(points), int(self.config.farm_edrag_deploy_taps))
-        total = 0
-        passes = 2
-        for pass_i in range(passes):
-            ordered = points if pass_i % 2 == 0 else list(reversed(points))
-            for x, y in ordered:
-                if self._stopping():
-                    return total
-                self.input.tap(x, y)
-                total += 1
-                if tap_pause > 0 and self._sleep(tap_pause):
-                    return total
-                if total >= edrag_taps and pass_i > 0:
-                    break
-            if total >= edrag_taps:
-                break
-
-        while total < edrag_taps:
-            if self._stopping():
-                return total
-            x, y = points[total % len(points)]
-            self.input.tap(x, y)
-            total += 1
-            if tap_pause > 0 and self._sleep(tap_pause):
-                return total
-
-        logger.info("Deployed e-drags along {} — {} map taps", side, total)
-
-        # Rage right after dragons so the push is already on the map.
-        rage_dropped = 0
-        if not self._stopping() and self.select_rage_slot(frame):
-            # One select arms all remaining rages — keep tapping the map.
-            if self._sleep(0.35):
-                return total
-            rage_points = self.rage_drop_points(frame, points, side=side)
-            logger.info(
-                "Dropping {} rage spell(s) on the base (single slot select)",
-                len(rage_points),
+        if not custom:
+            logger.error(
+                "No farm deploy sequence programmed — use Setup → Farm → Deploy tap sequence "
+                "(or Tools → Farm: program deploy sequence)"
             )
-            for i, (rx, ry) in enumerate(rage_points):
-                if self._stopping():
-                    return total
-                logger.info("Deploying rage {}/{} at ({}, {})", i + 1, len(rage_points), rx, ry)
-                self.input.tap(rx, ry)
-                total += 1
-                rage_dropped += 1
-                if self._sleep(random.uniform(0.12, 0.28)):
-                    return total
-
-        # Siege: select card, drop once near mid-edge.
-        if not self._stopping() and self.select_siege_slot(frame):
-            sx, sy = points[len(points) // 2]
-            logger.info("Deploying siege at ({}, {})", sx, sy)
-            self.input.tap(sx, sy)
-            total += 1
-            if self._sleep(0.35):
-                return total
-
-        heroes = self.hero_slot_points(frame)
-        place_idxs = [
-            int(i * (len(points) - 1) / max(1, len(heroes) - 1)) if len(heroes) > 1 else len(points) // 2
-            for i in range(len(heroes))
-        ]
-        activate = bool(self.config.farm_activate_hero_abilities)
-        for hero_i, (hx, hy) in enumerate(heroes):
-            if self._stopping():
-                return total
-            logger.info("Deploying hero {} via slot ({}, {})", hero_i + 1, hx, hy)
-            self.input.tap(hx, hy, jitter=0)
-            if self._sleep(0.30):
-                return total
-            px, py = points[place_idxs[hero_i]]
-            self.input.tap(px, py)
-            total += 1
-            if self._sleep(0.40):
-                return total
-            # Ability: tap the same hero icon again after they are on the map.
-            if activate:
-                logger.info("Activating hero {} ability (re-tap slot)", hero_i + 1)
-                self.input.tap(hx, hy, jitter=0)
-                if self._sleep(0.35):
-                    return total
-
-        logger.info(
-            "Army dump complete — {} map taps, {} heroes (abilities={}), siege={}, rage={}",
-            total,
-            len(heroes),
-            activate,
-            self.config.farm_deploy_siege,
-            rage_dropped,
-        )
-        return total
+            return 0
+        return self._dump_custom_sequence(frame, custom, tap_pause=tap_pause)

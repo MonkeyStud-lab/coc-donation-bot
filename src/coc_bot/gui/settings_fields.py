@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from coc_bot.config import BotConfig, load_config, load_user_settings, save_user_settings
+from coc_bot.gui.theme import normalize_theme_id, theme_label, theme_labels
 
 
 @dataclass(frozen=True)
@@ -13,10 +14,11 @@ class SettingField:
     key: str
     label: str
     description: str
-    kind: str  # int, float, bool, str, int_pair
+    kind: str  # int, float, bool, str, int_pair, choice
     getter: Callable[[BotConfig], Any]
     section: str
     yaml_path: tuple[str, ...]  # e.g. ("timing", "anti_idle_seconds")
+    choices: tuple[str, ...] = ()  # for kind "choice"
 
 
 def _pair(lo_hi: tuple[int, int]) -> str:
@@ -141,8 +143,8 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "farm_enabled",
         "Enable elixir farm attacks",
-        "When enabled, run one unranked Battle per interval (electro dragons along one edge). "
-        "Requires Calibration → Farm. Leave e-drags as the active army preset.",
+        "When enabled, run one unranked Battle per interval using your programmed "
+        "deploy tap sequence. Requires Setup → Farm calibration and a deploy sequence.",
         "bool",
         lambda c: c.farm_enabled,
         "Farm",
@@ -172,18 +174,20 @@ SETTINGS: list[SettingField] = [
     ),
     SettingField(
         "farm_deploy_side",
-        "Deploy side (left / right)",
-        "Which battlefield edge to dump troops along. Use left or right.",
-        "str",
+        "Deploy side",
+        "Default battlefield edge when programming a new deploy sequence "
+        "(the saved sequence stores its own side).",
+        "choice",
         lambda c: c.farm_deploy_side,
         "Farm",
         ("farm", "deploy_side"),
+        choices=("left", "right"),
     ),
     SettingField(
         "farm_pan_swipes",
         "Camera pan swipes",
-        "How many swipes from the centered match view toward the deploy edge. "
-        "Decimals allowed (e.g. 1.25 = one full swipe + a short extra pan).",
+        "Default pan count when programming a new deploy sequence "
+        "(decimals ok, e.g. 1.25). The saved sequence stores its own value.",
         "float",
         lambda c: c.farm_pan_swipes,
         "Farm",
@@ -192,7 +196,7 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "farm_deploy_jitter_px",
         "Farm deploy jitter (pixels)",
-        "Random offset for custom farm deploy sequence taps only (±N on X and Y). "
+        "Random offset for farm deploy sequence taps only (±N on X and Y). "
         "Does not affect donations or other taps. Also adjustable in the program-deploy "
         "editor (circle radius = N). Keep ≤12 for small army-bar icons.",
         "int",
@@ -228,72 +232,6 @@ SETTINGS: list[SettingField] = [
         lambda c: c.farm_retry_cooldown_seconds,
         "Farm",
         ("farm", "retry_cooldown_seconds"),
-    ),
-    SettingField(
-        "farm_edrag_deploy_taps",
-        "E-drag map taps",
-        "How many times to tap the village edge while electro dragons are selected "
-        "(use a bit more than 11 so all leave the bar).",
-        "int",
-        lambda c: c.farm_edrag_deploy_taps,
-        "Farm",
-        ("farm", "edrag_deploy_taps"),
-    ),
-    SettingField(
-        "farm_hero_count",
-        "Heroes to deploy (0–4)",
-        "After e-drags, select and place this many heroes from the army bar.",
-        "int",
-        lambda c: c.farm_hero_count,
-        "Farm",
-        ("farm", "hero_count"),
-    ),
-    SettingField(
-        "farm_deploy_siege",
-        "Deploy siege machine",
-        "After e-drags, select the siege slot and drop it on the deploy edge.",
-        "bool",
-        lambda c: c.farm_deploy_siege,
-        "Farm",
-        ("farm", "deploy_siege"),
-    ),
-    SettingField(
-        "farm_activate_hero_abilities",
-        "Activate hero abilities",
-        "After placing each hero, tap their army-bar icon again to trigger the ability.",
-        "bool",
-        lambda c: c.farm_activate_hero_abilities,
-        "Farm",
-        ("farm", "activate_hero_abilities"),
-    ),
-    SettingField(
-        "farm_deploy_rage",
-        "Deploy rage spells",
-        "After e-drags are down, select rage and drop them toward the base from the troop line.",
-        "bool",
-        lambda c: c.farm_deploy_rage,
-        "Farm",
-        ("farm", "deploy_rage"),
-    ),
-    SettingField(
-        "farm_rage_count",
-        "Rage spell drops",
-        "How many rage spells to place after selecting the rage card once "
-        "(spread vertically on the base — default 5).",
-        "int",
-        lambda c: c.farm_rage_count,
-        "Farm",
-        ("farm", "rage_count"),
-    ),
-    SettingField(
-        "farm_rage_inward_frac",
-        "Rage inward offset",
-        "How far toward the village from the troop column (screen fraction, e.g. 0.22). "
-        "On a left deploy this is well to the right of the troops.",
-        "float",
-        lambda c: c.farm_rage_inward_frac,
-        "Farm",
-        ("farm", "rage_inward_frac"),
     ),
     SettingField(
         "adb_device",
@@ -380,15 +318,16 @@ SETTINGS: list[SettingField] = [
         ("gui", "show_debug_activity"),
     ),
     SettingField(
-        "gui_ui_style",
-        "Settings UI style (modern / classic)",
-        "modern = Cursor-like rows (label left, control right, toggles). "
-        "classic = original stacked cards. Colors stay the same. "
-        "Restart the app after saving to refresh Home/Setup controls.",
-        "str",
-        lambda c: c.gui_ui_style,
+        "gui_theme",
+        "Theme",
+        "Full UI theme (colors + control layout). Classic = stacked Steam cards; "
+        "Modern = Cursor-like rows; Windows 11 / iOS 26 / Android 17 / Nord / Ember "
+        "are additional palettes. Applies to the whole window after Save.",
+        "choice",
+        lambda c: theme_label(c.gui_theme),
         "Interface",
-        ("gui", "ui_style"),
+        ("gui", "theme"),
+        choices=theme_labels(),
     ),
 ]
 
@@ -409,12 +348,6 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
             parsed: Any = bool(raw)
         elif field.kind == "int":
             parsed = int(str(raw).strip())
-            if field.key == "farm_hero_count" and (parsed < 0 or parsed > 4):
-                raise ValueError("Heroes to deploy must be between 0 and 4")
-            if field.key == "farm_edrag_deploy_taps" and parsed < 1:
-                raise ValueError("E-drag map taps must be at least 1")
-            if field.key == "farm_rage_count" and (parsed < 0 or parsed > 20):
-                raise ValueError("Rage spell drops must be between 0 and 20")
             if field.key == "farm_interval_variance_seconds" and parsed < 0:
                 raise ValueError("Farm interval variance cannot be negative")
             if field.key == "farm_interval_variance_seconds" and parsed > 24 * 3600:
@@ -423,24 +356,25 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
             parsed = float(str(raw).strip())
             if field.key == "farm_pan_swipes" and parsed < 0:
                 raise ValueError("Camera pan swipes cannot be negative")
-            if field.key == "farm_rage_inward_frac" and (parsed < 0 or parsed > 0.45):
-                raise ValueError("Rage inward offset must be between 0 and 0.45")
         elif field.kind == "int_pair":
             parsed = parse_int_pair(str(raw))
+        elif field.kind == "choice":
+            raw_text = str(raw).strip()
+            if field.key == "gui_theme":
+                parsed = normalize_theme_id(raw_text)
+            else:
+                parsed = raw_text.lower()
+                allowed = {c.lower() for c in field.choices}
+                if parsed not in allowed:
+                    raise ValueError(
+                        f"{field.label} must be one of: {', '.join(field.choices)}"
+                    )
+                for choice in field.choices:
+                    if choice.lower() == parsed:
+                        parsed = choice
+                        break
         else:
             parsed = str(raw).strip()
-            if field.key == "farm_deploy_side":
-                side = parsed.lower()
-                if side not in ("left", "right"):
-                    raise ValueError("Deploy side must be 'left' or 'right'")
-                parsed = side
-            if field.key == "gui_ui_style":
-                style = parsed.lower()
-                if style in ("legacy", "old"):
-                    style = "classic"
-                if style not in ("modern", "classic"):
-                    raise ValueError("Settings UI style must be 'modern' or 'classic'")
-                parsed = style
 
         cursor = payload
         for part in field.yaml_path[:-1]:

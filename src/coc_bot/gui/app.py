@@ -21,20 +21,15 @@ from coc_bot.calibration.wizard import (
 )
 from coc_bot.config import load_config, project_root, user_settings_path
 from coc_bot.gui.debug_actions import DEBUG_ACTIONS, DebugSession, run_debug_action
+import coc_bot.gui.theme as theme
 from coc_bot.gui.settings_fields import SETTINGS, current_setting_values, save_settings_from_gui
 from coc_bot.gui.theme import (
-    ACCENT,
-    BG,
-    LOG_BG,
-    LOG_FG,
-    SIDEBAR,
-    SURFACE,
-    SURFACE_2,
-    TEXT,
-    TEXT_SECONDARY,
+    active_layout,
     apply_theme,
     finish_scrollable,
     make_scrollable,
+    normalize_theme_id,
+    theme_label,
     ui_font,
 )
 from coc_bot.gui.util import calibrate_script, open_in_terminal
@@ -60,7 +55,8 @@ class BotControlApp(tk.Tk):
         self.title("CoC Donation Bot")
         self.geometry("960x680")
         self.minsize(820, 560)
-        apply_theme(self)
+        self._theme_id = normalize_theme_id(load_config().gui_theme)
+        apply_theme(self, self._theme_id)
 
         self._dry_run = dry_run
         self._debug_save_frames = debug_save_frames
@@ -80,8 +76,10 @@ class BotControlApp(tk.Tk):
         self._status = tk.StringVar(
             value="Ready — open Waydroid and Clash of Clans, then press Start"
         )
-        self._ui_style = load_config().gui_ui_style
         self._settings_canvas: tk.Canvas | None = None
+        self._sidebar_chrome: list[tk.Misc] = []
+        # (page_id, label, horizontal reserve px) — wraplength tracks content width.
+        self._wrap_labels: list[tuple[str, tk.Label, int]] = []
 
         shell = ttk.Frame(self)
         shell.pack(fill=tk.BOTH, expand=True)
@@ -101,6 +99,7 @@ class BotControlApp(tk.Tk):
 
         self._content = ttk.Frame(right, padding=(16, 4, 16, 8))
         self._content.pack(fill=tk.BOTH, expand=True)
+        self._content.bind("<Configure>", self._on_content_configure, add="+")
 
         for page_id, _label, _subtitle in PAGES:
             page = ttk.Frame(self._content)
@@ -122,37 +121,40 @@ class BotControlApp(tk.Tk):
         self._install_log_sink()
 
     def _build_sidebar(self, parent: ttk.Frame) -> None:
-        side = tk.Frame(parent, bg=SIDEBAR, width=200)
+        self._sidebar_chrome.clear()
+        side = tk.Frame(parent, bg=theme.SIDEBAR, width=200)
         side.pack(side=tk.LEFT, fill=tk.Y)
         side.pack_propagate(False)
+        self._sidebar_chrome.append(side)
 
-        brand = tk.Frame(side, bg=SIDEBAR)
+        brand = tk.Frame(side, bg=theme.SIDEBAR)
         brand.pack(fill=tk.X, padx=16, pady=(20, 24))
-        tk.Label(
-            brand,
-            text="DONATION BOT",
-            bg=SIDEBAR,
-            fg=TEXT,
-            font=ui_font(13, "bold"),
-            anchor="w",
-        ).pack(fill=tk.X)
-        tk.Label(
-            brand,
-            text="Clash of Clans · Waydroid",
-            bg=SIDEBAR,
-            fg=TEXT_SECONDARY,
-            font=ui_font(9),
-            anchor="w",
-        ).pack(fill=tk.X, pady=(4, 0))
+        self._sidebar_chrome.append(brand)
+        for text, size, weight, pady in (
+            ("DONATION BOT", 13, "bold", (0, 0)),
+            ("Clash of Clans · Waydroid", 9, "normal", (4, 0)),
+        ):
+            lab = tk.Label(
+                brand,
+                text=text,
+                bg=theme.SIDEBAR,
+                fg=theme.TEXT if weight == "bold" else theme.TEXT_SECONDARY,
+                font=ui_font(size, weight),
+                anchor="w",
+            )
+            lab.pack(fill=tk.X, pady=pady)
+            self._sidebar_chrome.append(lab)
 
-        tk.Label(
+        lib = tk.Label(
             side,
             text="LIBRARY",
-            bg=SIDEBAR,
-            fg=TEXT_SECONDARY,
+            bg=theme.SIDEBAR,
+            fg=theme.TEXT_SECONDARY,
             font=ui_font(8, "bold"),
             anchor="w",
-        ).pack(fill=tk.X, padx=16, pady=(0, 6))
+        )
+        lib.pack(fill=tk.X, padx=16, pady=(0, 6))
+        self._sidebar_chrome.append(lib)
 
         for page_id, label, _subtitle in PAGES:
             btn = ttk.Button(
@@ -178,10 +180,86 @@ class BotControlApp(tk.Tk):
                 self._page_title.set(label)
                 self._page_subtitle.set(subtitle)
                 break
+        self.after_idle(self._sync_wrap_lengths)
+
+    def _on_content_configure(self, event: tk.Event) -> None:
+        if event.widget is not self._content:
+            return
+        if event.width >= 120:
+            self._sync_wrap_lengths(event.width)
 
     @property
     def _modern(self) -> bool:
-        return self._ui_style != "classic"
+        """True when the active theme uses row/toggle settings layout."""
+        return active_layout() == "modern"
+
+    def _recolor_sidebar(self) -> None:
+        for widget in self._sidebar_chrome:
+            try:
+                if not widget.winfo_exists():
+                    continue
+                widget.configure(bg=theme.SIDEBAR)
+                if "fg" in widget.keys():
+                    current = str(widget.cget("text") or "")
+                    if current == "DONATION BOT":
+                        widget.configure(fg=theme.TEXT)
+                    else:
+                        widget.configure(fg=theme.TEXT_SECONDARY)
+            except tk.TclError:
+                continue
+
+    def _rebuild_pages_for_theme(self) -> None:
+        """Rebuild page contents after a theme/layout change."""
+        current = self._page
+        self._wrap_labels.clear()
+        for frame in self._pages.values():
+            for child in frame.winfo_children():
+                child.destroy()
+        self._build_home_page()
+        self._build_settings_page()
+        self._build_setup_page()
+        self._build_tools_page()
+        self._show_page(current)
+        self.after(100, self._refresh_calib_status)
+
+    def _apply_theme_id(self, theme_id: str) -> None:
+        self._theme_id = normalize_theme_id(theme_id)
+        apply_theme(self, self._theme_id)
+        self._recolor_sidebar()
+        self._rebuild_pages_for_theme()
+
+    def _clear_wrap_labels(self, page_id: str) -> None:
+        self._wrap_labels = [(p, lab, r) for p, lab, r in self._wrap_labels if p != page_id]
+
+    def _track_wrap_label(
+        self, label: tk.Label, *, reserve: int = 48, page_id: str | None = None
+    ) -> None:
+        """Register a label whose wraplength should follow the content width."""
+        page = page_id or self._page
+        self._wrap_labels.append((page, label, max(0, int(reserve))))
+
+    def _sync_wrap_lengths(self, width: int | None = None) -> None:
+        """Recompute wraplength for tracked labels from the available content width."""
+        if width is None or width < 80:
+            try:
+                width = int(self._content.winfo_width())
+            except tk.TclError:
+                width = 0
+        if width < 80:
+            return
+
+        # Content frame padding is already outside widgets; leave a little slack.
+        usable = max(140, int(width) - 8)
+        alive: list[tuple[str, tk.Label, int]] = []
+        for page_id, label, reserve in self._wrap_labels:
+            try:
+                if not label.winfo_exists():
+                    continue
+                label.configure(wraplength=max(140, usable - reserve))
+                alive.append((page_id, label, reserve))
+            except tk.TclError:
+                continue
+        self._wrap_labels = alive
 
     def _btn_style(self, kind: str) -> str:
         """Map Accent/Secondary/Danger/Play → modern or classic ttk style name."""
@@ -200,17 +278,17 @@ class BotControlApp(tk.Tk):
         }.get(kind, "Secondary.TButton")
 
     def _card(self, parent: tk.Misc, **pack_opts) -> tk.Frame:
-        outer = tk.Frame(parent, bg=SURFACE, bd=0, highlightthickness=0)
+        outer = tk.Frame(parent, bg=theme.SURFACE, bd=0, highlightthickness=0)
         fill = pack_opts.pop("fill", tk.X)
         outer.pack(fill=fill, **pack_opts)
-        inner = tk.Frame(outer, bg=SURFACE_2, bd=0, highlightthickness=0)
+        inner = tk.Frame(outer, bg=theme.SURFACE_2, bd=0, highlightthickness=0)
         inner.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
         return inner
 
     def _build_home_page(self) -> None:
         page = self._pages["home"]
         actions = self._card(page, pady=(0, 12))
-        pad = tk.Frame(actions, bg=SURFACE_2)
+        pad = tk.Frame(actions, bg=theme.SURFACE_2)
         pad_x = 18 if self._modern else 16
         pad_y = 16 if self._modern else 14
         pad.pack(fill=tk.X, padx=pad_x, pady=pad_y)
@@ -218,13 +296,13 @@ class BotControlApp(tk.Tk):
         tk.Label(
             pad,
             text="Play",
-            bg=SURFACE_2,
-            fg=TEXT,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT,
             font=ui_font(13, "bold"),
             anchor="w",
         ).pack(fill=tk.X)
 
-        primary = tk.Frame(pad, bg=SURFACE_2)
+        primary = tk.Frame(pad, bg=theme.SURFACE_2)
         primary.pack(fill=tk.X, pady=(12, 0))
         self._start_btn = ttk.Button(
             primary, text="▶  Start", style=self._btn_style("Play"), command=self.start_bot
@@ -239,7 +317,7 @@ class BotControlApp(tk.Tk):
         )
         self._stop_btn.pack(side=tk.LEFT, padx=(10, 0))
 
-        secondary = tk.Frame(pad, bg=SURFACE_2)
+        secondary = tk.Frame(pad, bg=theme.SURFACE_2)
         secondary.pack(fill=tk.X, pady=(12, 0))
         ttk.Button(
             secondary,
@@ -264,20 +342,20 @@ class BotControlApp(tk.Tk):
         tk.Label(
             pad,
             textvariable=self._farm_status,
-            bg=SURFACE_2,
-            fg=TEXT_SECONDARY,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT_SECONDARY,
             font=ui_font(10),
             anchor="w",
         ).pack(fill=tk.X, pady=(12, 0))
 
         log_card = self._card(page, fill=tk.BOTH, expand=True)
-        log_pad = tk.Frame(log_card, bg=SURFACE_2)
+        log_pad = tk.Frame(log_card, bg=theme.SURFACE_2)
         log_pad.pack(fill=tk.BOTH, expand=True, padx=16, pady=14)
         tk.Label(
             log_pad,
             text="Activity",
-            bg=SURFACE_2,
-            fg=TEXT,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT,
             font=ui_font(13, "bold"),
             anchor="w",
         ).pack(fill=tk.X)
@@ -287,9 +365,9 @@ class BotControlApp(tk.Tk):
             state=tk.DISABLED,
             wrap=tk.WORD,
             font=ui_font(10),
-            bg=LOG_BG,
-            fg=LOG_FG,
-            insertbackground=LOG_FG,
+            bg=theme.LOG_BG,
+            fg=theme.LOG_FG,
+            insertbackground=theme.LOG_FG,
             relief=tk.FLAT,
             borderwidth=0,
             highlightthickness=0,
@@ -303,28 +381,27 @@ class BotControlApp(tk.Tk):
         for child in page.winfo_children():
             child.destroy()
         self._setting_vars.clear()
+        self._clear_wrap_labels("settings")
 
         canvas, inner = make_scrollable(page)
         self._settings_canvas = canvas
 
-        intro = tk.Frame(inner, bg=BG)
+        intro = tk.Frame(inner, bg=theme.BG)
         intro.pack(fill=tk.X, padx=8, pady=(4, 4))
-        style_note = (
-            "Modern layout (Cursor-like rows). Switch to classic under Interface if you prefer."
-            if self._modern
-            else "Classic layout (original stacked cards)."
-        )
-        tk.Label(
+        intro_label = tk.Label(
             intro,
             text="Changes are saved to data/user_settings.yaml. Stop and Start the bot "
-            f"after saving so a running loop picks them up. {style_note}",
-            bg=BG,
-            fg=TEXT_SECONDARY,
+            "after saving so a running loop picks them up. Theme under Interface "
+            f"is currently {theme_label(self._theme_id)}.",
+            bg=theme.BG,
+            fg=theme.TEXT_SECONDARY,
             font=ui_font(10),
-            wraplength=700,
+            wraplength=400,
             justify=tk.LEFT,
             anchor="w",
-        ).pack(fill=tk.X, pady=(0, 8))
+        )
+        intro_label.pack(fill=tk.X, pady=(0, 8))
+        self._track_wrap_label(intro_label, reserve=40, page_id="settings")
 
         values = current_setting_values()
         current_section = None
@@ -334,8 +411,8 @@ class BotControlApp(tk.Tk):
                 tk.Label(
                     inner,
                     text=current_section.upper(),
-                    bg=BG,
-                    fg=ACCENT,
+                    bg=theme.BG,
+                    fg=theme.ACCENT,
                     font=ui_font(10, "bold"),
                     anchor="w",
                 ).pack(fill=tk.X, padx=8, pady=(18, 8))
@@ -345,7 +422,7 @@ class BotControlApp(tk.Tk):
             else:
                 self._add_setting_row_classic(inner, field, values[field.key])
 
-        btns = tk.Frame(inner, bg=BG)
+        btns = tk.Frame(inner, bg=theme.BG)
         btns.pack(fill=tk.X, padx=8, pady=(16, 24))
         ttk.Button(
             btns,
@@ -361,35 +438,50 @@ class BotControlApp(tk.Tk):
         ).pack(side=tk.LEFT, padx=(8, 0))
 
         finish_scrollable(inner, canvas)
+        self.after_idle(self._sync_wrap_lengths)
 
     def _add_setting_row_classic(self, parent: tk.Misc, field, value) -> None:
         """Original stacked card: label → description → control."""
         card = self._card(parent, padx=8, pady=5)
-        block = tk.Frame(card, bg=SURFACE_2)
+        block = tk.Frame(card, bg=theme.SURFACE_2)
         block.pack(fill=tk.X, padx=14, pady=12)
 
         tk.Label(
             block,
             text=field.label,
-            bg=SURFACE_2,
-            fg=TEXT,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT,
             font=ui_font(11, "bold"),
             anchor="w",
         ).pack(fill=tk.X)
-        tk.Label(
+        desc = tk.Label(
             block,
             text=field.description,
-            bg=SURFACE_2,
-            fg=TEXT_SECONDARY,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT_SECONDARY,
             font=ui_font(10),
-            wraplength=680,
+            wraplength=400,
             justify=tk.LEFT,
             anchor="w",
-        ).pack(fill=tk.X, pady=(4, 8))
+        )
+        desc.pack(fill=tk.X, pady=(4, 8))
+        # Card padding + scrollbar.
+        self._track_wrap_label(desc, reserve=56, page_id="settings")
 
         if field.kind == "bool":
             var: tk.Variable = tk.BooleanVar(value=bool(value))
             ttk.Checkbutton(block, text="Enabled", variable=var).pack(anchor=tk.W)
+            self._setting_vars[field.key] = var
+        elif field.kind == "choice":
+            var = tk.StringVar(value=str(value))
+            box = ttk.Combobox(
+                block,
+                textvariable=var,
+                values=list(field.choices),
+                state="readonly",
+                width=20,
+            )
+            box.pack(anchor=tk.W)
             self._setting_vars[field.key] = var
         else:
             var = tk.StringVar(value=str(value))
@@ -400,37 +492,53 @@ class BotControlApp(tk.Tk):
     def _add_setting_row_modern(self, parent: tk.Misc, field, value) -> None:
         """Cursor-like row: title/description left, control right."""
         card = self._card(parent, padx=8, pady=4)
-        block = tk.Frame(card, bg=SURFACE_2)
+        block = tk.Frame(card, bg=theme.SURFACE_2)
         block.pack(fill=tk.X, padx=16, pady=14)
         block.columnconfigure(0, weight=1)
 
-        left = tk.Frame(block, bg=SURFACE_2)
+        left = tk.Frame(block, bg=theme.SURFACE_2)
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
         tk.Label(
             left,
             text=field.label,
-            bg=SURFACE_2,
-            fg=TEXT,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT,
             font=ui_font(12),
             anchor="w",
         ).pack(fill=tk.X)
-        tk.Label(
+        desc = tk.Label(
             left,
             text=field.description,
-            bg=SURFACE_2,
-            fg=TEXT_SECONDARY,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT_SECONDARY,
             font=ui_font(10),
-            wraplength=520,
+            wraplength=320,
             justify=tk.LEFT,
             anchor="w",
-        ).pack(fill=tk.X, pady=(4, 0))
+        )
+        desc.pack(fill=tk.X, pady=(4, 0))
+        # Leave room for the right-side control + padding/scrollbar.
+        self._track_wrap_label(desc, reserve=200, page_id="settings")
 
-        right = tk.Frame(block, bg=SURFACE_2)
+        right = tk.Frame(block, bg=theme.SURFACE_2)
         right.grid(row=0, column=1, sticky="ne")
 
         if field.kind == "bool":
             var = tk.BooleanVar(value=bool(value))
-            ToggleSwitch(right, var, bg=SURFACE_2).pack(anchor=tk.E, pady=(2, 0))
+            ToggleSwitch(right, var, bg=theme.SURFACE_2).pack(anchor=tk.E, pady=(2, 0))
+            self._setting_vars[field.key] = var
+        elif field.kind == "choice":
+            var = tk.StringVar(value=str(value))
+            box = ttk.Combobox(
+                right,
+                textvariable=var,
+                values=list(field.choices),
+                state="readonly",
+                width=14,
+                style="Modern.TCombobox",
+                justify=tk.RIGHT,
+            )
+            box.pack(anchor=tk.E)
             self._setting_vars[field.key] = var
         else:
             var = tk.StringVar(value=str(value))
@@ -455,7 +563,7 @@ class BotControlApp(tk.Tk):
         self._install_log_sink()
 
     def _save_settings(self) -> None:
-        previous_style = self._ui_style
+        previous_theme = self._theme_id
         try:
             values: dict[str, str | bool] = {}
             for field in SETTINGS:
@@ -469,23 +577,15 @@ class BotControlApp(tk.Tk):
         self._install_log_sink()
         self._append_log(f"==> Settings saved to {path}")
 
-        new_style = str(values.get("gui_ui_style", previous_style)).strip().lower()
-        if new_style in ("legacy", "old"):
-            new_style = "classic"
-        if new_style not in ("modern", "classic"):
-            new_style = previous_style
-        style_changed = new_style != previous_style
-        if style_changed:
-            self._ui_style = new_style
-            self._build_settings_page()
-            self._append_log(f"==> Settings UI style → {new_style} (restart for Home/Setup)")
+        new_theme = normalize_theme_id(values.get("gui_theme", previous_theme))
+        theme_changed = new_theme != previous_theme
+        if theme_changed:
+            self._apply_theme_id(new_theme)
+            self._append_log(f"==> Theme → {theme_label(new_theme)}")
 
         extra = ""
-        if style_changed:
-            extra = (
-                "\n\nSettings page updated to the new style. "
-                "Restart the app to refresh Home/Setup button padding."
-            )
+        if theme_changed:
+            extra = f"\n\nTheme switched to {theme_label(new_theme)}."
         messagebox.showinfo(
             "Saved",
             f"Settings saved to:\n{path}\n\nStop and Start the bot to apply them to a running loop.\n"
@@ -500,8 +600,8 @@ class BotControlApp(tk.Tk):
             "Select a step or a single part below, then Recalibrate Selected "
             "(parts skip the rest of that step). Open Waydroid and Clash first. "
             "Farm deploy sequence: Farm → Deploy tap sequence (be in battle first).",
-            bg=BG,
-            fg=TEXT_SECONDARY,
+            bg=theme.BG,
+            fg=theme.TEXT_SECONDARY,
             font=ui_font(10),
             wraplength=720,
             justify=tk.LEFT,
@@ -509,7 +609,7 @@ class BotControlApp(tk.Tk):
         ).pack(fill=tk.X, pady=(0, 12))
 
         card = self._card(page, pady=(0, 10))
-        tree_wrap = tk.Frame(card, bg=SURFACE_2)
+        tree_wrap = tk.Frame(card, bg=theme.SURFACE_2)
         tree_wrap.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
         cols = ("item", "status")
@@ -531,7 +631,7 @@ class BotControlApp(tk.Tk):
         self._calib_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
-        row = tk.Frame(page, bg=BG)
+        row = tk.Frame(page, bg=theme.BG)
         row.pack(fill=tk.X, pady=(4, 0))
         ttk.Button(
             row,
@@ -553,62 +653,69 @@ class BotControlApp(tk.Tk):
         ).pack(side=tk.LEFT, padx=(8, 0))
 
         self._calib_detail = tk.StringVar(value="")
-        tk.Label(
+        calib_detail = tk.Label(
             page,
             textvariable=self._calib_detail,
-            bg=BG,
-            fg=TEXT_SECONDARY,
+            bg=theme.BG,
+            fg=theme.TEXT_SECONDARY,
             font=ui_font(10),
-            wraplength=720,
+            wraplength=400,
             justify=tk.LEFT,
             anchor="w",
-        ).pack(fill=tk.X, pady=(12, 0))
+        )
+        calib_detail.pack(fill=tk.X, pady=(12, 0))
+        self._track_wrap_label(calib_detail, reserve=40, page_id="setup")
         self._calib_tree.bind("<<TreeviewSelect>>", self._on_calib_select)
 
     def _build_tools_page(self) -> None:
         page = self._pages["tools"]
+        self._clear_wrap_labels("tools")
         canvas, inner = make_scrollable(page)
 
-        intro = tk.Frame(inner, bg=BG)
+        intro = tk.Frame(inner, bg=theme.BG)
         intro.pack(fill=tk.X, padx=8, pady=(4, 4))
-        tk.Label(
+        intro_label = tk.Label(
             intro,
             text="Run one test at a time. Stop the bot first so tests do not conflict. "
             "Results also appear in the Home activity log.",
-            bg=BG,
-            fg=TEXT_SECONDARY,
+            bg=theme.BG,
+            fg=theme.TEXT_SECONDARY,
             font=ui_font(10),
-            wraplength=700,
+            wraplength=400,
             justify=tk.LEFT,
             anchor="w",
-        ).pack(fill=tk.X, pady=(0, 8))
+        )
+        intro_label.pack(fill=tk.X, pady=(0, 8))
+        self._track_wrap_label(intro_label, reserve=40, page_id="tools")
 
         for action_id, label, description in DEBUG_ACTIONS:
             card = self._card(inner, padx=8, pady=4 if self._modern else 5)
-            block = tk.Frame(card, bg=SURFACE_2)
+            block = tk.Frame(card, bg=theme.SURFACE_2)
             block.pack(fill=tk.X, padx=14, pady=12)
             if self._modern:
                 block.columnconfigure(0, weight=1)
-                left = tk.Frame(block, bg=SURFACE_2)
+                left = tk.Frame(block, bg=theme.SURFACE_2)
                 left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
                 tk.Label(
                     left,
                     text=label,
-                    bg=SURFACE_2,
-                    fg=TEXT,
+                    bg=theme.SURFACE_2,
+                    fg=theme.TEXT,
                     font=ui_font(12),
                     anchor="w",
                 ).pack(fill=tk.X)
-                tk.Label(
+                desc = tk.Label(
                     left,
                     text=description,
-                    bg=SURFACE_2,
-                    fg=TEXT_SECONDARY,
+                    bg=theme.SURFACE_2,
+                    fg=theme.TEXT_SECONDARY,
                     font=ui_font(10),
-                    wraplength=520,
+                    wraplength=320,
                     justify=tk.LEFT,
                     anchor="w",
-                ).pack(fill=tk.X, pady=(4, 0))
+                )
+                desc.pack(fill=tk.X, pady=(4, 0))
+                self._track_wrap_label(desc, reserve=180, page_id="tools")
                 ttk.Button(
                     block,
                     text="Run",
@@ -622,30 +729,35 @@ class BotControlApp(tk.Tk):
                     style=self._btn_style("Secondary"),
                     command=lambda aid=action_id: self._run_debug(aid),
                 ).pack(anchor=tk.W)
-                tk.Label(
+                desc = tk.Label(
                     block,
                     text=description,
-                    bg=SURFACE_2,
-                    fg=TEXT_SECONDARY,
+                    bg=theme.SURFACE_2,
+                    fg=theme.TEXT_SECONDARY,
                     font=ui_font(10),
-                    wraplength=680,
+                    wraplength=400,
                     justify=tk.LEFT,
                     anchor="w",
-                ).pack(fill=tk.X, pady=(8, 0))
+                )
+                desc.pack(fill=tk.X, pady=(8, 0))
+                self._track_wrap_label(desc, reserve=56, page_id="tools")
 
         self._debug_result = tk.StringVar(value="")
-        tk.Label(
+        result_label = tk.Label(
             inner,
             textvariable=self._debug_result,
-            bg=BG,
-            fg=ACCENT,
+            bg=theme.BG,
+            fg=theme.ACCENT,
             font=ui_font(11),
-            wraplength=700,
+            wraplength=400,
             justify=tk.LEFT,
             anchor="w",
-        ).pack(fill=tk.X, padx=8, pady=(12, 24))
+        )
+        result_label.pack(fill=tk.X, padx=8, pady=(12, 24))
+        self._track_wrap_label(result_label, reserve=40, page_id="tools")
 
         finish_scrollable(inner, canvas)
+        self.after_idle(self._sync_wrap_lengths)
 
     def _run_debug(self, action_id: str) -> None:
         if self._bot_running():
@@ -904,8 +1016,17 @@ class BotControlApp(tk.Tk):
                 elif not config.farm_calibrated:
                     self._farm_status.set("Farm: needs calibration (Setup → Farm)")
                 else:
+                    from coc_bot.config import normalize_farm_deploy_sequence
                     from coc_bot.runtime.tracker import RuntimeTracker
 
+                    if not normalize_farm_deploy_sequence(config.farm_deploy_sequence).get(
+                        "taps"
+                    ):
+                        self._farm_status.set(
+                            "Farm: needs deploy sequence (Setup → Farm → Deploy tap sequence)"
+                        )
+                        self.after(5000, self._refresh_farm_status)
+                        return
                     tracker = RuntimeTracker(config)
                     since = tracker.seconds_since_last_farm()
                     interval = tracker.effective_farm_interval_seconds()
@@ -948,17 +1069,17 @@ class BotControlApp(tk.Tk):
                 def show() -> None:
                     win = tk.Toplevel(self)
                     win.title(f"Bot view — {w}×{h}")
-                    win.configure(bg=BG)
+                    win.configure(bg=theme.BG)
                     photo = ImageTk.PhotoImage(image)
                     win._photo = photo  # type: ignore[attr-defined]
                     tk.Label(
                         win,
                         text="Current ADB screencap (same source the bot uses)",
-                        bg=BG,
-                        fg=TEXT_SECONDARY,
+                        bg=theme.BG,
+                        fg=theme.TEXT_SECONDARY,
                         font=ui_font(10),
                     ).pack(anchor=tk.W, padx=16, pady=(12, 4))
-                    tk.Label(win, image=photo, bg=BG, bd=0).pack(padx=16, pady=(0, 16))
+                    tk.Label(win, image=photo, bg=theme.BG, bd=0).pack(padx=16, pady=(0, 16))
                     self._append_log(f"==> Screenshot preview {w}×{h}")
 
                 self.after(0, show)

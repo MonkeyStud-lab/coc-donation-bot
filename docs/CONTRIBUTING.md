@@ -48,12 +48,12 @@ Prefer small, focused changes. Match existing naming and logging style (`loguru`
 |------|------|
 | Order of actions / success criteria | `attack/farmer.py` |
 | Matchmaking, results, Return Home | `attack/navigator.py` |
-| Pans, taps, rage, heroes / custom sequence replay | `attack/deployer.py` |
+| Pan + replay programmed deploy sequence | `attack/deployer.py` |
 | Programmable tap editor | `calibration/sequence_picker.py` + Tools actions in `gui/debug_actions.py` |
 | Tunables | `config/default.yaml` → `farm:` + `BotConfig` in `config.py` + GUI field in `gui/settings_fields.py` |
 | New tap targets | Wizard step `"farm"` |
 
-When `farm_deploy_sequence.taps` is set, deployer skips the built-in e-drag recipe.
+Farm deploy requires `farm_deploy_sequence.taps` (no built-in e-drag recipe).
 Keep the simple post-deploy timer in `wait_for_battle_end` (wait N seconds from first
 deploy, then **force-tap** calibrated `return_home` coords with no vision skip). After
 that tap, leave confirmation should **only** look for home village (Attack! / chat) —

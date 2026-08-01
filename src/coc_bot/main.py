@@ -152,7 +152,11 @@ class DonationBot:
         if not self.config.farm_enabled:
             return "Farm: disabled"
         if not self.config.farm_calibrated:
-            return "Farm: needs calibration (Calibration → Farm)"
+            return "Farm: needs calibration (Setup → Farm)"
+        from coc_bot.config import normalize_farm_deploy_sequence
+
+        if not normalize_farm_deploy_sequence(self.config.farm_deploy_sequence).get("taps"):
+            return "Farm: needs deploy sequence (Setup → Farm → Deploy tap sequence)"
         if self._farm_requested:
             return "Farm: manual attack queued"
         now = time.monotonic()

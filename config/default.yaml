@@ -40,26 +40,21 @@ donation:
 clan:
   level: 8
 
-# Unranked Battle farming (electro dragons along one edge). Requires farm calibration.
+# Unranked Battle farming via programmed deploy tap sequence. Requires farm calibration.
 farm:
   enabled: false
   interval_seconds: 3600          # base seconds between fought auto farms (even if leave fails)
   interval_variance_seconds: 300  # random ±N seconds around interval (0 = exact)
-  deploy_side: left               # left or right side of the defending village
-  pan_swipes: 3                   # camera pans toward deploy edge (decimals ok, e.g. 1.25)
-  deploy_jitter_px: 6             # jitter for custom farm deploy sequence taps only
+  deploy_side: left               # default side when programming a new sequence
+  pan_swipes: 3                   # default pans when programming a new sequence
+  deploy_jitter_px: 6             # jitter for farm deploy sequence taps only
   match_timeout_seconds: 120      # clouds / Find a Match
   battle_timeout_seconds: 210     # after first deploy: wait this long, then tap Return Home (3m30s)
   retry_cooldown_seconds: 300     # only when farm fails before deploy (menu/matchmaking)
-  edrag_deploy_taps: 14           # map taps while e-drags selected (11 troops + spare)
-  hero_count: 4                   # heroes to select + place after e-drags
-  deploy_siege: true              # select + drop siege machine after e-drags
-  activate_hero_abilities: true   # re-tap each hero icon after placing to fire ability
-  deploy_rage: true               # drop rage spells after troops/heroes
-  rage_count: 5                   # how many rage drops (select once, then tap the map)
-  rage_inward_frac: 0.22          # how far toward the base from the troop line (screen fraction)
 
 # Control window (GUI)
 gui:
   show_debug_activity: false      # DEBUG lines in Home activity log (noisy; leave off normally)
-  ui_style: modern                # modern = Cursor-like controls; classic = original stacked cards
+  # Theme: classic | modern | windows11 | ios26 | android17 | nord | ember
+  # (legacy key ui_style still accepted)
+  theme: modern

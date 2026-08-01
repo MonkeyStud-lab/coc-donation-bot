@@ -76,10 +76,10 @@ class BotConfig:
     farm_deploy_rage: bool = True
     farm_rage_count: int = 5
     farm_rage_inward_frac: float = 0.22
-    # Ordered army+map taps after pan; when taps non-empty, overrides built-in recipe.
+    # Ordered army+map taps after pan (required for farm deploy).
     farm_deploy_sequence: dict[str, Any] = field(default_factory=dict)
     gui_show_debug_activity: bool = False
-    gui_ui_style: str = "modern"  # modern | classic
+    gui_theme: str = "modern"
     data_dir: Path = field(default_factory=lambda: _project_root() / "data")
     templates_dir: Path = field(default_factory=lambda: _project_root() / "data" / "templates")
 
@@ -256,17 +256,18 @@ def load_config(
             merged.get("farm_deploy_sequence")
         ),
         gui_show_debug_activity=bool((merged.get("gui") or {}).get("show_debug_activity", False)),
-        gui_ui_style=_normalize_ui_style((merged.get("gui") or {}).get("ui_style", "modern")),
+        gui_theme=_normalize_gui_theme(merged.get("gui") or {}),
         data_dir=root / "data",
         templates_dir=root / "data" / "templates",
     )
 
 
-def _normalize_ui_style(raw: Any) -> str:
-    style = str(raw or "modern").strip().lower()
-    if style in ("classic", "legacy", "old"):
-        return "classic"
-    return "modern"
+def _normalize_gui_theme(gui: dict[str, Any]) -> str:
+    from coc_bot.gui.theme import normalize_theme_id
+
+    # Prefer gui.theme; fall back to legacy gui.ui_style.
+    raw = gui.get("theme", gui.get("ui_style", "modern"))
+    return normalize_theme_id(raw)
 
 
 def normalize_farm_deploy_sequence(raw: Any) -> dict[str, Any]:

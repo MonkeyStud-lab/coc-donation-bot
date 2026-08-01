@@ -143,7 +143,7 @@ Orchestrator: [`src/coc_bot/attack/farmer.py`](../src/coc_bot/attack/farmer.py).
 
 ```text
 leave clan chat → Attack! → unranked Battle → battlefield
-    → pan + deploy army (custom tap sequence OR built-in e-drag recipe)
+    → pan + replay programmed deploy tap sequence
     → wait 3m30s from first deploy (configurable), then tap Return Home coords
     → confirm home (Attack! / clan chat) — no early surrender
     → reopen clan chat
@@ -152,15 +152,14 @@ leave clan chat → Attack! → unranked Battle → battlefield
 | Piece | Location |
 |-------|----------|
 | Navigation | `attack/navigator.py` |
-| Deploy recipe | `attack/deployer.py` |
-| Custom army taps | Tools → **Farm: program deploy sequence** → `farm_deploy_sequence` in `calibrated.yaml` |
+| Deploy taps | `attack/deployer.py` + `farm_deploy_sequence` in `calibrated.yaml` |
 | Triggers | GUI **Farm attack now**, or auto when `farm.enabled` + interval elapsed |
 
-### Custom farm deploy sequence
+### Farm deploy sequence (required)
 
-If `farm_deploy_sequence.taps` is non-empty, farm **replays those ordered taps** (army-bar selects + map drops) after panning with the **side / pan_swipes stored in the sequence**. The built-in e-drag / rage / siege / hero settings are unused until you **Tools → Farm: clear deploy sequence**.
+Farm **only** uses a programmed tap sequence. Without taps in `farm_deploy_sequence`, attacks abort before deploy.
 
-Program from **Setup → Farm → Deploy tap sequence** (Recalibrate Selected), or Tools: be on the battlefield first; the bot pans, shows a screenshot, and you click taps in order (numbered circles; radius = **farm deploy jitter**). That jitter applies only to custom farm sequence taps — donations use Timing → Tap jitter. Jitter for farm deploy is also a number field under Settings → Farm (slider lives in the editor only).
+Program from **Setup → Farm → Deploy tap sequence** (Recalibrate Selected), or Tools: be on the battlefield first; the bot pans, shows a screenshot, and you click taps in order (numbered circles; radius = **farm deploy jitter**). The sequence stores its own **side / pan_swipes**; Settings → Farm deploy side / pan swipes are defaults for new sequences. Jitter applies only to sequence taps — donations use Timing → Tap jitter.
 
 ### Leave / Return Home safeguards
 

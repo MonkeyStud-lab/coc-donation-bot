@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from coc_bot.attack.deployer import EdgeDeployer  # noqa: E402
 from coc_bot.calibration.wizard import STEP_IDS, STEPS  # noqa: E402
-from coc_bot.config import load_config  # noqa: E402
+from coc_bot.config import load_config, normalize_farm_deploy_sequence  # noqa: E402
 from coc_bot.gui.settings_fields import SETTINGS  # noqa: E402
 from coc_bot.vision.screens import ScreenType  # noqa: E402
 
@@ -22,11 +22,10 @@ def main() -> int:
     config = load_config()
     assert hasattr(config, "farm_enabled")
     assert config.farm_interval_seconds >= 60
+    assert config.farm_interval_variance_seconds >= 0
     assert config.farm_deploy_side in ("left", "right")
     assert config.farm_match_timeout_seconds > 0
     assert config.farm_battle_timeout_seconds >= 180
-    assert config.farm_edrag_deploy_taps >= 11
-    assert 0 <= config.farm_hero_count <= 4
 
     for name in ("ATTACK_MENU", "MATCHMAKING", "BATTLE", "BATTLE_RESULTS"):
         assert hasattr(ScreenType, name), name
@@ -37,8 +36,19 @@ def main() -> int:
     farm_keys = {f.key for f in SETTINGS if f.section == "Farm"}
     assert "farm_enabled" in farm_keys
     assert "farm_deploy_side" in farm_keys
+    assert "farm_edrag_deploy_taps" not in farm_keys
+    assert "farm_deploy_siege" not in farm_keys
 
-    from coc_bot.config import normalize_farm_deploy_sequence
+    side_field = next(f for f in SETTINGS if f.key == "farm_deploy_side")
+    assert side_field.kind == "choice" and side_field.choices == ("left", "right")
+    theme_field = next(f for f in SETTINGS if f.key == "gui_theme")
+    assert theme_field.kind == "choice"
+    assert "Modern" in theme_field.choices
+    assert "Windows 11" in theme_field.choices
+    assert "iOS 26" in theme_field.choices
+    assert "Android 17" in theme_field.choices
+    assert "Nord" in theme_field.choices
+    assert "Ember" in theme_field.choices
 
     seq = normalize_farm_deploy_sequence(config.farm_deploy_sequence)
     assert "taps" in seq and isinstance(seq["taps"], list)
@@ -52,12 +62,9 @@ def main() -> int:
     assert all(p[0] < frame.shape[1] * 0.2 for p in left)
     assert all(p[0] > frame.shape[1] * 0.8 for p in right)
 
-    rage = deployer.rage_drop_points(frame, left, side="left")
-    assert len(rage) == config.farm_rage_count
-    assert all(r[0] > left[0][0] for r in rage), "rage should sit right of left-edge troops"
-
     print("verify_farm_offline: OK")
     print(f"  farm_enabled={config.farm_enabled} farm_calibrated={config.farm_calibrated}")
+    print(f"  deploy sequence taps={len(seq['taps'])}")
     print(f"  deploy points left={len(left)} right={len(right)}")
     return 0
 

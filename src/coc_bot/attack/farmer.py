@@ -69,9 +69,20 @@ class AttackFarmer:
         if not self.config.farm_calibrated:
             return FarmResult(False, "farm not calibrated (need attack_button, unranked_battle, return_home)")
 
+        from coc_bot.config import normalize_farm_deploy_sequence
+
+        sequence = normalize_farm_deploy_sequence(self.config.farm_deploy_sequence)
+        if not sequence.get("taps"):
+            return FarmResult(
+                False,
+                "no farm deploy sequence — Setup → Farm → Deploy tap sequence",
+            )
+
         logger.info(
-            "Starting farm attack (deploy_side={}, unranked Battle)",
-            self.config.farm_deploy_side,
+            "Starting farm attack (sequence taps={}, side={}, pan_swipes={})",
+            len(sequence["taps"]),
+            sequence.get("side", self.config.farm_deploy_side),
+            sequence.get("pan_swipes", self.config.farm_pan_swipes),
         )
 
         if self._stopping():
@@ -141,16 +152,19 @@ class AttackFarmer:
 
         frame = self.capture.screenshot()
         logger.info(
-            "Opponent ready — deploying (pan_swipes={}, e-drag taps={}, heroes={}) along {}",
-            self.config.farm_pan_swipes,
-            self.config.farm_edrag_deploy_taps,
-            self.config.farm_hero_count,
-            self.config.farm_deploy_side,
+            "Opponent ready — replaying deploy sequence ({} taps, side={})",
+            len(sequence["taps"]),
+            sequence.get("side", self.config.farm_deploy_side),
         )
         # Timer starts when the first troop goes down (beginning of dump).
         deploy_started = time.time()
         taps = self.deployer.dump_army_along_edge(frame)
-        logger.info("Deploy finished — {} map taps", taps)
+        logger.info("Deploy finished — {} sequence taps", taps)
+        if taps <= 0:
+            if self._stopping():
+                return FarmResult(False, "stopped")
+            self._abort_to_chat()
+            return FarmResult(False, "deploy sequence produced no taps")
         # From here on, this attempt counts toward the farm interval clock.
 
         if self._stopping():

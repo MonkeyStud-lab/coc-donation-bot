@@ -10,6 +10,7 @@ build/
 data/calibrated.yaml
 data/runtime_state.json
 data/debug/
+data/calibration_backups/
 data/templates/
 data/icons/
 data/bot.log

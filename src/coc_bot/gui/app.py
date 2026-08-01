@@ -23,6 +23,12 @@ from coc_bot.calibration.wizard import (
     part_is_configured,
 )
 from coc_bot.config import load_config, project_root, user_settings_path
+from coc_bot.gui.calib_backup import (
+    CalibrationBackup,
+    create_backup,
+    list_backups,
+    restore_backup,
+)
 from coc_bot.gui.debug_actions import DEBUG_GROUPS, DebugSession, run_debug_action
 from coc_bot.gui.debug_export import export_debug_bundle
 from coc_bot.gui.notify import notify
@@ -1209,6 +1215,21 @@ class BotControlApp(tk.Tk):
             command=self._classic_calibrate_selected,
         ).pack(side=tk.LEFT, padx=(8, 0))
 
+        row2 = tk.Frame(page, bg=theme.BG)
+        row2.pack(fill=tk.X, pady=(8, 0))
+        ttk.Button(
+            row2,
+            text="Backup calibration",
+            style=self._btn_style("Secondary"),
+            command=self._backup_calibration,
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            row2,
+            text="Restore calibration",
+            style=self._btn_style("Secondary"),
+            command=self._restore_calibration,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+
         self._calib_detail = tk.StringVar(value="")
         calib_detail = tk.Label(
             page,
@@ -2064,6 +2085,124 @@ class BotControlApp(tk.Tk):
             self._launch_calibrate(["--step", step_id, "--part", part_key])
             return
         self._launch_calibrate(["--step", step_id])
+
+    def _backup_calibration(self) -> None:
+        try:
+            backup = create_backup()
+        except FileNotFoundError:
+            messagebox.showinfo(
+                "Nothing to back up",
+                "No calibrated.yaml or templates found yet.\n"
+                "Finish Setup calibration first, then try again.",
+            )
+            return
+        except OSError as exc:
+            messagebox.showerror("Backup failed", str(exc))
+            return
+        self._append_log(f"==> Calibration backed up to {backup.path}")
+        messagebox.showinfo(
+            "Calibration backed up",
+            f"Saved a snapshot of calibrated.yaml and templates to:\n\n{backup.path}",
+        )
+
+    def _restore_calibration(self) -> None:
+        backups = list_backups()
+        if not backups:
+            messagebox.showinfo(
+                "No backups",
+                "No calibration backups found yet.\n"
+                "Use Backup calibration first.",
+            )
+            return
+        chosen = self._pick_calibration_backup(backups)
+        if chosen is None:
+            return
+        if not messagebox.askyesno(
+            "Restore calibration?",
+            f"Replace the live calibration with snapshot:\n\n{chosen.stamp}\n\n"
+            "Your current calibration will be auto-saved as a pre_restore_* "
+            "backup first. The bot must be Stopped for a clean reload — "
+            "Stop and Start after restoring if it is running.",
+        ):
+            return
+        try:
+            restore_backup(chosen)
+        except (OSError, FileNotFoundError) as exc:
+            messagebox.showerror("Restore failed", str(exc))
+            return
+        self._append_log(f"==> Calibration restored from {chosen.path}")
+        self._refresh_calib_status()
+        messagebox.showinfo(
+            "Calibration restored",
+            f"Restored from:\n{chosen.path}\n\n"
+            "If the bot is running, Stop and Start so it reloads the files.",
+        )
+
+    def _pick_calibration_backup(
+        self, backups: list[CalibrationBackup]
+    ) -> CalibrationBackup | None:
+        """Modal list picker; returns a CalibrationBackup or None if cancelled."""
+        win = tk.Toplevel(self)
+        win.title("Restore calibration")
+        win.transient(self)
+        win.grab_set()
+        win.configure(bg=theme.BG)
+        result: dict[str, CalibrationBackup | None] = {"value": None}
+
+        tk.Label(
+            win,
+            text="Select a backup to restore (newest first):",
+            bg=theme.BG,
+            fg=theme.TEXT,
+            font=ui_font(11),
+            anchor="w",
+        ).pack(fill=tk.X, padx=16, pady=(16, 8))
+
+        frame = tk.Frame(win, bg=theme.BG)
+        frame.pack(fill=tk.BOTH, expand=True, padx=16)
+        listbox = tk.Listbox(
+            frame,
+            height=min(12, max(4, len(backups))),
+            font=ui_font(10),
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT,
+            selectbackground=theme.ACCENT,
+            activestyle="none",
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=listbox.yview)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        listbox.configure(yscrollcommand=scroll.set)
+        for item in backups:
+            listbox.insert(tk.END, item.label)
+        listbox.selection_set(0)
+
+        btns = tk.Frame(win, bg=theme.BG)
+        btns.pack(fill=tk.X, padx=16, pady=16)
+
+        def accept() -> None:
+            sel = listbox.curselection()
+            if not sel:
+                return
+            result["value"] = backups[int(sel[0])]
+            win.destroy()
+
+        def cancel() -> None:
+            result["value"] = None
+            win.destroy()
+
+        ttk.Button(
+            btns, text="Cancel", style=self._btn_style("Secondary"), command=cancel
+        ).pack(side=tk.RIGHT)
+        ttk.Button(
+            btns, text="Restore", style=self._btn_style("Accent"), command=accept
+        ).pack(side=tk.RIGHT, padx=(0, 8))
+        listbox.bind("<Double-Button-1>", lambda _e: accept())
+        win.protocol("WM_DELETE_WINDOW", cancel)
+        win.wait_window()
+        return result["value"]
 
     def _launch_calibrate(self, extra_args: list[str]) -> None:
         script = calibrate_script()

@@ -43,7 +43,8 @@ clan:
 # Unranked Battle farming (electro dragons along one edge). Requires farm calibration.
 farm:
   enabled: false
-  interval_seconds: 3600          # min seconds between fought auto farms (even if leave fails)
+  interval_seconds: 3600          # base seconds between fought auto farms (even if leave fails)
+  interval_variance_seconds: 300  # random ±N seconds around interval (0 = exact)
   deploy_side: left               # left or right side of the defending village
   pan_swipes: 3                   # camera pans toward deploy edge (decimals ok, e.g. 1.25)
   deploy_jitter_px: 6             # jitter for custom farm deploy sequence taps only
@@ -61,3 +62,4 @@ farm:
 # Control window (GUI)
 gui:
   show_debug_activity: false      # DEBUG lines in Home activity log (noisy; leave off normally)
+  ui_style: modern                # modern = Cursor-like controls; classic = original stacked cards

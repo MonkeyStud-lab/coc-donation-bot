@@ -62,6 +62,7 @@ class BotConfig:
     dry_run: bool = False
     farm_enabled: bool = False
     farm_interval_seconds: int = 3600
+    farm_interval_variance_seconds: int = 300
     farm_deploy_side: str = "left"
     farm_pan_swipes: float = 3.0
     farm_deploy_jitter_px: int = 6
@@ -78,6 +79,7 @@ class BotConfig:
     # Ordered army+map taps after pan; when taps non-empty, overrides built-in recipe.
     farm_deploy_sequence: dict[str, Any] = field(default_factory=dict)
     gui_show_debug_activity: bool = False
+    gui_ui_style: str = "modern"  # modern | classic
     data_dir: Path = field(default_factory=lambda: _project_root() / "data")
     templates_dir: Path = field(default_factory=lambda: _project_root() / "data" / "templates")
 
@@ -236,6 +238,7 @@ def load_config(
         ocr_confidence_threshold=vision.get("ocr_confidence_threshold", 0.5),
         farm_enabled=bool(farm.get("enabled", False)),
         farm_interval_seconds=int(farm.get("interval_seconds", 3600)),
+        farm_interval_variance_seconds=max(0, int(farm.get("interval_variance_seconds", 300))),
         farm_deploy_side=deploy_side,
         farm_pan_swipes=max(0.0, float(farm.get("pan_swipes", 3))),
         farm_deploy_jitter_px=max(0, min(40, int(farm.get("deploy_jitter_px", 6)))),
@@ -253,9 +256,17 @@ def load_config(
             merged.get("farm_deploy_sequence")
         ),
         gui_show_debug_activity=bool((merged.get("gui") or {}).get("show_debug_activity", False)),
+        gui_ui_style=_normalize_ui_style((merged.get("gui") or {}).get("ui_style", "modern")),
         data_dir=root / "data",
         templates_dir=root / "data" / "templates",
     )
+
+
+def _normalize_ui_style(raw: Any) -> str:
+    style = str(raw or "modern").strip().lower()
+    if style in ("classic", "legacy", "old"):
+        return "classic"
+    return "modern"
 
 
 def normalize_farm_deploy_sequence(raw: Any) -> dict[str, Any]:

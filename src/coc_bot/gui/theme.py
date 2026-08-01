@@ -190,6 +190,78 @@ def apply_theme(root: tk.Tk) -> ttk.Style:
         fieldbackground=[("focus", "#16202d")],
         bordercolor=[("focus", ACCENT)],
     )
+    # Cursor-like compact controls (same palette, tighter geometry).
+    style.configure(
+        "Modern.TEntry",
+        fieldbackground="#16202d",
+        foreground=TEXT,
+        insertcolor=TEXT,
+        padding=(10, 7),
+        bordercolor=SURFACE,
+        lightcolor=SURFACE,
+        darkcolor=SURFACE,
+    )
+    style.map(
+        "Modern.TEntry",
+        fieldbackground=[("focus", "#121a24")],
+        bordercolor=[("focus", ACCENT)],
+        lightcolor=[("focus", ACCENT)],
+        darkcolor=[("focus", ACCENT)],
+    )
+    style.configure(
+        "Modern.Accent.TButton",
+        background=ACCENT,
+        foreground="#1b2838",
+        font=ui_font(11, "bold"),
+        padding=(18, 9),
+        borderwidth=0,
+        focuscolor=ACCENT,
+    )
+    style.map(
+        "Modern.Accent.TButton",
+        background=[("active", ACCENT_PRESSED), ("disabled", "#3a5a70")],
+        foreground=[("disabled", "#8f98a0")],
+    )
+    style.configure(
+        "Modern.Secondary.TButton",
+        background=SURFACE,
+        foreground=TEXT,
+        font=ui_font(11),
+        padding=(16, 9),
+        borderwidth=0,
+    )
+    style.map(
+        "Modern.Secondary.TButton",
+        background=[("active", SURFACE_HOVER), ("disabled", SURFACE_2)],
+        foreground=[("disabled", TEXT_SECONDARY)],
+    )
+    style.configure(
+        "Modern.Danger.TButton",
+        background=SURFACE,
+        foreground=DANGER,
+        font=ui_font(11),
+        padding=(16, 9),
+        borderwidth=0,
+    )
+    style.map(
+        "Modern.Danger.TButton",
+        background=[("active", DANGER_HOVER)],
+        foreground=[("active", TEXT)],
+    )
+    style.configure(
+        "Modern.Play.TButton",
+        background=PLAY,
+        foreground=PLAY_FG,
+        font=ui_font(12, "bold"),
+        padding=(26, 11),
+        borderwidth=0,
+        focuscolor=PLAY,
+    )
+    style.map(
+        "Modern.Play.TButton",
+        background=[("active", PLAY_HOVER), ("disabled", "#3a4a20")],
+        foreground=[("disabled", "#7a8a40")],
+    )
     style.configure(
         "TCheckbutton",
         background=SURFACE_2,

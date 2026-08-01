@@ -160,12 +160,18 @@ class DonationBot:
             left = int(self._farm_fail_cooldown_until - now)
             return f"Farm: retry cooldown {left // 60}m {left % 60}s"
         since = self.tracker.seconds_since_last_farm()
-        interval = max(60, int(self.config.farm_interval_seconds))
+        interval = self.tracker.effective_farm_interval_seconds()
         if since is None:
             return "Farm: due on next safe tick"
         remaining = max(0, int(interval - since))
         if remaining <= 0:
             return "Farm: due on next safe tick"
+        variance = max(0, int(self.config.farm_interval_variance_seconds))
+        if variance > 0:
+            return (
+                f"Farm: next auto in {remaining // 60}m {remaining % 60}s "
+                f"(target {interval}s)"
+            )
         return f"Farm: next auto in {remaining // 60}m {remaining % 60}s"
 
     def screen_status_line(self) -> str:
@@ -278,11 +284,11 @@ class DonationBot:
         if time.monotonic() < self._farm_fail_cooldown_until:
             return False
         since = self.tracker.seconds_since_last_farm()
-        interval = max(60, int(self.config.farm_interval_seconds))
+        interval = self.tracker.effective_farm_interval_seconds()
         due = since is None or since >= interval
         if due and since is not None:
             logger.debug(
-                "Farm due: {:.0f}s since last fight (interval {}s)",
+                "Farm due: {:.0f}s since last fight (target interval {}s)",
                 since,
                 interval,
             )

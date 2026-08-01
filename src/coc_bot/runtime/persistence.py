@@ -14,6 +14,8 @@ class RuntimeState:
     cycle_count: int
     break_until: str | None = None
     last_farm_at: str | None = None  # UTC ISO timestamp of last successful farm
+    # Rolled wait until the next auto farm (base interval ± variance); None = roll on read.
+    next_farm_interval_seconds: int | None = None
 
     @classmethod
     def fresh(cls) -> RuntimeState:
@@ -22,6 +24,14 @@ class RuntimeState:
 
     @classmethod
     def from_dict(cls, data: dict) -> RuntimeState:
+        raw_next = data.get("next_farm_interval_seconds")
+        next_interval: int | None
+        try:
+            next_interval = int(raw_next) if raw_next is not None else None
+        except (TypeError, ValueError):
+            next_interval = None
+        if next_interval is not None and next_interval < 60:
+            next_interval = None
         return cls(
             session_started_at=data.get("session_started_at", datetime.now(timezone.utc).isoformat()),
             active_seconds=float(data.get("active_seconds", 0)),
@@ -29,6 +39,7 @@ class RuntimeState:
             cycle_count=int(data.get("cycle_count", 0)),
             break_until=data.get("break_until"),
             last_farm_at=data.get("last_farm_at"),
+            next_farm_interval_seconds=next_interval,
         )
 
 

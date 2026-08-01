@@ -38,6 +38,7 @@ from coc_bot.gui.theme import (
     ui_font,
 )
 from coc_bot.gui.util import calibrate_script, open_in_terminal
+from coc_bot.gui.widgets import ToggleSwitch
 
 PAGES = (
     ("home", "Home", "Start the bot, farm, and watch activity"),
@@ -79,6 +80,8 @@ class BotControlApp(tk.Tk):
         self._status = tk.StringVar(
             value="Ready — open Waydroid and Clash of Clans, then press Start"
         )
+        self._ui_style = load_config().gui_ui_style
+        self._settings_canvas: tk.Canvas | None = None
 
         shell = ttk.Frame(self)
         shell.pack(fill=tk.BOTH, expand=True)
@@ -176,6 +179,26 @@ class BotControlApp(tk.Tk):
                 self._page_subtitle.set(subtitle)
                 break
 
+    @property
+    def _modern(self) -> bool:
+        return self._ui_style != "classic"
+
+    def _btn_style(self, kind: str) -> str:
+        """Map Accent/Secondary/Danger/Play → modern or classic ttk style name."""
+        if self._modern:
+            return {
+                "Accent": "Modern.Accent.TButton",
+                "Secondary": "Modern.Secondary.TButton",
+                "Danger": "Modern.Danger.TButton",
+                "Play": "Modern.Play.TButton",
+            }.get(kind, "Modern.Secondary.TButton")
+        return {
+            "Accent": "Accent.TButton",
+            "Secondary": "Secondary.TButton",
+            "Danger": "Danger.TButton",
+            "Play": "Play.TButton",
+        }.get(kind, "Secondary.TButton")
+
     def _card(self, parent: tk.Misc, **pack_opts) -> tk.Frame:
         outer = tk.Frame(parent, bg=SURFACE, bd=0, highlightthickness=0)
         fill = pack_opts.pop("fill", tk.X)
@@ -188,7 +211,9 @@ class BotControlApp(tk.Tk):
         page = self._pages["home"]
         actions = self._card(page, pady=(0, 12))
         pad = tk.Frame(actions, bg=SURFACE_2)
-        pad.pack(fill=tk.X, padx=16, pady=14)
+        pad_x = 18 if self._modern else 16
+        pad_y = 16 if self._modern else 14
+        pad.pack(fill=tk.X, padx=pad_x, pady=pad_y)
 
         tk.Label(
             pad,
@@ -202,13 +227,13 @@ class BotControlApp(tk.Tk):
         primary = tk.Frame(pad, bg=SURFACE_2)
         primary.pack(fill=tk.X, pady=(12, 0))
         self._start_btn = ttk.Button(
-            primary, text="▶  Start", style="Play.TButton", command=self.start_bot
+            primary, text="▶  Start", style=self._btn_style("Play"), command=self.start_bot
         )
         self._start_btn.pack(side=tk.LEFT)
         self._stop_btn = ttk.Button(
             primary,
             text="Stop",
-            style="Secondary.TButton",
+            style=self._btn_style("Secondary"),
             command=self.stop_bot,
             state=tk.DISABLED,
         )
@@ -219,19 +244,19 @@ class BotControlApp(tk.Tk):
         ttk.Button(
             secondary,
             text="View screenshot",
-            style="Secondary.TButton",
+            style=self._btn_style("Secondary"),
             command=self.view_bot_screenshot,
         ).pack(side=tk.LEFT)
         ttk.Button(
             secondary,
             text="Farm attack now",
-            style="Secondary.TButton",
+            style=self._btn_style("Secondary"),
             command=self.request_farm_attack,
         ).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(
             secondary,
             text="Close Waydroid + Clash",
-            style="Danger.TButton",
+            style=self._btn_style("Danger"),
             command=self.close_waydroid_and_coc,
         ).pack(side=tk.RIGHT)
 
@@ -275,14 +300,24 @@ class BotControlApp(tk.Tk):
 
     def _build_settings_page(self) -> None:
         page = self._pages["settings"]
+        for child in page.winfo_children():
+            child.destroy()
+        self._setting_vars.clear()
+
         canvas, inner = make_scrollable(page)
+        self._settings_canvas = canvas
 
         intro = tk.Frame(inner, bg=BG)
         intro.pack(fill=tk.X, padx=8, pady=(4, 4))
+        style_note = (
+            "Modern layout (Cursor-like rows). Switch to classic under Interface if you prefer."
+            if self._modern
+            else "Classic layout (original stacked cards)."
+        )
         tk.Label(
             intro,
             text="Changes are saved to data/user_settings.yaml. Stop and Start the bot "
-            "after saving so a running loop picks them up.",
+            f"after saving so a running loop picks them up. {style_note}",
             bg=BG,
             fg=TEXT_SECONDARY,
             font=ui_font(10),
@@ -305,54 +340,113 @@ class BotControlApp(tk.Tk):
                     anchor="w",
                 ).pack(fill=tk.X, padx=8, pady=(18, 8))
 
-            card = self._card(inner, padx=8, pady=5)
-            block = tk.Frame(card, bg=SURFACE_2)
-            block.pack(fill=tk.X, padx=14, pady=12)
-
-            tk.Label(
-                block,
-                text=field.label,
-                bg=SURFACE_2,
-                fg=TEXT,
-                font=ui_font(11, "bold"),
-                anchor="w",
-            ).pack(fill=tk.X)
-            tk.Label(
-                block,
-                text=field.description,
-                bg=SURFACE_2,
-                fg=TEXT_SECONDARY,
-                font=ui_font(10),
-                wraplength=680,
-                justify=tk.LEFT,
-                anchor="w",
-            ).pack(fill=tk.X, pady=(4, 8))
-
-            if field.kind == "bool":
-                var: tk.Variable = tk.BooleanVar(value=bool(values[field.key]))
-                ttk.Checkbutton(block, text="Enabled", variable=var).pack(anchor=tk.W)
-                self._setting_vars[field.key] = var
+            if self._modern:
+                self._add_setting_row_modern(inner, field, values[field.key])
             else:
-                var = tk.StringVar(value=str(values[field.key]))
-                entry = ttk.Entry(block, textvariable=var, width=42)
-                entry.pack(anchor=tk.W, ipady=2)
-                self._setting_vars[field.key] = var
+                self._add_setting_row_classic(inner, field, values[field.key])
 
         btns = tk.Frame(inner, bg=BG)
         btns.pack(fill=tk.X, padx=8, pady=(16, 24))
         ttk.Button(
-            btns, text="Reload", style="Secondary.TButton", command=self._reload_settings_fields
+            btns,
+            text="Reload",
+            style=self._btn_style("Secondary"),
+            command=self._reload_settings_fields,
         ).pack(side=tk.LEFT)
         ttk.Button(
-            btns, text="Save Settings", style="Accent.TButton", command=self._save_settings
+            btns,
+            text="Save Settings",
+            style=self._btn_style("Accent"),
+            command=self._save_settings,
         ).pack(side=tk.LEFT, padx=(8, 0))
 
         finish_scrollable(inner, canvas)
 
+    def _add_setting_row_classic(self, parent: tk.Misc, field, value) -> None:
+        """Original stacked card: label → description → control."""
+        card = self._card(parent, padx=8, pady=5)
+        block = tk.Frame(card, bg=SURFACE_2)
+        block.pack(fill=tk.X, padx=14, pady=12)
+
+        tk.Label(
+            block,
+            text=field.label,
+            bg=SURFACE_2,
+            fg=TEXT,
+            font=ui_font(11, "bold"),
+            anchor="w",
+        ).pack(fill=tk.X)
+        tk.Label(
+            block,
+            text=field.description,
+            bg=SURFACE_2,
+            fg=TEXT_SECONDARY,
+            font=ui_font(10),
+            wraplength=680,
+            justify=tk.LEFT,
+            anchor="w",
+        ).pack(fill=tk.X, pady=(4, 8))
+
+        if field.kind == "bool":
+            var: tk.Variable = tk.BooleanVar(value=bool(value))
+            ttk.Checkbutton(block, text="Enabled", variable=var).pack(anchor=tk.W)
+            self._setting_vars[field.key] = var
+        else:
+            var = tk.StringVar(value=str(value))
+            entry = ttk.Entry(block, textvariable=var, width=42)
+            entry.pack(anchor=tk.W, ipady=2)
+            self._setting_vars[field.key] = var
+
+    def _add_setting_row_modern(self, parent: tk.Misc, field, value) -> None:
+        """Cursor-like row: title/description left, control right."""
+        card = self._card(parent, padx=8, pady=4)
+        block = tk.Frame(card, bg=SURFACE_2)
+        block.pack(fill=tk.X, padx=16, pady=14)
+        block.columnconfigure(0, weight=1)
+
+        left = tk.Frame(block, bg=SURFACE_2)
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
+        tk.Label(
+            left,
+            text=field.label,
+            bg=SURFACE_2,
+            fg=TEXT,
+            font=ui_font(12),
+            anchor="w",
+        ).pack(fill=tk.X)
+        tk.Label(
+            left,
+            text=field.description,
+            bg=SURFACE_2,
+            fg=TEXT_SECONDARY,
+            font=ui_font(10),
+            wraplength=520,
+            justify=tk.LEFT,
+            anchor="w",
+        ).pack(fill=tk.X, pady=(4, 0))
+
+        right = tk.Frame(block, bg=SURFACE_2)
+        right.grid(row=0, column=1, sticky="ne")
+
+        if field.kind == "bool":
+            var = tk.BooleanVar(value=bool(value))
+            ToggleSwitch(right, var, bg=SURFACE_2).pack(anchor=tk.E, pady=(2, 0))
+            self._setting_vars[field.key] = var
+        else:
+            var = tk.StringVar(value=str(value))
+            width = 28 if field.kind in ("int", "float") else 34
+            entry = ttk.Entry(
+                right, textvariable=var, width=width, style="Modern.TEntry", justify=tk.RIGHT
+            )
+            entry.pack(anchor=tk.E)
+            self._setting_vars[field.key] = var
+
     def _reload_settings_fields(self) -> None:
         values = current_setting_values()
         for field in SETTINGS:
-            var = self._setting_vars[field.key]
+            var = self._setting_vars.get(field.key)
+            if var is None:
+                continue
             if field.kind == "bool":
                 var.set(bool(values[field.key]))
             else:
@@ -361,6 +455,7 @@ class BotControlApp(tk.Tk):
         self._install_log_sink()
 
     def _save_settings(self) -> None:
+        previous_style = self._ui_style
         try:
             values: dict[str, str | bool] = {}
             for field in SETTINGS:
@@ -373,10 +468,28 @@ class BotControlApp(tk.Tk):
         path = user_settings_path()
         self._install_log_sink()
         self._append_log(f"==> Settings saved to {path}")
+
+        new_style = str(values.get("gui_ui_style", previous_style)).strip().lower()
+        if new_style in ("legacy", "old"):
+            new_style = "classic"
+        if new_style not in ("modern", "classic"):
+            new_style = previous_style
+        style_changed = new_style != previous_style
+        if style_changed:
+            self._ui_style = new_style
+            self._build_settings_page()
+            self._append_log(f"==> Settings UI style → {new_style} (restart for Home/Setup)")
+
+        extra = ""
+        if style_changed:
+            extra = (
+                "\n\nSettings page updated to the new style. "
+                "Restart the app to refresh Home/Setup button padding."
+            )
         messagebox.showinfo(
             "Saved",
             f"Settings saved to:\n{path}\n\nStop and Start the bot to apply them to a running loop.\n"
-            "Activity log DEBUG filter applies immediately.",
+            f"Activity log DEBUG filter applies immediately.{extra}",
         )
 
     def _build_setup_page(self) -> None:
@@ -421,16 +534,22 @@ class BotControlApp(tk.Tk):
         row = tk.Frame(page, bg=BG)
         row.pack(fill=tk.X, pady=(4, 0))
         ttk.Button(
-            row, text="Refresh", style="Secondary.TButton", command=self._refresh_calib_status
+            row,
+            text="Refresh",
+            style=self._btn_style("Secondary"),
+            command=self._refresh_calib_status,
         ).pack(side=tk.LEFT)
         ttk.Button(
             row,
             text="Recalibrate Selected",
-            style="Secondary.TButton",
+            style=self._btn_style("Secondary"),
             command=self._recalibrate_selected,
         ).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(
-            row, text="Recalibrate All", style="Accent.TButton", command=self._recalibrate_all
+            row,
+            text="Recalibrate All",
+            style=self._btn_style("Accent"),
+            command=self._recalibrate_all,
         ).pack(side=tk.LEFT, padx=(8, 0))
 
         self._calib_detail = tk.StringVar(value="")
@@ -465,25 +584,54 @@ class BotControlApp(tk.Tk):
         ).pack(fill=tk.X, pady=(0, 8))
 
         for action_id, label, description in DEBUG_ACTIONS:
-            card = self._card(inner, padx=8, pady=5)
+            card = self._card(inner, padx=8, pady=4 if self._modern else 5)
             block = tk.Frame(card, bg=SURFACE_2)
             block.pack(fill=tk.X, padx=14, pady=12)
-            ttk.Button(
-                block,
-                text=label,
-                style="Secondary.TButton",
-                command=lambda aid=action_id: self._run_debug(aid),
-            ).pack(anchor=tk.W)
-            tk.Label(
-                block,
-                text=description,
-                bg=SURFACE_2,
-                fg=TEXT_SECONDARY,
-                font=ui_font(10),
-                wraplength=680,
-                justify=tk.LEFT,
-                anchor="w",
-            ).pack(fill=tk.X, pady=(8, 0))
+            if self._modern:
+                block.columnconfigure(0, weight=1)
+                left = tk.Frame(block, bg=SURFACE_2)
+                left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+                tk.Label(
+                    left,
+                    text=label,
+                    bg=SURFACE_2,
+                    fg=TEXT,
+                    font=ui_font(12),
+                    anchor="w",
+                ).pack(fill=tk.X)
+                tk.Label(
+                    left,
+                    text=description,
+                    bg=SURFACE_2,
+                    fg=TEXT_SECONDARY,
+                    font=ui_font(10),
+                    wraplength=520,
+                    justify=tk.LEFT,
+                    anchor="w",
+                ).pack(fill=tk.X, pady=(4, 0))
+                ttk.Button(
+                    block,
+                    text="Run",
+                    style=self._btn_style("Secondary"),
+                    command=lambda aid=action_id: self._run_debug(aid),
+                ).grid(row=0, column=1, sticky="ne")
+            else:
+                ttk.Button(
+                    block,
+                    text=label,
+                    style=self._btn_style("Secondary"),
+                    command=lambda aid=action_id: self._run_debug(aid),
+                ).pack(anchor=tk.W)
+                tk.Label(
+                    block,
+                    text=description,
+                    bg=SURFACE_2,
+                    fg=TEXT_SECONDARY,
+                    font=ui_font(10),
+                    wraplength=680,
+                    justify=tk.LEFT,
+                    anchor="w",
+                ).pack(fill=tk.X, pady=(8, 0))
 
         self._debug_result = tk.StringVar(value="")
         tk.Label(
@@ -760,7 +908,7 @@ class BotControlApp(tk.Tk):
 
                     tracker = RuntimeTracker(config)
                     since = tracker.seconds_since_last_farm()
-                    interval = max(60, int(config.farm_interval_seconds))
+                    interval = tracker.effective_farm_interval_seconds()
                     if since is None:
                         self._farm_status.set("Farm: ready (bot stopped)")
                     else:
@@ -770,7 +918,7 @@ class BotControlApp(tk.Tk):
                         else:
                             self._farm_status.set(
                                 f"Farm: next auto in {remaining // 60}m {remaining % 60}s "
-                                "(bot stopped)"
+                                f"(target {interval}s, bot stopped)"
                             )
         except Exception:  # noqa: BLE001
             self._farm_status.set("Farm: —")

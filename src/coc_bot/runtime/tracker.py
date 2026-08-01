@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,6 +9,19 @@ from loguru import logger
 
 from coc_bot.config import BotConfig
 from coc_bot.runtime.persistence import RuntimeState, load_runtime_state, save_runtime_state
+
+
+def roll_farm_interval_seconds(base: int, variance: int) -> int:
+    """Pick a wait in [base-variance, base+variance], never below 60s."""
+    base = max(60, int(base))
+    variance = max(0, int(variance))
+    if variance <= 0:
+        return base
+    lo = max(60, base - variance)
+    hi = base + variance
+    if hi < lo:
+        return lo
+    return random.randint(lo, hi)
 
 
 class RuntimeTracker:
@@ -88,8 +102,45 @@ class RuntimeTracker:
     def mark_farm_success(self) -> None:
         """Record that a farm battle was fought (success or post-deploy leave fail)."""
         self.state.last_farm_at = datetime.now(timezone.utc).isoformat()
+        rolled = self._roll_next_farm_interval()
+        self.state.next_farm_interval_seconds = rolled
         save_runtime_state(self.state_path, self.state)
-        logger.info("Recorded farm interval clock at {}", self.state.last_farm_at)
+        base = max(60, int(self.config.farm_interval_seconds))
+        variance = max(0, int(self.config.farm_interval_variance_seconds))
+        logger.info(
+            "Recorded farm interval clock at {} — next wait {}s (base {}s ± {}s)",
+            self.state.last_farm_at,
+            rolled,
+            base,
+            variance,
+        )
+
+    def _roll_next_farm_interval(self) -> int:
+        return roll_farm_interval_seconds(
+            self.config.farm_interval_seconds,
+            self.config.farm_interval_variance_seconds,
+        )
+
+    def effective_farm_interval_seconds(self) -> int:
+        """
+        Wait used for the current auto-farm countdown.
+
+        Persists a rolled value so status text and due-checks stay aligned until
+        the next fought farm re-rolls it.
+        """
+        stored = self.state.next_farm_interval_seconds
+        if stored is not None and int(stored) >= 60:
+            return int(stored)
+        rolled = self._roll_next_farm_interval()
+        self.state.next_farm_interval_seconds = rolled
+        save_runtime_state(self.state_path, self.state)
+        logger.debug(
+            "Rolled farm interval target {}s (base {} ± {})",
+            rolled,
+            max(60, int(self.config.farm_interval_seconds)),
+            max(0, int(self.config.farm_interval_variance_seconds)),
+        )
+        return rolled
 
     def seconds_since_last_farm(self) -> float | None:
         """Seconds since last fought farm battle, or None if never farmed."""

@@ -151,13 +151,24 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "farm_interval_seconds",
         "Farm interval (seconds)",
-        "Minimum time between auto farm attacks after a battle is fought "
+        "Base time between auto farm attacks after a battle is fought "
         "(7200 = every 2 hours). Applies even if Return Home / chat confirm fails. "
         "Stop and Start the bot after saving so the running loop picks this up.",
         "int",
         lambda c: c.farm_interval_seconds,
         "Farm",
         ("farm", "interval_seconds"),
+    ),
+    SettingField(
+        "farm_interval_variance_seconds",
+        "Farm interval variance (± seconds)",
+        "Random ± this many seconds around the farm interval so attacks are not "
+        "metronomic (300 ≈ ±5 minutes). Set 0 for an exact interval. "
+        "The rolled wait is saved until the next fought farm.",
+        "int",
+        lambda c: c.farm_interval_variance_seconds,
+        "Farm",
+        ("farm", "interval_variance_seconds"),
     ),
     SettingField(
         "farm_deploy_side",
@@ -368,6 +379,17 @@ SETTINGS: list[SettingField] = [
         "Interface",
         ("gui", "show_debug_activity"),
     ),
+    SettingField(
+        "gui_ui_style",
+        "Settings UI style (modern / classic)",
+        "modern = Cursor-like rows (label left, control right, toggles). "
+        "classic = original stacked cards. Colors stay the same. "
+        "Restart the app after saving to refresh Home/Setup controls.",
+        "str",
+        lambda c: c.gui_ui_style,
+        "Interface",
+        ("gui", "ui_style"),
+    ),
 ]
 
 
@@ -393,6 +415,10 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
                 raise ValueError("E-drag map taps must be at least 1")
             if field.key == "farm_rage_count" and (parsed < 0 or parsed > 20):
                 raise ValueError("Rage spell drops must be between 0 and 20")
+            if field.key == "farm_interval_variance_seconds" and parsed < 0:
+                raise ValueError("Farm interval variance cannot be negative")
+            if field.key == "farm_interval_variance_seconds" and parsed > 24 * 3600:
+                raise ValueError("Farm interval variance must be at most 86400 seconds")
         elif field.kind == "float":
             parsed = float(str(raw).strip())
             if field.key == "farm_pan_swipes" and parsed < 0:
@@ -408,6 +434,13 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
                 if side not in ("left", "right"):
                     raise ValueError("Deploy side must be 'left' or 'right'")
                 parsed = side
+            if field.key == "gui_ui_style":
+                style = parsed.lower()
+                if style in ("legacy", "old"):
+                    style = "classic"
+                if style not in ("modern", "classic"):
+                    raise ValueError("Settings UI style must be 'modern' or 'classic'")
+                parsed = style
 
         cursor = payload
         for part in field.yaml_path[:-1]:
@@ -423,6 +456,7 @@ def current_setting_values() -> dict[str, Any]:
 
 def save_settings_from_gui(values: dict[str, str | bool]) -> None:
     existing = load_user_settings()
+    previous = load_config()
     incoming = build_user_settings_payload(values)
     # Shallow-section merge: replace sections we edit.
     for section, data in incoming.items():
@@ -431,3 +465,29 @@ def save_settings_from_gui(values: dict[str, str | bool]) -> None:
         else:
             existing[section] = data
     save_user_settings(existing)
+
+    # Re-roll the next farm wait when interval / variance changes.
+    farm_in = incoming.get("farm") or {}
+    if isinstance(farm_in, dict) and (
+        "interval_seconds" in farm_in or "interval_variance_seconds" in farm_in
+    ):
+        new_interval = int(farm_in.get("interval_seconds", previous.farm_interval_seconds))
+        new_variance = int(
+            farm_in.get("interval_variance_seconds", previous.farm_interval_variance_seconds)
+        )
+        if (
+            new_interval != previous.farm_interval_seconds
+            or new_variance != previous.farm_interval_variance_seconds
+        ):
+            _reroll_next_farm_interval(new_interval, new_variance)
+
+
+def _reroll_next_farm_interval(base: int, variance: int) -> None:
+    from coc_bot.runtime.persistence import load_runtime_state, save_runtime_state
+    from coc_bot.runtime.tracker import roll_farm_interval_seconds
+
+    config = load_config()
+    path = config.data_dir / "runtime_state.json"
+    state = load_runtime_state(path)
+    state.next_farm_interval_seconds = roll_farm_interval_seconds(base, variance)
+    save_runtime_state(path, state)

@@ -147,6 +147,11 @@ class DonationBot:
         self._farm_requested = True
         logger.info("Farm attack requested — will run when not mid-donation")
 
+    @property
+    def farm_queued(self) -> bool:
+        """True when a manual/auto farm attack is queued for the next safe tick."""
+        return bool(self._farm_requested)
+
     def farm_status_line(self) -> str:
         """Short status for the GUI (next auto farm / cooldown)."""
         if not self.config.farm_enabled:
@@ -177,6 +182,12 @@ class DonationBot:
                 f"(target {interval}s)"
             )
         return f"Farm: next auto in {remaining // 60}m {remaining % 60}s"
+
+    def break_status_line(self) -> str:
+        """Short status for the GUI (time until next session break)."""
+        from coc_bot.runtime.tracker import break_status_line as _break_status_line
+
+        return _break_status_line(self.tracker)
 
     def screen_status_line(self) -> str:
         """Short screen label for the GUI."""

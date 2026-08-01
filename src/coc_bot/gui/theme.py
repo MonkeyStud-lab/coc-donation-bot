@@ -475,6 +475,21 @@ def apply_theme(root: tk.Tk | None = None, theme_id: str | None = None) -> ttk.S
         background=[("active", t.play_hover), ("disabled", t.surface_2)],
         foreground=[("disabled", t.text_secondary)],
     )
+    # Home Stop — same font/padding as Play so Start/Stop share size.
+    style.configure(
+        "HomeStop.TButton",
+        background=t.surface,
+        foreground=t.text,
+        font=ui_font(12, "bold"),
+        padding=(22, 10),
+        borderwidth=0,
+        focuscolor=t.surface,
+    )
+    style.map(
+        "HomeStop.TButton",
+        background=[("active", t.surface_hover), ("disabled", t.surface_2)],
+        foreground=[("disabled", t.text_secondary)],
+    )
 
     style.configure(
         "Accent.TButton",
@@ -603,6 +618,20 @@ def apply_theme(root: tk.Tk | None = None, theme_id: str | None = None) -> ttk.S
     style.map(
         "Modern.Play.TButton",
         background=[("active", t.play_hover), ("disabled", t.surface_2)],
+        foreground=[("disabled", t.text_secondary)],
+    )
+    style.configure(
+        "Modern.HomeStop.TButton",
+        background=t.surface,
+        foreground=t.text,
+        font=ui_font(12, "bold"),
+        padding=(26, 11),
+        borderwidth=0,
+        focuscolor=t.surface,
+    )
+    style.map(
+        "Modern.HomeStop.TButton",
+        background=[("active", t.surface_hover), ("disabled", t.surface_2)],
         foreground=[("disabled", t.text_secondary)],
     )
     style.configure(

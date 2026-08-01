@@ -29,6 +29,39 @@ def roll_session_limit_seconds(base: int, variance: int) -> int:
     return roll_farm_interval_seconds(base, variance)
 
 
+def format_duration_short(seconds: float) -> str:
+    """Compact countdown like 2h 15m / 12m 5s / 40s."""
+    total = max(0, int(seconds))
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}h {minutes}m"
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
+
+
+def break_status_line(tracker: RuntimeTracker) -> str:
+    """Short Home-tab line for time until the next session break."""
+    state = tracker.state
+    if state.break_until:
+        try:
+            until = datetime.fromisoformat(state.break_until)
+        except ValueError:
+            until = None
+        if until is not None:
+            now = datetime.now(timezone.utc)
+            if until.tzinfo is None:
+                until = until.replace(tzinfo=timezone.utc)
+            left = (until - now).total_seconds()
+            if left > 0:
+                return f"Break: in progress — resumes in {format_duration_short(left)}"
+    remaining = tracker.remaining_seconds()
+    if remaining <= 0:
+        return "Break: due on next check"
+    return f"Break: next in {format_duration_short(remaining)}"
+
+
 class RuntimeTracker:
     """Track active donation-loop runtime with persisted state."""
 

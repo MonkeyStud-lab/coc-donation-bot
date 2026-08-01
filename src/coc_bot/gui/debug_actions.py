@@ -362,100 +362,119 @@ class DebugSession:
         msg = f"Farm one-shot: success={result.success} ({result.reason})"
         return result.success, msg
 
+# Grouped Tools page actions: (group title, [(id, label, description), ...])
+DEBUG_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
+    (
+        "System",
+        [
+            (
+                "health_check",
+                "ADB health check",
+                "Verify the bot can talk to Waydroid over ADB.",
+            ),
+            (
+                "classify_screen",
+                "Classify current screen",
+                "Detect home / clan chat / donation panel / popup / unknown.",
+            ),
+            (
+                "save_screenshot",
+                "Save screenshot",
+                "Write a debug PNG under data/debug/.",
+            ),
+            (
+                "force_stop",
+                "Force-stop Clash of Clans",
+                "Close the game only (Waydroid stays up). Leaves you on Android home.",
+            ),
+            (
+                "relaunch",
+                "Relaunch Clash of Clans",
+                "Start CoC again and wait until it looks loaded.",
+            ),
+            (
+                "break_cycle",
+                "Test break / take-a-break cycle",
+                "Force-stop CoC, wait ~8s, relaunch, reopen clan chat — simulates the "
+                "session-limit break used to avoid long continuous play.",
+            ),
+        ],
+    ),
+    (
+        "Donation",
+        [
+            (
+                "open_clan_chat",
+                "Open clan chat",
+                "Navigate from home (or recover) until clan chat is open.",
+            ),
+            (
+                "find_classify_request",
+                "Find + classify donation request",
+                "Look for a Donate button and report specific vs open/hybrid.",
+            ),
+            (
+                "open_donation",
+                "Open a donation panel",
+                "Tap the first visible Donate and wait for the donation popup.",
+            ),
+            (
+                "close_donation",
+                "Close donation panel",
+                "Tap outside the donation popup to close it.",
+            ),
+            (
+                "scroll_chat",
+                "Scroll / seek chat once",
+                "One step of searching chat for donation requests.",
+            ),
+            (
+                "anti_idle",
+                "Anti-idle nudge once",
+                "Small swipe in the chat area (same idea as inactivity prevention).",
+            ),
+        ],
+    ),
+    (
+        "Farm",
+        [
+            (
+                "farm_open_attack",
+                "Farm: open Attack menu",
+                "Leave chat if needed, tap Attack. Does not start a match.",
+            ),
+            (
+                "farm_start_search",
+                "Farm: start unranked search",
+                "Tap unranked Battle (+ Find a Match if calibrated). May enter clouds — cancel manually if needed.",
+            ),
+            (
+                "farm_classify",
+                "Farm: classify battle screen",
+                "Report current screen type (attack_menu / matchmaking / battle / results / …).",
+            ),
+            (
+                "farm_deploy_dry",
+                "Farm: deploy-edge dry taps",
+                "A few taps along the configured deploy edge (no full attack wait).",
+            ),
+            (
+                "farm_program_deploy",
+                "Farm: program deploy sequence",
+                "Be on the battlefield first. Pans with your Settings, then opens a click "
+                "editor — number army-bar + map taps in order (required for farm deploy).",
+            ),
+            (
+                "farm_clear_deploy",
+                "Farm: clear deploy sequence",
+                "Delete the programmed tap sequence (farm cannot deploy until you program a new one).",
+            ),
+        ],
+    ),
+]
+
 DEBUG_ACTIONS: list[tuple[str, str, str]] = [
-    # id, label, description
-    (
-        "health_check",
-        "ADB health check",
-        "Verify the bot can talk to Waydroid over ADB.",
-    ),
-    (
-        "classify_screen",
-        "Classify current screen",
-        "Detect home / clan chat / donation panel / popup / unknown.",
-    ),
-    (
-        "open_clan_chat",
-        "Open clan chat",
-        "Navigate from home (or recover) until clan chat is open.",
-    ),
-    (
-        "find_classify_request",
-        "Find + classify donation request",
-        "Look for a Donate button and report specific vs open/hybrid.",
-    ),
-    (
-        "open_donation",
-        "Open a donation panel",
-        "Tap the first visible Donate and wait for the donation popup.",
-    ),
-    (
-        "close_donation",
-        "Close donation panel",
-        "Tap outside the donation popup to close it.",
-    ),
-    (
-        "scroll_chat",
-        "Scroll / seek chat once",
-        "One step of searching chat for donation requests.",
-    ),
-    (
-        "anti_idle",
-        "Anti-idle nudge once",
-        "Small swipe in the chat area (same idea as inactivity prevention).",
-    ),
-    (
-        "save_screenshot",
-        "Save screenshot",
-        "Write a debug PNG under data/debug/.",
-    ),
-    (
-        "force_stop",
-        "Force-stop Clash of Clans",
-        "Close the game only (Waydroid stays up). Leaves you on Android home.",
-    ),
-    (
-        "relaunch",
-        "Relaunch Clash of Clans",
-        "Start CoC again and wait until it looks loaded.",
-    ),
-    (
-        "break_cycle",
-        "Test break / take-a-break cycle",
-        "Force-stop CoC, wait ~8s, relaunch, reopen clan chat — simulates the "
-        "session-limit break used to avoid long continuous play.",
-    ),
-    (
-        "farm_open_attack",
-        "Farm: open Attack menu",
-        "Leave chat if needed, tap Attack. Does not start a match.",
-    ),
-    (
-        "farm_start_search",
-        "Farm: start unranked search",
-        "Tap unranked Battle (+ Find a Match if calibrated). May enter clouds — cancel manually if needed.",
-    ),
-    (
-        "farm_classify",
-        "Farm: classify battle screen",
-        "Report current screen type (attack_menu / matchmaking / battle / results / …).",
-    ),
-    (
-        "farm_deploy_dry",
-        "Farm: deploy-edge dry taps",
-        "A few taps along the configured deploy edge (no full attack wait).",
-    ),
-    (
-        "farm_program_deploy",
-        "Farm: program deploy sequence",
-        "Be on the battlefield first. Pans with your Settings, then opens a click "
-        "editor — number army-bar + map taps in order (required for farm deploy).",
-    ),
-    (
-        "farm_clear_deploy",
-        "Farm: clear deploy sequence",
-        "Delete the programmed tap sequence (farm cannot deploy until you program a new one).",
-    ),
+    action for _group, actions in DEBUG_GROUPS for action in actions
 ]
 
 

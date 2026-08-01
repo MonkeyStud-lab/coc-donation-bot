@@ -125,7 +125,7 @@ Farm expands into finer phases (`home` → `attack_menu` → `matchmaking` → `
 | Ensure chat open | `donation/navigator.py` | Open chat, dismiss popups, recover from wrong screens |
 | Find request | `donation/chat_monitor.py` | Match green Donate in chat ROI |
 | Kind (specific / open / hybrid) | `donation/request_parser.py` | Icons vs capacity bars |
-| Fill | `donation/executor.py` | Tap colored troop/spell slots; scroll bars |
+| Fill | `donation/executor.py` | Tap visible troop+spell slots first, then scroll bars |
 
 **Gating:** specific requests are always handled. Open/hybrid depend on `donate_open_requests` in settings.
 

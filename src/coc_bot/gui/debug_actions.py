@@ -368,6 +368,12 @@ DEBUG_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
         "System",
         [
             (
+                "install_desktop_shortcut",
+                "Create desktop shortcut",
+                "Add a CoC Donation Bot icon on your Desktop (and app menu) that "
+                "opens a terminal and starts the GUI. Safe to run while the bot is running.",
+            ),
+            (
                 "health_check",
                 "ADB health check",
                 "Verify the bot can talk to Waydroid over ADB.",
@@ -479,6 +485,15 @@ DEBUG_ACTIONS: list[tuple[str, str, str]] = [
 
 
 def run_debug_action(action_id: str) -> str:
+    if action_id == "install_desktop_shortcut":
+        from coc_bot.gui.util import install_desktop_shortcut
+
+        try:
+            return install_desktop_shortcut()
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Desktop shortcut install failed")
+            return f"Error: {exc}"
+
     session = DebugSession()
     mapping = {
         "health_check": session.health_check,

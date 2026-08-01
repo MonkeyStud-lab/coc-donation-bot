@@ -1277,6 +1277,7 @@ class BotControlApp(tk.Tk):
                 card = self._card(body, padx=8, pady=4 if self._modern else 5)
                 block = tk.Frame(card, bg=theme.SURFACE_2)
                 block.pack(fill=tk.X, padx=14, pady=12)
+                allow_while_running = action_id == "install_desktop_shortcut"
                 if self._modern:
                     block.columnconfigure(0, weight=1)
                     left = tk.Frame(block, bg=theme.SURFACE_2)
@@ -1328,6 +1329,7 @@ class BotControlApp(tk.Tk):
                     )
                     desc.pack(fill=tk.X, pady=(8, 0))
                     self._track_wrap_label(desc, reserve=56, page_id="tools")
+                run_btn._allow_while_running = allow_while_running  # type: ignore[attr-defined]
                 self._tool_buttons.append(run_btn)
 
         self._debug_result = tk.StringVar(value="")
@@ -1349,7 +1351,9 @@ class BotControlApp(tk.Tk):
         self._update_tool_buttons_state()
 
     def _run_debug(self, action_id: str) -> None:
-        if self._bot_running():
+        # Shortcut install does not touch ADB / the bot loop.
+        allow_while_running = action_id == "install_desktop_shortcut"
+        if self._bot_running() and not allow_while_running:
             messagebox.showwarning(
                 "Bot running",
                 "Stop the bot before running tools so they do not conflict.",
@@ -1374,6 +1378,12 @@ class BotControlApp(tk.Tk):
                 self._set_debug_busy(False)
                 self._debug_result.set(result)
                 self._append_log(result)
+                if action_id == "install_desktop_shortcut" and not result.startswith("Error"):
+                    messagebox.showinfo(
+                        "Desktop shortcut",
+                        f"{result}\n\n"
+                        "Double-click the icon (choose Allow Launching if Ubuntu asks).",
+                    )
 
             self.after(0, done)
 
@@ -1384,12 +1394,14 @@ class BotControlApp(tk.Tk):
         self._update_tool_buttons_state()
 
     def _update_tool_buttons_state(self) -> None:
-        disabled = self._debug_busy or self._bot_running()
-        state = tk.DISABLED if disabled else tk.NORMAL
+        bot_running = self._bot_running()
         for btn in self._tool_buttons:
             try:
-                if btn.winfo_exists():
-                    btn.configure(state=state)
+                if not btn.winfo_exists():
+                    continue
+                allow_while_running = bool(getattr(btn, "_allow_while_running", False))
+                disabled = self._debug_busy or (bot_running and not allow_while_running)
+                btn.configure(state=tk.DISABLED if disabled else tk.NORMAL)
             except tk.TclError:
                 continue
 

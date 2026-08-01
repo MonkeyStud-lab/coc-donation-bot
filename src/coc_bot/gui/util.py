@@ -14,6 +14,29 @@ def calibrate_script() -> Path:
     return project_root() / "scripts" / "calibrate.py"
 
 
+def install_run_shortcut_script() -> Path:
+    return project_root() / "scripts" / "install_run_shortcut.sh"
+
+
+def install_desktop_shortcut() -> str:
+    """Run ``install_run_shortcut.sh``; return the script's stdout message."""
+    script = install_run_shortcut_script()
+    if not script.is_file():
+        raise FileNotFoundError(f"Missing script: {script}")
+    result = subprocess.run(  # noqa: S603
+        ["bash", str(script)],
+        cwd=str(project_root()),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    out = ((result.stdout or "") + (result.stderr or "")).strip()
+    if result.returncode != 0:
+        raise RuntimeError(out or f"Shortcut install failed (exit {result.returncode})")
+    return out or "Desktop shortcut installed."
+
+
 def open_in_terminal(command: str) -> bool:
     """Run an interactive command in a new terminal window (Linux)."""
     wrapped = f"{command}; echo; read -r -p 'Press Enter to close…'"

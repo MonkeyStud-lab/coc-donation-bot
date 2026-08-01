@@ -61,26 +61,28 @@ cd ~/Downloads/coc-donation-bot
 
 ---
 
-### Step 2 — Run the installer
+### Step 2 — Install and open the app
 
 Still inside the bot folder, run:
 
 ```bash
-chmod +x scripts/setup_linux.sh
-./scripts/setup_linux.sh
+chmod +x scripts/get_started.sh
+./scripts/get_started.sh
 ```
 
-What this does (in plain language):
+That script runs the Linux installer the first time (if needed), then opens the control window. The installer:
 
-- Installs tools your computer needs (ADB, Python, window toolkit, etc.)
+- Installs tools your computer needs (ADB, Python, window toolkit, `notify-send`, etc.)
 - Creates a private Python environment for the bot (a “venv”)
 - Downloads troop/spell icons the bot uses
+- Offers an optional desktop shortcut at the end
 
-It may ask for your **password** (sudo). That is normal. Wait until it finishes.
+It may ask for your **password** (sudo). That is normal.
 
-If something went wrong halfway, you can run it again. To force a full redo:
+To re-run setup only (or force a full redo):
 
 ```bash
+./scripts/setup_linux.sh
 ./scripts/setup_linux.sh --force
 ```
 
@@ -91,7 +93,8 @@ If something went wrong halfway, you can run it again. To force a full redo:
 The bot talks to the Android session through **ADB**. Think of ADB as a cable between your PC and Waydroid.
 
 1. Start Waydroid and open Clash of Clans so the game is visible.
-2. In a terminal, check that ADB sees the device:
+2. In the app on **Home**, use **Connect ADB** (also on the offline banner / Get started card).
+3. Or in a terminal:
 
 ```bash
 adb devices
@@ -99,55 +102,39 @@ adb devices
 
 You want a line that looks like `127.0.0.1:5555` or `HOST:5555` with the word **device** (not “offline”).
 
-If the list is empty, try connecting:
+If the list is empty:
 
 ```bash
 adb connect 127.0.0.1:5555
 adb devices
 ```
 
-If that address does not work, look up your Waydroid IP with:
+If that address does not work, check `waydroid status` (or your emulator docs), then `adb connect YOUR_IP:5555`.
 
-```bash
-waydroid status
-```
+4. Tell the bot which address to use (pick one):
 
-or check Waydroid docs for your setup, then:
-
-```bash
-adb connect YOUR_IP:5555
-```
-
-3. Tell the bot which address to use (pick one):
-
-- **In the app later:** open **Settings**, set **ADB device**, Save  
-- **Or in a terminal for this session:**
-
-```bash
-export ADB_DEVICE=YOUR_IP:5555
-```
-
-(Replace with your real address from `adb devices`.)
+- **In the app:** **Settings** → **ADB device** → Save  
+- **Or for this terminal session:** `export ADB_DEVICE=YOUR_IP:5555`
 
 ---
 
 ### Step 4 — Teach the bot your screen (calibration)
 
-Every screen size is a bit different. Calibration is a guided “click this button on the screenshot” process so the bot knows where Attack, Donate, chat, and so on are.
+Every screen size is a bit different. Calibration shows a screenshot so you can mark Attack, Donate, chat regions, and so on.
 
-1. Open Waydroid and Clash of Clans (home village or clan chat as the wizard asks).
-2. In a terminal:
+1. Open Waydroid and Clash of Clans (home village or clan chat as needed).
+2. In the app, open **Setup**.
+3. Select a step or part → **Recalibrate Selected**. Taps, ROIs, and templates open an **in-app picker**. Slot colors and grid layout use **Classic terminal calibrator**.
+4. Finish all required steps (Home Get started checklist turns green when ADB + required calibration are OK).
+
+Files land under `data/calibrated.yaml` and `data/templates/`.
+
+You can still run the full terminal wizard: **Setup → Recalibrate All**, or:
 
 ```bash
-cd ~/Projects/coc-donation-bot   # or your folder
 source .venv/bin/activate
 python scripts/calibrate.py
 ```
-
-3. Follow the on-screen prompts. Click where it asks. Finish all required steps.
-4. When done, files are saved under `data/calibrated.yaml` and `data/templates/`.
-
-You can also start calibration later from the app: sidebar **Setup** → **Recalibrate All** (or select one step).
 
 If you move to another PC with the **same** screen resolution, you can copy those `data/` files. If the resolution is different, calibrate again.
 
@@ -156,36 +143,30 @@ If you move to another PC with the **same** screen resolution, you can copy thos
 ### Step 5 — Start the bot
 
 1. Open Waydroid and Clash of Clans yourself.
-2. In a terminal:
-
-```bash
-cd ~/Projects/coc-donation-bot
-source .venv/bin/activate
-python -m coc_bot.main
-```
-
-3. A dark control window opens (Steam-style layout):
+2. Launch the app (again with `./scripts/get_started.sh`, or `source .venv/bin/activate && python -m coc_bot.main`).
+3. Control window pages:
 
 | Sidebar | What it does |
 |---------|----------------|
-| **Home** | **Start** / **Stop**, farm attack, screenshot, activity log |
-| **Settings** | How often to scan, donations, farm, breaks |
-| **Setup** | Calibration status; recalibrate steps |
-| **Tools** | One-shot tests (ADB check, open chat, etc.) |
+| **Home** | **Start** / **Stop**, Connect ADB, Get started checklist, farm attack, activity log, copy/export debug |
+| **Settings** | Timing presets (Safe / Balanced / Fast), donations, farm, breaks; Dev options shows raw ms |
+| **Setup** | Calibration status; in-app recalibrate + classic terminal fallback |
+| **Tools** | One-shot tests (ADB health, open chat, etc.) |
 
 4. Click **Start** on Home. The bot begins watching for donations (and farm, if enabled).
 
 **Stop** leaves Clash open. **Close Waydroid + Clash** shuts the game and Waydroid session.
 
+Desktop notifications (`notify-send`) fire when ADB drops while running, the bot stops, or Start is blocked for missing calibration.
+
 #### Optional desktop shortcut
 
 ```bash
-cd ~/Projects/coc-donation-bot
 chmod +x scripts/install_run_shortcut.sh
 ./scripts/install_run_shortcut.sh
 ```
 
-Then use the **CoC Donation Bot** icon on your desktop (choose **Allow Launching** if Ubuntu asks).
+(`setup_linux.sh` can also offer this at the end.) Then use the **CoC Donation Bot** icon on your desktop (choose **Allow Launching** if Ubuntu asks).
 
 ---
 
@@ -223,12 +204,13 @@ That last command shows a live log. Press `Ctrl+C` to stop watching (the service
 
 | Problem | What to try |
 |---------|-------------|
-| `adb devices` is empty or “offline” | Start Waydroid, then `adb connect YOUR_IP:5555` |
-| Bot says not calibrated | Run Step 4 again, or use **Setup** → Recalibrate |
-| Taps miss buttons | Recalibrate that step; check Settings → ADB device matches `adb devices` |
-| No donation slots found | Recalibrate **slot colors** and **grid** |
+| `adb devices` is empty or “offline” | Start Waydroid; Home → **Connect ADB**, or `adb connect YOUR_IP:5555` |
+| Bot says not calibrated | Open **Setup** and finish required steps (Get started checklist) |
+| Taps miss buttons | Recalibrate that part in Setup; check Settings → ADB device |
+| No donation slots found | Recalibrate **slot colors** and **grid** (Classic terminal calibrator) |
 | Screencap / screenshot fails | Restart Waydroid, wait ~15 seconds, try again |
-| New computer | Re-run `./scripts/setup_linux.sh`, then calibrate if the screen size differs |
+| Need logs for help | Home → **Copy logs** or **Export debug** (`data/debug/export_…`) |
+| New computer | `./scripts/get_started.sh` (or `setup_linux.sh`), then calibrate if the screen size differs |
 | Bot stuck | Use **Tools** → classify screen / open clan chat; or restart the bot |
 
 ---
@@ -287,8 +269,9 @@ src/coc_bot/
   runtime/      # Session limits and breaks
   calibration/  # Setup wizard
 scripts/
+  get_started.sh   # Setup if needed, then launch the GUI
   setup_linux.sh   # First-time install on Ubuntu
-  calibrate.py     # Setup wizard from the terminal
+  calibrate.py     # Classic Setup wizard from the terminal
 docs/
   HOW_IT_WORKS.md  # Architecture (read this to extend the bot)
   CONTRIBUTING.md  # Extension recipes

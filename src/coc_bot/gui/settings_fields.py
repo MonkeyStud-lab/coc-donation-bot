@@ -7,6 +7,15 @@ from typing import Any, Callable
 
 from coc_bot.config import BotConfig, load_config, load_user_settings, save_user_settings
 from coc_bot.gui.theme import normalize_theme_id, theme_label, theme_labels
+from coc_bot.gui.timing_presets import (
+    PRESET_LABELS,
+    RAW_TIMING_FIELD_KEYS,
+    apply_timing_preset,
+    infer_preset_from_timing,
+    normalize_timing_preset,
+    timing_preset_id_from_label,
+    timing_preset_label,
+)
 
 
 @dataclass(frozen=True)
@@ -26,6 +35,17 @@ def _pair(lo_hi: tuple[int, int]) -> str:
 
 
 SETTINGS: list[SettingField] = [
+    SettingField(
+        "gui_timing_preset",
+        "Timing preset",
+        "Safe = slower and steadier; Balanced = defaults; Fast = snappier taps/scans. "
+        "Turn on Dev options (Interface) to edit raw millisecond values.",
+        "choice",
+        lambda c: timing_preset_label(c.gui_timing_preset),
+        "Timing",
+        ("gui", "timing_preset"),
+        choices=PRESET_LABELS,
+    ),
     SettingField(
         "scan_interval_ms",
         "Screenshot / scan interval (ms)",
@@ -329,6 +349,16 @@ SETTINGS: list[SettingField] = [
         ("gui", "show_debug_activity"),
     ),
     SettingField(
+        "gui_dev_options",
+        "Dev options",
+        "When enabled, Timing shows raw millisecond fields so you can edit values by hand. "
+        "When off, use Timing preset (Safe / Balanced / Fast) only.",
+        "bool",
+        lambda c: c.gui_dev_options,
+        "Interface",
+        ("gui", "dev_options"),
+    ),
+    SettingField(
         "gui_theme",
         "Theme",
         "Full UI theme (colors + control layout). Classic = stacked cards; "
@@ -341,6 +371,10 @@ SETTINGS: list[SettingField] = [
         choices=theme_labels(),
     ),
 ]
+
+
+def is_raw_timing_field(field_key: str) -> bool:
+    return field_key in RAW_TIMING_FIELD_KEYS
 
 
 def parse_int_pair(text: str) -> list[int]:
@@ -379,6 +413,8 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
             raw_text = str(raw).strip()
             if field.key == "gui_theme":
                 parsed = normalize_theme_id(raw_text)
+            elif field.key == "gui_timing_preset":
+                parsed = timing_preset_id_from_label(raw_text)
             else:
                 parsed = raw_text.lower()
                 allowed = {c.lower() for c in field.choices}
@@ -409,6 +445,30 @@ def save_settings_from_gui(values: dict[str, str | bool]) -> None:
     existing = load_user_settings()
     previous = load_config()
     incoming = build_user_settings_payload(values)
+
+    # Named timing presets overwrite timing.* ; Custom keeps whatever raw fields say.
+    gui_in = incoming.get("gui") if isinstance(incoming.get("gui"), dict) else {}
+    preset = normalize_timing_preset(gui_in.get("timing_preset", previous.gui_timing_preset))
+    dev_options = bool(gui_in.get("dev_options", previous.gui_dev_options))
+    if preset != "custom":
+        timing_values = apply_timing_preset(preset)
+        if timing_values:
+            incoming.setdefault("timing", {})
+            if isinstance(incoming["timing"], dict):
+                incoming["timing"].update(timing_values)
+    elif dev_options:
+        # Editing raw fields while Dev options is on → mark Custom.
+        timing_in = incoming.get("timing") if isinstance(incoming.get("timing"), dict) else {}
+        if timing_in:
+            scan = timing_in.get("scan_interval_ms", list(previous.scan_interval_ms))
+            action = timing_in.get("action_delay_ms", list(previous.action_delay_ms))
+            jitter = timing_in.get("tap_jitter_px", previous.tap_jitter_px)
+            anti = timing_in.get("anti_idle_seconds", previous.anti_idle_seconds)
+            inferred = infer_preset_from_timing(scan, action, int(jitter), int(anti))
+            incoming.setdefault("gui", {})
+            if isinstance(incoming["gui"], dict):
+                incoming["gui"]["timing_preset"] = inferred
+
     # Shallow-section merge: replace sections we edit.
     for section, data in incoming.items():
         if isinstance(data, dict) and isinstance(existing.get(section), dict):

@@ -81,6 +81,8 @@ class BotConfig:
     farm_deploy_sequence: dict[str, Any] = field(default_factory=dict)
     gui_show_debug_activity: bool = False
     gui_theme: str = "modern"
+    gui_dev_options: bool = False
+    gui_timing_preset: str = "balanced"
     data_dir: Path = field(default_factory=lambda: _project_root() / "data")
     templates_dir: Path = field(default_factory=lambda: _project_root() / "data" / "templates")
 
@@ -261,6 +263,8 @@ def load_config(
         ),
         gui_show_debug_activity=bool((merged.get("gui") or {}).get("show_debug_activity", False)),
         gui_theme=_normalize_gui_theme(merged.get("gui") or {}),
+        gui_dev_options=bool((merged.get("gui") or {}).get("dev_options", False)),
+        gui_timing_preset=_normalize_gui_timing_preset(merged.get("gui") or {}),
         data_dir=root / "data",
         templates_dir=root / "data" / "templates",
     )
@@ -272,6 +276,12 @@ def _normalize_gui_theme(gui: dict[str, Any]) -> str:
     # Prefer gui.theme; fall back to legacy gui.ui_style.
     raw = gui.get("theme", gui.get("ui_style", "modern"))
     return normalize_theme_id(raw)
+
+
+def _normalize_gui_timing_preset(gui: dict[str, Any]) -> str:
+    from coc_bot.gui.timing_presets import normalize_timing_preset
+
+    return normalize_timing_preset(gui.get("timing_preset", "balanced"))
 
 
 def normalize_farm_deploy_sequence(raw: Any) -> dict[str, Any]:

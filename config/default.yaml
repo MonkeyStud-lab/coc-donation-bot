@@ -60,3 +60,5 @@ gui:
   # android17 (Amethyst) | nord (Frost) | ember (Ember)
   # (legacy key ui_style still accepted)
   theme: modern
+  timing_preset: balanced         # safe | balanced | fast | custom
+  dev_options: false              # when true, Settings shows raw timing ms fields

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -77,23 +78,57 @@ def format_countdown(seconds: float) -> str:
     return f"{secs}s"
 
 
-def load_window_geometry(path: Path) -> str | None:
-    """Load saved window geometry from JSON, or ``None`` on any error."""
+@dataclass
+class GuiWindowState:
+    """Persisted control-window chrome (geometry, last page, onboarding)."""
+
+    geometry: str | None = None
+    last_page: str = "home"
+    onboarding_dismissed: bool = False
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> GuiWindowState:
+        geom = data.get("geometry")
+        if not isinstance(geom, str) or not geom:
+            geom = None
+        page = str(data.get("last_page") or "home").strip().lower()
+        if page not in ("home", "settings", "setup", "tools"):
+            page = "home"
+        return cls(
+            geometry=geom,
+            last_page=page,
+            onboarding_dismissed=bool(data.get("onboarding_dismissed", False)),
+        )
+
+
+def load_gui_window_state(path: Path) -> GuiWindowState:
+    """Load saved GUI window state from JSON."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
-        return None
-    geometry = data.get("geometry")
-    return geometry if isinstance(geometry, str) and geometry else None
+        return GuiWindowState()
+    if not isinstance(data, dict):
+        return GuiWindowState()
+    return GuiWindowState.from_dict(data)
+
+
+def save_gui_window_state(path: Path, state: GuiWindowState) -> None:
+    """Persist GUI window state as JSON."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = asdict(state)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def load_window_geometry(path: Path) -> str | None:
+    """Load saved window geometry from JSON, or ``None`` on any error."""
+    return load_gui_window_state(path).geometry
 
 
 def save_window_geometry(path: Path, geometry: str) -> None:
-    """Persist window geometry as JSON ``{"geometry": "WxH+X+Y"}``."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps({"geometry": geometry}, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    """Persist window geometry, preserving other GUI window state fields."""
+    state = load_gui_window_state(path)
+    state.geometry = geometry
+    save_gui_window_state(path, state)
 
 
 def adb_status_label(ok: bool | None) -> tuple[str, ColorRole]:

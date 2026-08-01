@@ -203,10 +203,12 @@ GUI one-shot farm (**Farm attack now** without Start) wires the same stop flag i
 
 | Page | Role |
 |------|------|
-| Home | Start / Stop, farm now, activity log, Waydroid close |
-| Settings | Editable fields from `gui/settings_fields.py` → `user_settings.yaml` |
-| Setup | Calibration checklist + recalibrate steps |
+| Home | Start / Stop, Connect ADB, Get started checklist, farm now, activity log, copy/export debug, Waydroid close |
+| Settings | Fields from `gui/settings_fields.py` → `user_settings.yaml`; Timing presets + Dev options (raw ms) |
+| Setup | Calibration checklist; in-app pickers for tap/ROI/template; classic terminal for colors/grid/full runs |
 | Tools | One-shot debug actions (`gui/debug_actions.py`) |
+
+Window chrome (`last_page`, geometry, onboarding dismissed) lives in `data/gui_window.json`. Timing preset / Dev options live under `gui:` in `user_settings.yaml`. Desktop toasts use `gui/notify.py` (`notify-send`).
 
 Activity log is a loguru sink. **Show DEBUG messages in activity log** (Interface settings) controls whether DEBUG lines appear there (default off).
 
@@ -214,7 +216,9 @@ Activity log is a loguru sink. **Show DEBUG messages in activity log** (Interfac
 
 ## Calibration
 
-[`src/coc_bot/calibration/wizard.py`](../src/coc_bot/calibration/wizard.py) walks through home → chat → donation → colors/grid → farm taps and saves:
+[`src/coc_bot/calibration/wizard.py`](../src/coc_bot/calibration/wizard.py) defines steps (home → chat → donation → colors/grid → farm). Setup **Recalibrate Selected** prefers in-app pickers ([`gui/setup_calib.py`](../src/coc_bot/gui/setup_calib.py) + `InteractivePicker`) for tap / ROI / template parts; slot colors, grid, and Recalibrate All still launch the terminal wizard (`scripts/calibrate.py`).
+
+Saves:
 
 - Images under `data/templates/`
 - Coordinates / ROIs in `data/calibrated.yaml`

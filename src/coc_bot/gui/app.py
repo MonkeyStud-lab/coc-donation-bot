@@ -24,8 +24,16 @@ from coc_bot.calibration.wizard import (
 )
 from coc_bot.config import load_config, project_root, user_settings_path
 from coc_bot.gui.debug_actions import DEBUG_GROUPS, DebugSession, run_debug_action
+from coc_bot.gui.debug_export import export_debug_bundle
+from coc_bot.gui.notify import notify
 import coc_bot.gui.theme as theme
-from coc_bot.gui.settings_fields import SETTINGS, current_setting_values, save_settings_from_gui
+from coc_bot.gui.settings_fields import (
+    SETTINGS,
+    current_setting_values,
+    is_raw_timing_field,
+    save_settings_from_gui,
+)
+from coc_bot.gui.setup_calib import calibrate_part_in_app, part_supports_in_app
 from coc_bot.gui.theme import (
     active_layout,
     apply_theme,
@@ -36,11 +44,12 @@ from coc_bot.gui.theme import (
     ui_font,
 )
 from coc_bot.gui.ui_helpers import (
+    GuiWindowState,
     adb_status_label,
     format_countdown,
     humanize_setting_value,
-    load_window_geometry,
-    save_window_geometry,
+    load_gui_window_state,
+    save_gui_window_state,
 )
 from coc_bot.gui.util import calibrate_script, open_in_terminal
 from coc_bot.gui.widgets import ToggleSwitch
@@ -69,10 +78,10 @@ class BotControlApp(tk.Tk):
         self.title("CoC Donation Bot")
         self.geometry("1040x720")
         self.minsize(860, 600)
-        saved_geometry = load_window_geometry(self._window_geometry_path())
-        if saved_geometry:
+        self._gui_state: GuiWindowState = load_gui_window_state(self._window_geometry_path())
+        if self._gui_state.geometry:
             try:
-                self.geometry(saved_geometry)
+                self.geometry(self._gui_state.geometry)
             except tk.TclError:
                 pass
         self._theme_id = normalize_theme_id(load_config().gui_theme)
@@ -100,6 +109,11 @@ class BotControlApp(tk.Tk):
         )
         self._adb_status_var = tk.StringVar(value="ADB · …")
         self._last_adb_ok: bool | None = None
+        self._adb_banner: tk.Frame | None = None
+        self._onboarding_frame: tk.Frame | None = None
+        self._onboarding_checklist_var = tk.StringVar(value="")
+        self._home_anchor: tk.Misc | None = None
+        self._log_lines: list[str] = []
         self._run_chip_var = tk.StringVar(value="Stopped")
         self._farm_timer_var = tk.StringVar(value="—")
         self._break_timer_var = tk.StringVar(value="—")
@@ -161,7 +175,8 @@ class BotControlApp(tk.Tk):
         self._statusbar_chrome.append(status)
         self._statusbar_chrome.append(self._adb_status_label)
 
-        self._show_page("home")
+        start_page = self._gui_state.last_page if self._gui_state.last_page in self._pages else "home"
+        self._show_page(start_page)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(400, self._refresh_calib_status)
         self.after(1000, self._refresh_farm_status)
@@ -245,6 +260,18 @@ class BotControlApp(tk.Tk):
                 self._page_subtitle.set(subtitle)
                 break
         self.after_idle(self._sync_wrap_lengths)
+        self._gui_state.last_page = page_id
+        self._save_gui_state()
+
+    def _save_gui_state(self) -> None:
+        try:
+            self._gui_state.geometry = self.geometry()
+        except tk.TclError:
+            pass
+        try:
+            save_gui_window_state(self._window_geometry_path(), self._gui_state)
+        except OSError as exc:
+            logger.warning("Could not save GUI window state: {}", exc)
 
     def _on_content_configure(self, event: tk.Event) -> None:
         if event.widget is not self._content:
@@ -267,6 +294,7 @@ class BotControlApp(tk.Tk):
         self.after(8000, self._poll_adb_status)
 
     def _set_adb_status(self, ok: bool | None) -> None:
+        previous = self._last_adb_ok
         self._last_adb_ok = ok
         label, role = adb_status_label(ok)
         self._adb_status_var.set(label)
@@ -280,6 +308,9 @@ class BotControlApp(tk.Tk):
                 self._adb_status_label.configure(fg=color)
         except tk.TclError:
             pass
+        if previous is True and ok is False and self._bot_running():
+            notify("ADB disconnected", "The bot may not be able to control the device.")
+        self._refresh_home_status()
 
     @property
     def _modern(self) -> bool:
@@ -443,7 +474,9 @@ class BotControlApp(tk.Tk):
             "HomeStop": "HomeStop.TButton",
         }.get(kind, "Secondary.TButton")
 
-    def _card(self, parent: tk.Misc, **pack_opts) -> tk.Frame:
+    def _card(
+        self, parent: tk.Misc, *, return_outer: bool = False, **pack_opts
+    ) -> tk.Frame | tuple[tk.Frame, tk.Frame]:
         outer = tk.Frame(
             parent,
             bg=theme.SURFACE,
@@ -456,6 +489,8 @@ class BotControlApp(tk.Tk):
         outer.pack(fill=fill, **pack_opts)
         inner = tk.Frame(outer, bg=theme.SURFACE_2, bd=0, highlightthickness=0)
         inner.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+        if return_outer:
+            return outer, inner
         return inner
 
     def _section_header(self, parent: tk.Misc, section_key: str, title: str) -> tk.Frame:
@@ -508,7 +543,86 @@ class BotControlApp(tk.Tk):
 
     def _build_home_page(self) -> None:
         page = self._pages["home"]
-        actions = self._card(page, pady=(0, 12))
+
+        banner_outer, banner_inner = self._card(page, pady=(0, 12), return_outer=True)
+        self._adb_banner = banner_outer
+        banner_pad = tk.Frame(banner_inner, bg=theme.SURFACE_2)
+        banner_pad.pack(fill=tk.X, padx=16, pady=12)
+        banner_label = tk.Label(
+            banner_pad,
+            text="⚠ ADB is offline — the bot can't see your device.",
+            bg=theme.SURFACE_2,
+            fg=theme.DANGER,
+            font=ui_font(11, "bold"),
+            anchor="w",
+            justify=tk.LEFT,
+            wraplength=360,
+        )
+        banner_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._track_wrap_label(banner_label, reserve=280, page_id="home")
+        banner_btns = tk.Frame(banner_pad, bg=theme.SURFACE_2)
+        banner_btns.pack(side=tk.RIGHT)
+        ttk.Button(
+            banner_btns,
+            text="Connect ADB",
+            style=self._btn_style("Accent"),
+            command=self.connect_adb,
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            banner_btns,
+            text="Open Tools",
+            style=self._btn_style("Secondary"),
+            command=lambda: self._show_page("tools"),
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        banner_outer.pack_forget()
+
+        onboarding_outer, onboarding_inner = self._card(page, pady=(0, 12), return_outer=True)
+        self._onboarding_frame = onboarding_outer
+        ob_pad = tk.Frame(onboarding_inner, bg=theme.SURFACE_2)
+        ob_pad.pack(fill=tk.X, padx=18, pady=14)
+        tk.Label(
+            ob_pad,
+            text="Get started",
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT,
+            font=ui_font(13, "bold"),
+            anchor="w",
+        ).pack(anchor=tk.W)
+        checklist_label = tk.Label(
+            ob_pad,
+            textvariable=self._onboarding_checklist_var,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT_SECONDARY,
+            font=ui_font(10),
+            justify=tk.LEFT,
+            anchor="w",
+        )
+        checklist_label.pack(anchor=tk.W, fill=tk.X, pady=(6, 12))
+        self._track_wrap_label(checklist_label, reserve=40, page_id="home")
+        ob_btns = tk.Frame(ob_pad, bg=theme.SURFACE_2)
+        ob_btns.pack(fill=tk.X)
+        ttk.Button(
+            ob_btns,
+            text="Connect ADB",
+            style=self._btn_style("Secondary"),
+            command=self.connect_adb,
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            ob_btns,
+            text="Go to Setup",
+            style=self._btn_style("Accent"),
+            command=lambda: self._show_page("setup"),
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            ob_btns,
+            text="Dismiss",
+            style=self._btn_style("Secondary"),
+            command=self._dismiss_onboarding,
+        ).pack(side=tk.RIGHT)
+        onboarding_outer.pack_forget()
+
+        actions_outer, actions = self._card(page, pady=(0, 12), return_outer=True)
+        self._home_anchor = actions_outer
         pad = tk.Frame(actions, bg=theme.SURFACE_2)
         pad_x = 18 if self._modern else 16
         pad_y = 16 if self._modern else 14
@@ -613,8 +727,22 @@ class BotControlApp(tk.Tk):
             font=ui_font(13, "bold"),
             anchor="w",
         ).pack(side=tk.LEFT)
-        autoscroll_row = tk.Frame(log_header, bg=theme.SURFACE_2)
-        autoscroll_row.pack(side=tk.RIGHT)
+        header_actions = tk.Frame(log_header, bg=theme.SURFACE_2)
+        header_actions.pack(side=tk.RIGHT)
+        ttk.Button(
+            header_actions,
+            text="Copy logs",
+            style=self._btn_style("Secondary"),
+            command=self._copy_logs,
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            header_actions,
+            text="Export debug",
+            style=self._btn_style("Secondary"),
+            command=self._export_debug,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        autoscroll_row = tk.Frame(header_actions, bg=theme.SURFACE_2)
+        autoscroll_row.pack(side=tk.LEFT, padx=(12, 0))
         tk.Label(
             autoscroll_row,
             text="Auto-scroll",
@@ -642,6 +770,92 @@ class BotControlApp(tk.Tk):
         )
         self._log.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
         self._configure_log_tags()
+        self._refresh_home_status()
+
+    def _refresh_home_status(self) -> None:
+        """Update the ADB offline banner and Get-started checklist visibility/text."""
+        if self._adb_banner is None or self._onboarding_frame is None or self._home_anchor is None:
+            return
+        try:
+            config = load_config()
+        except Exception:  # noqa: BLE001
+            config = None
+        adb_ok = self._last_adb_ok is True
+        calib_ok = bool(config.calibrated) if config is not None else False
+
+        try:
+            if self._last_adb_ok is False:
+                if not self._adb_banner.winfo_ismapped():
+                    self._adb_banner.pack(fill=tk.X, pady=(0, 12), before=self._home_anchor)
+            else:
+                self._adb_banner.pack_forget()
+        except tk.TclError:
+            pass
+
+        self._onboarding_checklist_var.set(
+            f"{'✓' if adb_ok else '✗'}  ADB connected\n"
+            f"{'✓' if calib_ok else '✗'}  Required calibration (Setup)\n"
+            "•  Farm attacks are optional — set them up any time in Setup → Farm"
+        )
+        show_onboarding = not self._gui_state.onboarding_dismissed
+        try:
+            if show_onboarding:
+                if not self._onboarding_frame.winfo_ismapped():
+                    self._onboarding_frame.pack(fill=tk.X, pady=(0, 12), before=self._home_anchor)
+            else:
+                self._onboarding_frame.pack_forget()
+        except tk.TclError:
+            pass
+
+    def _dismiss_onboarding(self) -> None:
+        self._gui_state.onboarding_dismissed = True
+        self._save_gui_state()
+        self._refresh_home_status()
+
+    def _copy_logs(self) -> None:
+        text = "\n".join(self._log_lines)
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+        except tk.TclError as exc:
+            messagebox.showerror("Copy failed", str(exc))
+            return
+        self._append_log(f"==> Copied {len(self._log_lines)} log line(s) to clipboard")
+
+    def _export_debug(self) -> None:
+        try:
+            out_dir = export_debug_bundle(self._log_lines)
+        except OSError as exc:
+            messagebox.showerror("Export failed", str(exc))
+            return
+        self._append_log(f"==> Exported debug bundle to {out_dir}")
+        messagebox.showinfo("Debug bundle exported", f"Saved to:\n{out_dir}")
+
+    def connect_adb(self) -> None:
+        self._append_log("==> Connecting to ADB…")
+
+        def worker() -> None:
+            try:
+                from coc_bot.adb.client import AdbClient
+
+                config = load_config()
+                ok = AdbClient(device=config.adb_device).connect()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ADB connect failed: {}", exc)
+                ok = False
+
+            def done() -> None:
+                self._set_adb_status(ok)
+                if ok:
+                    self._append_log("==> ADB connected")
+                    notify("ADB connected", "The bot can see your device again.")
+                else:
+                    self._append_log("==> ADB connect failed")
+                    notify("ADB connect failed", "Check Waydroid/emulator and try again.")
+
+            self.after(0, done)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _build_settings_page(self) -> None:
         page = self._pages["settings"]
@@ -687,9 +901,12 @@ class BotControlApp(tk.Tk):
         self._track_wrap_label(intro_label, reserve=40, page_id="settings")
 
         values = current_setting_values()
+        dev = bool(values.get("gui_dev_options", False))
         current_section = None
         section_body: tk.Frame | None = None
         for field in SETTINGS:
+            if is_raw_timing_field(field.key) and not dev:
+                continue
             if field.section != current_section:
                 current_section = field.section
                 section_body = self._section_header(
@@ -875,10 +1092,16 @@ class BotControlApp(tk.Tk):
 
     def _save_settings(self) -> None:
         previous_theme = self._theme_id
+        previous_dev = load_config().gui_dev_options
         try:
             values: dict[str, str | bool] = {}
+            current = current_setting_values()
             for field in SETTINGS:
-                var = self._setting_vars[field.key]
+                var = self._setting_vars.get(field.key)
+                if var is None:
+                    # Hidden field (e.g. raw timing while Dev options is off) — keep as-is.
+                    values[field.key] = current[field.key]
+                    continue
                 values[field.key] = bool(var.get()) if field.kind == "bool" else str(var.get())
             save_settings_from_gui(values)
         except Exception as exc:  # noqa: BLE001
@@ -890,9 +1113,16 @@ class BotControlApp(tk.Tk):
 
         new_theme = normalize_theme_id(values.get("gui_theme", previous_theme))
         theme_changed = new_theme != previous_theme
+        new_dev = bool(values.get("gui_dev_options", previous_dev))
+        dev_changed = new_dev != previous_dev
         if theme_changed:
             self._apply_theme_id(new_theme)
             self._append_log(f"==> Theme → {theme_label(new_theme)}")
+        elif dev_changed:
+            self._build_settings_page()
+            self._append_log(
+                f"==> Dev options {'enabled' if new_dev else 'disabled'} — settings refreshed"
+            )
 
         extra = ""
         if theme_changed:
@@ -908,9 +1138,10 @@ class BotControlApp(tk.Tk):
         tk.Label(
             page,
             text="Calibration teaches the bot where buttons and bars are on your screen. "
-            "Select a step or a single part below, then Recalibrate Selected "
-            "(parts skip the rest of that step). Open Waydroid and Clash first. "
-            "Farm deploy sequence: Farm → Deploy tap sequence (be in battle first).",
+            "Select a step or part, then Recalibrate Selected — taps, ROIs, and templates "
+            "open an in-app picker. Slot colors / grid use Classic terminal calibrator. "
+            "Open Waydroid and Clash first. Farm deploy: Farm → Deploy tap sequence "
+            "(be in battle first).",
             bg=theme.BG,
             fg=theme.TEXT_SECONDARY,
             font=ui_font(10),
@@ -970,6 +1201,12 @@ class BotControlApp(tk.Tk):
             text="Recalibrate All",
             style=self._btn_style("Accent"),
             command=self._recalibrate_all,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            row,
+            text="Classic terminal calibrator",
+            style=self._btn_style("Secondary"),
+            command=self._classic_calibrate_selected,
         ).pack(side=tk.LEFT, padx=(8, 0))
 
         self._calib_detail = tk.StringVar(value="")
@@ -1203,6 +1440,10 @@ class BotControlApp(tk.Tk):
         self._log.tag_configure("META", foreground=theme.ACCENT, font=ui_font(10, "bold"))
 
     def _append_log(self, line: str) -> None:
+        self._log_lines.append(line)
+        if len(self._log_lines) > 2000:
+            del self._log_lines[: len(self._log_lines) - 2000]
+
         stripped = line.strip()
         tag = None
         match = _LOG_LINE_RE.match(stripped)
@@ -1257,6 +1498,10 @@ class BotControlApp(tk.Tk):
                 "Not calibrated",
                 "Setup is incomplete. Open Setup in the sidebar and run the missing steps.",
             )
+            notify("Start blocked", "Required calibration is incomplete — open Setup.")
+            self._gui_state.onboarding_dismissed = False
+            self._save_gui_state()
+            self._refresh_home_status()
             self._show_page("setup")
             self._refresh_calib_status()
             return
@@ -1589,6 +1834,7 @@ class BotControlApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def _on_bot_stopped(self) -> None:
+        was_running = self._bot_thread is not None
         self._status.set("Ready — open Waydroid and Clash of Clans, then press Start")
         self._start_btn.configure(state=tk.NORMAL)
         self._stop_btn.configure(state=tk.DISABLED)
@@ -1600,8 +1846,10 @@ class BotControlApp(tk.Tk):
         except Exception:  # noqa: BLE001
             pass
         self._sync_run_chip()
-        self._sync_run_chip()
         self._update_tool_buttons_state()
+        self._refresh_home_status()
+        if was_running:
+            notify("Bot stopped", "The bot loop is no longer running.")
 
     def close_waydroid_and_coc(self) -> None:
         if not messagebox.askyesno(
@@ -1689,6 +1937,7 @@ class BotControlApp(tk.Tk):
                 )
         total = len(STEP_IDS)
         self._calib_progress.set(f"Setup progress: {done} / {total} steps ready")
+        self._refresh_home_status()
         self._calib_detail.set(
             f"{done}/{total} steps configured. Expand a step and select a part to "
             "recalibrate only that item (answer n at prompts to keep existing values)."
@@ -1740,6 +1989,8 @@ class BotControlApp(tk.Tk):
             return
         iid = sel[0]
         step_id = parent_step_id(iid)
+        step = STEPS[step_id]
+
         if "::" in iid:
             part_key = iid.split("::", 1)[1]
             if part_key == "deploy_sequence":
@@ -1751,9 +2002,46 @@ class BotControlApp(tk.Tk):
                     return
                 self._run_debug("farm_program_deploy")
                 return
+            part = next((p for p in step.parts if p.key == part_key), None)
+            if part is not None and part_supports_in_app(part):
+                self._run_in_app_calibration(step_id, part_key)
+                return
             self._launch_calibrate(["--step", step_id, "--part", part_key])
             return
+
+        # Whole step selected — run in-app when every part supports it, else fall
+        # back to the terminal wizard (meta/grid/color parts need it).
+        in_app_parts = [p.key for p in step.parts if p.kind != "meta" and part_supports_in_app(p)]
+        other_parts = [p for p in step.parts if p.kind == "meta" or not part_supports_in_app(p)]
+        if step.parts and not other_parts:
+            self._run_in_app_calibration_sequence(step_id, in_app_parts)
+            return
         self._launch_calibrate(["--step", step_id])
+
+    def _run_in_app_calibration(self, step_id: str, part_key: str) -> None:
+        try:
+            result = calibrate_part_in_app(self, step_id, part_key)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("In-app calibration failed for {}::{}: {}", step_id, part_key, exc)
+            self._append_log(f"Calibration cancelled/failed ({part_key}): {exc}")
+            return
+        self._append_log(f"==> {result}")
+        self._refresh_calib_status()
+
+    def _run_in_app_calibration_sequence(self, step_id: str, part_keys: list[str]) -> None:
+        if not part_keys:
+            return
+        for part_key in part_keys:
+            try:
+                result = calibrate_part_in_app(self, step_id, part_key)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "In-app calibration failed for {}::{}: {}", step_id, part_key, exc
+                )
+                self._append_log(f"Calibration cancelled/failed ({part_key}): {exc}")
+                continue
+            self._append_log(f"==> {result}")
+        self._refresh_calib_status()
 
     def _recalibrate_all(self) -> None:
         if not messagebox.askyesno(
@@ -1762,6 +2050,20 @@ class BotControlApp(tk.Tk):
         ):
             return
         self._launch_calibrate(["--all"])
+
+    def _classic_calibrate_selected(self) -> None:
+        """Open the classic terminal calibrator for the current selection (or --all)."""
+        sel = self._calib_tree.selection()
+        if not sel:
+            self._launch_calibrate(["--all"])
+            return
+        iid = sel[0]
+        step_id = parent_step_id(iid)
+        if "::" in iid:
+            part_key = iid.split("::", 1)[1]
+            self._launch_calibrate(["--step", step_id, "--part", part_key])
+            return
+        self._launch_calibrate(["--step", step_id])
 
     def _launch_calibrate(self, extra_args: list[str]) -> None:
         script = calibrate_script()
@@ -1797,10 +2099,8 @@ class BotControlApp(tk.Tk):
                 self._bot_thread.join(timeout=3.0)
             if self._farm_oneshot_thread is not None:
                 self._farm_oneshot_thread.join(timeout=3.0)
-        try:
-            save_window_geometry(self._window_geometry_path(), self.geometry())
-        except OSError as exc:
-            logger.warning("Could not save window geometry: {}", exc)
+        self._gui_state.last_page = self._page
+        self._save_gui_state()
         if self._log_sink_id is not None:
             try:
                 logger.remove(self._log_sink_id)

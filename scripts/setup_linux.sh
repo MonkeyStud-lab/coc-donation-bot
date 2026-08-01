@@ -156,9 +156,29 @@ fi
 
 stamp_fingerprint >"$STAMP"
 log "Linux setup finished."
-log "Next steps:"
-log "  1. Open Waydroid and Clash of Clans manually"
-log "  2. Calibrate once:  source .venv/bin/activate && python scripts/calibrate.py"
-log "  3. Run the bot:     python -m coc_bot.main"
 echo
+log "What’s next:"
+log "  1. Open Waydroid and Clash of Clans so the game is visible"
+log "  2. Start the app:   ./scripts/get_started.sh"
+log "     (or: source .venv/bin/activate && python -m coc_bot.main)"
+log "  3. In the app: Home → Connect ADB if needed, then Setup → calibrate taps"
+log "  4. Press Start on Home"
+echo
+log "Tip: Tools → ADB health check, or Home → Connect ADB, verifies the device link."
 log "Note: Waydroid + Clash of Clans must already be installed separately."
+echo
+
+if [[ -t 0 ]]; then
+  read -r -p "Install a desktop shortcut now? [y/N] " reply || reply=""
+  case "${reply,,}" in
+    y|yes)
+      chmod +x "$ROOT/scripts/install_run_shortcut.sh"
+      "$ROOT/scripts/install_run_shortcut.sh"
+      ;;
+    *)
+      log "Skipped shortcut. Later: ./scripts/install_run_shortcut.sh"
+      ;;
+  esac
+else
+  log "Non-interactive shell — skipped shortcut prompt. Run: ./scripts/install_run_shortcut.sh"
+fi

@@ -320,8 +320,8 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "gui_theme",
         "Theme",
-        "Full UI theme (colors + control layout). Classic = stacked Steam cards; "
-        "Modern = Cursor-like rows; Windows 11 / iOS 26 / Android 17 / Nord / Ember "
+        "Full UI theme (colors + control layout). Classic = stacked cards; "
+        "Modern = row layout; Graphite / Midnight / Amethyst / Frost / Ember "
         "are additional palettes. Applies to the whole window after Save.",
         "choice",
         lambda c: theme_label(c.gui_theme),

@@ -44,10 +44,10 @@ def main() -> int:
     theme_field = next(f for f in SETTINGS if f.key == "gui_theme")
     assert theme_field.kind == "choice"
     assert "Modern" in theme_field.choices
-    assert "Windows 11" in theme_field.choices
-    assert "iOS 26" in theme_field.choices
-    assert "Android 17" in theme_field.choices
-    assert "Nord" in theme_field.choices
+    assert "Graphite" in theme_field.choices
+    assert "Midnight" in theme_field.choices
+    assert "Amethyst" in theme_field.choices
+    assert "Frost" in theme_field.choices
     assert "Ember" in theme_field.choices
 
     seq = normalize_farm_deploy_sequence(config.farm_deploy_sequence)

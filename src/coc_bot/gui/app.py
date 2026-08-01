@@ -238,6 +238,63 @@ class BotControlApp(tk.Tk):
         page = page_id or self._page
         self._wrap_labels.append((page, label, max(0, int(reserve))))
 
+    def _bind_wrap_to_width(self, label: tk.Label, host: tk.Misc, *, pad: int = 8) -> None:
+        """Keep label wraplength equal to *host*'s actual width."""
+
+        def _apply(width: int) -> None:
+            try:
+                if label.winfo_exists():
+                    label.configure(wraplength=max(100, int(width) - pad))
+            except tk.TclError:
+                return
+
+        def _on_configure(event: tk.Event) -> None:
+            if event.widget is not host:
+                return
+            if event.width >= 80:
+                _apply(event.width)
+
+        host.bind("<Configure>", _on_configure, add="+")
+        self.after_idle(lambda: _apply(max(host.winfo_width(), 80)))
+
+    def _bind_modern_row_wrap(
+        self,
+        labels: list[tk.Label],
+        row: tk.Misc,
+        right: tk.Misc,
+        *,
+        gap: int = 16,
+    ) -> None:
+        """
+        Wrap modern-row labels to (row width − control column width).
+
+        Binding only to the left frame fails because its width is still driven by
+        unwrapped text request size; subtracting the right column fixes that.
+        """
+
+        def _apply() -> None:
+            try:
+                if not row.winfo_exists() or not right.winfo_exists():
+                    return
+                row.update_idletasks()
+                right_w = max(right.winfo_reqwidth(), right.winfo_width())
+                available = int(row.winfo_width()) - int(right_w) - gap
+                wrap = max(100, available)
+                for label in labels:
+                    if label.winfo_exists():
+                        label.configure(wraplength=wrap)
+            except tk.TclError:
+                return
+
+        def _on_configure(event: tk.Event) -> None:
+            if event.widget is not row:
+                return
+            if event.width >= 120:
+                _apply()
+
+        row.bind("<Configure>", _on_configure, add="+")
+        self.after_idle(_apply)
+
     def _sync_wrap_lengths(self, width: int | None = None) -> None:
         """Recompute wraplength for tracked labels from the available content width."""
         if width is None or width < 80:
@@ -495,30 +552,33 @@ class BotControlApp(tk.Tk):
         block = tk.Frame(card, bg=theme.SURFACE_2)
         block.pack(fill=tk.X, padx=16, pady=14)
         block.columnconfigure(0, weight=1)
+        block.columnconfigure(1, weight=0)
 
         left = tk.Frame(block, bg=theme.SURFACE_2)
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
-        tk.Label(
+
+        title = tk.Label(
             left,
             text=field.label,
             bg=theme.SURFACE_2,
             fg=theme.TEXT,
             font=ui_font(12),
             anchor="w",
-        ).pack(fill=tk.X)
+            justify=tk.LEFT,
+            wraplength=200,
+        )
+        title.pack(anchor=tk.W)
         desc = tk.Label(
             left,
             text=field.description,
             bg=theme.SURFACE_2,
             fg=theme.TEXT_SECONDARY,
             font=ui_font(10),
-            wraplength=320,
+            wraplength=200,
             justify=tk.LEFT,
             anchor="w",
         )
-        desc.pack(fill=tk.X, pady=(4, 0))
-        # Leave room for the right-side control + padding/scrollbar.
-        self._track_wrap_label(desc, reserve=200, page_id="settings")
+        desc.pack(anchor=tk.W, pady=(4, 0))
 
         right = tk.Frame(block, bg=theme.SURFACE_2)
         right.grid(row=0, column=1, sticky="ne")
@@ -542,12 +602,14 @@ class BotControlApp(tk.Tk):
             self._setting_vars[field.key] = var
         else:
             var = tk.StringVar(value=str(value))
-            width = 28 if field.kind in ("int", "float") else 34
+            width = 12 if field.kind in ("int", "float") else 18
             entry = ttk.Entry(
                 right, textvariable=var, width=width, style="Modern.TEntry", justify=tk.RIGHT
             )
             entry.pack(anchor=tk.E)
             self._setting_vars[field.key] = var
+
+        self._bind_modern_row_wrap([title, desc], block, right, gap=20)
 
     def _reload_settings_fields(self) -> None:
         values = current_setting_values()

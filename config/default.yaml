@@ -55,6 +55,7 @@ farm:
 # Control window (GUI)
 gui:
   show_debug_activity: false      # DEBUG lines in Home activity log (noisy; leave off normally)
-  # Theme: classic | modern | windows11 | ios26 | android17 | nord | ember
+  # Theme ids: classic | modern | windows11 (Graphite) | ios26 (Midnight) |
+  # android17 (Amethyst) | nord (Frost) | ember (Ember)
   # (legacy key ui_style still accepted)
   theme: modern

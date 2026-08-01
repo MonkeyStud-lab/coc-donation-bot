@@ -101,7 +101,7 @@ THEMES: dict[str, GuiTheme] = {
     ),
     "windows11": GuiTheme(
         id="windows11",
-        label="Windows 11",
+        label="Graphite",
         layout="modern",
         bg="#202020",
         sidebar="#2c2c2c",
@@ -129,7 +129,7 @@ THEMES: dict[str, GuiTheme] = {
     ),
     "ios26": GuiTheme(
         id="ios26",
-        label="iOS 26",
+        label="Midnight",
         layout="modern",
         bg="#000000",
         sidebar="#0a0a0a",
@@ -157,7 +157,7 @@ THEMES: dict[str, GuiTheme] = {
     ),
     "android17": GuiTheme(
         id="android17",
-        label="Android 17",
+        label="Amethyst",
         layout="modern",
         bg="#131313",
         sidebar="#0e0e0e",
@@ -185,7 +185,7 @@ THEMES: dict[str, GuiTheme] = {
     ),
     "nord": GuiTheme(
         id="nord",
-        label="Nord",
+        label="Frost",
         layout="modern",
         bg="#2e3440",
         sidebar="#3b4252",
@@ -298,16 +298,20 @@ def normalize_theme_id(raw: object) -> str:
         "windows11": "windows11",
         "windows 11": "windows11",
         "win11": "windows11",
+        "graphite": "windows11",
         "ios26": "ios26",
         "ios 26": "ios26",
         "ios": "ios26",
+        "midnight": "ios26",
         "android17": "android17",
         "android 17": "android17",
         "android": "android17",
+        "amethyst": "android17",
         "nord": "nord",
+        "frost": "nord",
         "ember": "ember",
     }
-    # Match by label too ("Windows 11", "iOS 26", …).
+    # Match by current label too ("Graphite", "Midnight", …).
     for tid in THEME_ORDER:
         label = THEMES[tid].label.lower()
         aliases[label] = tid

@@ -80,6 +80,33 @@ class AdbClient:
             logger.info("adb connect {}: {}", host_port, (result.stdout or result.stderr or "").strip())
         return self.get_state() == "device"
 
+    @staticmethod
+    def list_devices() -> list[tuple[str, str]]:
+        """
+        Return ``[(serial, state), ...]`` from ``adb devices``.
+
+        ``state`` is typically ``device``, ``offline``, or ``unauthorized``.
+        """
+        try:
+            result = subprocess.run(
+                ["adb", "devices"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return []
+        found: list[tuple[str, str]] = []
+        for line in (result.stdout or "").splitlines():
+            line = line.strip()
+            if not line or line.lower().startswith("list of devices"):
+                continue
+            parts = line.split()
+            if len(parts) >= 2:
+                found.append((parts[0], parts[1]))
+        return found
+
     def get_state(self) -> str:
         try:
             result = self.run(["get-state"], check=False)

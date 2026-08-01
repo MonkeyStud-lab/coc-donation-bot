@@ -83,6 +83,7 @@ class BotConfig:
     gui_theme: str = "modern"
     gui_dev_options: bool = False
     gui_timing_preset: str = "balanced"
+    gui_practice_mode: bool = False
     data_dir: Path = field(default_factory=lambda: _project_root() / "data")
     templates_dir: Path = field(default_factory=lambda: _project_root() / "data" / "templates")
 
@@ -265,6 +266,7 @@ def load_config(
         gui_theme=_normalize_gui_theme(merged.get("gui") or {}),
         gui_dev_options=bool((merged.get("gui") or {}).get("dev_options", False)),
         gui_timing_preset=_normalize_gui_timing_preset(merged.get("gui") or {}),
+        gui_practice_mode=bool((merged.get("gui") or {}).get("practice_mode", False)),
         data_dir=root / "data",
         templates_dir=root / "data" / "templates",
     )

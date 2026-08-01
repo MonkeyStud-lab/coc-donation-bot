@@ -349,6 +349,16 @@ SETTINGS: list[SettingField] = [
         ("gui", "show_debug_activity"),
     ),
     SettingField(
+        "gui_practice_mode",
+        "Practice mode (no donate taps)",
+        "When enabled, Start runs in practice mode: navigation still works, but donation "
+        "taps are skipped. Useful to verify calibration safely. Stop/Start after changing.",
+        "bool",
+        lambda c: c.gui_practice_mode,
+        "Interface",
+        ("gui", "practice_mode"),
+    ),
+    SettingField(
         "gui_dev_options",
         "Dev options",
         "When enabled, Timing shows raw millisecond fields so you can edit values by hand. "

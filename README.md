@@ -148,10 +148,10 @@ If you move to another PC with the **same** screen resolution, you can copy thos
 
 | Sidebar | What it does |
 |---------|----------------|
-| **Home** | **Start** / **Stop**, Connect ADB, Get started checklist, farm attack, activity log, copy/export debug |
-| **Settings** | Timing presets (Safe / Balanced / Fast), donations, farm, breaks; Dev options shows raw ms |
-| **Setup** | Calibration status; in-app recalibrate + classic terminal fallback |
-| **Tools** | One-shot tests (ADB health, open chat, etc.) |
+| **Home** | **Start** / **Stop**, Connect/Pick ADB, Get started, practice mode, farm readiness, live status, activity feed |
+| **Settings** | Timing presets, practice mode, donations, farm, breaks; Dev options; Apply & restart when running |
+| **Setup** | Full in-app calibration; Calibrate what’s missing; backup/restore; classic fallback |
+| **Tools** | Fix-it recipes, ADB health, desktop shortcut, other one-shot tests |
 
 4. Click **Start** on Home. The bot begins watching for donations (and farm, if enabled).
 

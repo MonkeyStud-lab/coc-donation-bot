@@ -62,3 +62,4 @@ gui:
   theme: modern
   timing_preset: balanced         # safe | balanced | fast | custom
   dev_options: false              # when true, Settings shows raw timing ms fields
+  practice_mode: false            # when true, Start runs without donate taps (dry-run)

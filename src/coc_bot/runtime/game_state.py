@@ -172,6 +172,33 @@ _VALID_TRANSITIONS: dict[GameState, frozenset[GameState]] = {
 }
 
 
+_ACTIVITY_BY_STATE: dict[GameState, str] = {
+    GameState.CLAN_CHAT: "Watching clan chat",
+    GameState.SCROLLING_CHAT: "Scrolling clan chat",
+    GameState.OPENING_DONATION: "Opening donation panel",
+    GameState.DONATING: "Donating…",
+    GameState.ATTACK_MENU: "Opening Attack menu",
+    GameState.MATCHMAKING: "Searching for a farm match",
+    GameState.IN_BATTLE: "Farm battle in progress",
+    GameState.BATTLE_RESULTS: "Farm battle finished — returning home",
+    GameState.RETURNING_HOME: "Returning home after farm",
+    GameState.ON_BREAK: "Session break — Clash closed until the break ends",
+    GameState.RECOVERING: "Recovering (reopening chat)",
+    GameState.HOME: "On home village",
+}
+
+
+def _log_activity_for_state(state: GameState, *, reason: str = "") -> None:
+    """Emit a short human-facing Activity line for important phase changes."""
+    message = _ACTIVITY_BY_STATE.get(state)
+    if not message:
+        return
+    if reason:
+        logger.info("Activity: {} ({})", message, reason)
+    else:
+        logger.info("Activity: {}", message)
+
+
 class GameStateMachine:
     """Tracks game phase and logs whether each transition looks logical."""
 
@@ -214,7 +241,10 @@ class GameStateMachine:
                     new_state.value,
                     suffix,
                 )
+                _log_activity_for_state(new_state, reason=reason)
             return True
+
+        _log_activity_for_state(new_state, reason=reason or "unexpected")
 
         allowed_names = ", ".join(sorted(s.value for s in allowed)) or "(none)"
         logger.warning(

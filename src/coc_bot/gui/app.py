@@ -22,7 +22,13 @@ from coc_bot.calibration.wizard import (
     parent_step_id,
     part_is_configured,
 )
-from coc_bot.config import load_config, project_root, user_settings_path
+from coc_bot.config import (
+    load_config,
+    load_user_settings,
+    project_root,
+    save_user_settings,
+    user_settings_path,
+)
 from coc_bot.gui.calib_backup import (
     CalibrationBackup,
     create_backup,
@@ -60,6 +66,19 @@ from coc_bot.gui.ui_helpers import (
     humanize_setting_value,
     load_gui_window_state,
     save_gui_window_state,
+)
+from coc_bot.gui.ux_helpers import (
+    FIXIT_RECIPES,
+    FarmReadiness,
+    FixItRecipe,
+    MissingCalibration,
+    STEP_SCREEN_HINTS,
+    break_timer_caption,
+    farm_readiness,
+    humanize_log_line,
+    live_status_label,
+    next_missing_calibration,
+    settings_snapshot,
 )
 from coc_bot.gui.util import calibrate_script, open_in_terminal
 from coc_bot.gui.widgets import ToggleSwitch
@@ -139,6 +158,26 @@ class BotControlApp(tk.Tk):
         self._statusbar_chrome: list[tk.Misc] = []
         # (page_id, label, horizontal reserve px) — wraplength tracks content width.
         self._wrap_labels: list[tuple[str, tk.Label, int]] = []
+
+        # UX polish: practice mode, dirty-settings guard, human activity feed,
+        # break warnings, and ADB device picker / auto-reconnect state.
+        self._practice_var = tk.BooleanVar(value=bool(load_config().gui_practice_mode))
+        self._practice_mode = bool(self._practice_var.get())
+        self._practice_sync_guard = False
+        self._practice_var.trace_add("write", lambda *_a: self._on_practice_toggle())
+        self._settings_dirty = False
+        self._settings_baseline: dict[str, str] | None = None
+        self._human_lines: list[str] = []
+        self._human_log: scrolledtext.ScrolledText | None = None
+        self._break_warn_sent_for: str | None = None
+        self._adb_reconnect_attempts = 0
+        self._adb_reconnecting = False
+        self._live_status_var = tk.StringVar(value="")
+        self._farm_ready_var = tk.StringVar(value="")
+        self._farm_ready_outer: tk.Frame | None = None
+        self._farm_ready_label: tk.Label | None = None
+        self._home_timers_frame: tk.Frame | None = None
+        self._break_caption_var = tk.StringVar(value="NEXT BREAK")
 
         shell = ttk.Frame(self)
         shell.pack(fill=tk.BOTH, expand=True)
@@ -255,6 +294,21 @@ class BotControlApp(tk.Tk):
                 continue
 
     def _show_page(self, page_id: str) -> None:
+        if self._page == "settings" and page_id != "settings" and self._settings_dirty:
+            outcome = self._confirm_settings_dirty_leave()
+            if outcome == "cancel":
+                return
+            if outcome == "save":
+                self._save_settings()
+                if self._settings_dirty:
+                    # Save failed validation — stay put so the user can fix it.
+                    return
+            elif outcome == "discard":
+                self._reload_settings_fields()
+                self._settings_baseline = settings_snapshot(
+                    {key: var.get() for key, var in self._setting_vars.items()}
+                )
+                self._settings_dirty = False
         self._page = page_id
         for pid, frame in self._pages.items():
             if pid == page_id:
@@ -272,6 +326,20 @@ class BotControlApp(tk.Tk):
         self.after_idle(self._sync_wrap_lengths)
         self._gui_state.last_page = page_id
         self._save_gui_state()
+
+    def _confirm_settings_dirty_leave(self) -> str:
+        """Ask Save / Discard / Cancel for unsaved Settings edits. Returns one of those."""
+        response = messagebox.askyesnocancel(
+            "Unsaved settings",
+            "You have unsaved changes in Settings.\n\n"
+            "Save them before leaving this page?\n\n"
+            "Yes = Save, No = Discard changes, Cancel = stay here.",
+        )
+        if response is True:
+            return "save"
+        if response is False:
+            return "discard"
+        return "cancel"
 
     def _save_gui_state(self) -> None:
         try:
@@ -320,7 +388,57 @@ class BotControlApp(tk.Tk):
             pass
         if previous is True and ok is False and self._bot_running():
             notify("ADB disconnected", "The bot may not be able to control the device.")
+            self._start_adb_auto_reconnect()
         self._refresh_home_status()
+
+    def _start_adb_auto_reconnect(self) -> None:
+        """Kick off automatic ADB reconnect attempts while the bot is running."""
+        if self._adb_reconnecting:
+            return
+        self._adb_reconnecting = True
+        self._adb_reconnect_attempts = 0
+        self._append_log("==> ADB disconnected — attempting to reconnect…")
+        self._adb_auto_reconnect()
+
+    def _adb_auto_reconnect(self) -> None:
+        if not self._bot_running() or self._last_adb_ok is True:
+            self._adb_reconnecting = False
+            self._adb_reconnect_attempts = 0
+            return
+        if self._adb_reconnect_attempts >= 5:
+            self._adb_reconnecting = False
+            self._append_log("==> ADB auto-reconnect gave up after 5 attempts")
+            notify(
+                "ADB reconnect failed",
+                "Could not reconnect after 5 attempts — check Waydroid/emulator.",
+            )
+            return
+        self._adb_reconnect_attempts += 1
+        attempt = self._adb_reconnect_attempts
+
+        def worker() -> None:
+            try:
+                from coc_bot.adb.client import AdbClient
+
+                config = load_config()
+                ok = AdbClient(device=config.adb_device).connect()
+            except Exception:  # noqa: BLE001
+                ok = False
+
+            def done() -> None:
+                self._append_log(
+                    f"==> ADB auto-reconnect attempt {attempt}/5: {'ok' if ok else 'failed'}"
+                )
+                if ok:
+                    self._adb_reconnecting = False
+                    self._adb_reconnect_attempts = 0
+                    self._set_adb_status(True)
+                    return
+                self.after(8000, self._adb_auto_reconnect)
+
+            self.after(0, done)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     @property
     def _modern(self) -> bool:
@@ -580,6 +698,12 @@ class BotControlApp(tk.Tk):
         ).pack(side=tk.LEFT)
         ttk.Button(
             banner_btns,
+            text="Pick device",
+            style=self._btn_style("Secondary"),
+            command=self._pick_adb_device,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            banner_btns,
             text="Open Tools",
             style=self._btn_style("Secondary"),
             command=lambda: self._show_page("tools"),
@@ -619,9 +743,21 @@ class BotControlApp(tk.Tk):
         ).pack(side=tk.LEFT)
         ttk.Button(
             ob_btns,
+            text="Pick device",
+            style=self._btn_style("Secondary"),
+            command=self._pick_adb_device,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            ob_btns,
             text="Go to Setup",
-            style=self._btn_style("Accent"),
+            style=self._btn_style("Secondary"),
             command=lambda: self._show_page("setup"),
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            ob_btns,
+            text="Calibrate what's missing",
+            style=self._btn_style("Accent"),
+            command=self.calibrate_whats_missing,
         ).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(
             ob_btns,
@@ -658,6 +794,29 @@ class BotControlApp(tk.Tk):
             pady=3,
         )
         self._run_chip.pack(side=tk.RIGHT)
+        practice_row = tk.Frame(play_header, bg=theme.SURFACE_2)
+        practice_row.pack(side=tk.RIGHT, padx=(0, 10))
+        tk.Label(
+            practice_row,
+            text="Practice",
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT_SECONDARY,
+            font=ui_font(10),
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        ToggleSwitch(practice_row, self._practice_var, bg=theme.SURFACE_2).pack(side=tk.LEFT)
+
+        status_row = tk.Frame(pad, bg=theme.SURFACE_2)
+        status_row.pack(fill=tk.X, pady=(4, 0))
+        status_label = tk.Label(
+            status_row,
+            textvariable=self._live_status_var,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT_SECONDARY,
+            font=ui_font(9),
+            anchor="w",
+        )
+        status_label.pack(anchor=tk.W, fill=tk.X)
+        self._track_wrap_label(status_label, reserve=40, page_id="home")
 
         primary = tk.Frame(pad, bg=theme.SURFACE_2)
         primary.pack(fill=tk.X, pady=(12, 0))
@@ -697,32 +856,70 @@ class BotControlApp(tk.Tk):
             command=self.close_waydroid_and_coc,
         ).pack(side=tk.RIGHT)
 
+        farm_ready_frame = tk.Frame(pad, bg=theme.SURFACE_2)
+        farm_ready_frame.pack(fill=tk.X, pady=(12, 0))
+        self._farm_ready_outer = farm_ready_frame
+        farm_ready_label = tk.Label(
+            farm_ready_frame,
+            textvariable=self._farm_ready_var,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT_SECONDARY,
+            font=ui_font(10),
+            justify=tk.LEFT,
+            anchor="w",
+        )
+        farm_ready_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._farm_ready_label = farm_ready_label
+        self._track_wrap_label(farm_ready_label, reserve=140, page_id="home")
+        ttk.Button(
+            farm_ready_frame,
+            text="Fix in Setup",
+            style=self._btn_style("Secondary"),
+            command=lambda: self._show_page("setup"),
+        ).pack(side=tk.RIGHT)
+
         timers = tk.Frame(pad, bg=theme.SURFACE_2)
         timers.pack(fill=tk.X, pady=(14, 0))
+        self._home_timers_frame = timers
         timers.columnconfigure(0, weight=1, uniform="home_timer")
         timers.columnconfigure(1, weight=1, uniform="home_timer")
-        for col, title, var in (
-            (0, "FARM", self._farm_timer_var),
-            (1, "BREAK", self._break_timer_var),
-        ):
-            cell = tk.Frame(timers, bg=theme.SURFACE_2)
-            cell.grid(row=0, column=col, sticky="w", padx=(0 if col == 0 else 16, 0))
-            tk.Label(
-                cell,
-                text=title,
-                bg=theme.SURFACE_2,
-                fg=theme.TEXT_SECONDARY,
-                font=ui_font(9, "bold"),
-                anchor="w",
-            ).pack(anchor=tk.W)
-            tk.Label(
-                cell,
-                textvariable=var,
-                bg=theme.SURFACE_2,
-                fg=theme.TEXT,
-                font=ui_font(12, "bold"),
-                anchor="w",
-            ).pack(anchor=tk.W)
+        farm_cell = tk.Frame(timers, bg=theme.SURFACE_2)
+        farm_cell.grid(row=0, column=0, sticky="w")
+        tk.Label(
+            farm_cell,
+            text="FARM",
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT_SECONDARY,
+            font=ui_font(9, "bold"),
+            anchor="w",
+        ).pack(anchor=tk.W)
+        tk.Label(
+            farm_cell,
+            textvariable=self._farm_timer_var,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT,
+            font=ui_font(12, "bold"),
+            anchor="w",
+        ).pack(anchor=tk.W)
+
+        break_cell = tk.Frame(timers, bg=theme.SURFACE_2)
+        break_cell.grid(row=0, column=1, sticky="w", padx=(16, 0))
+        tk.Label(
+            break_cell,
+            textvariable=self._break_caption_var,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT_SECONDARY,
+            font=ui_font(9, "bold"),
+            anchor="w",
+        ).pack(anchor=tk.W)
+        tk.Label(
+            break_cell,
+            textvariable=self._break_timer_var,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT,
+            font=ui_font(12, "bold"),
+            anchor="w",
+        ).pack(anchor=tk.W)
 
         log_card = self._card(page, fill=tk.BOTH, expand=True)
         log_pad = tk.Frame(log_card, bg=theme.SURFACE_2)
@@ -763,6 +960,31 @@ class BotControlApp(tk.Tk):
         ToggleSwitch(autoscroll_row, self._log_autoscroll, bg=theme.SURFACE_2).pack(
             side=tk.LEFT
         )
+        tk.Label(
+            log_pad,
+            text="What's happening",
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT_SECONDARY,
+            font=ui_font(10, "bold"),
+            anchor="w",
+        ).pack(fill=tk.X, pady=(10, 4))
+        self._human_log = scrolledtext.ScrolledText(
+            log_pad,
+            height=4,
+            state=tk.DISABLED,
+            wrap=tk.WORD,
+            font=ui_font(10),
+            bg=theme.LOG_BG,
+            fg=theme.LOG_FG,
+            insertbackground=theme.LOG_FG,
+            relief=tk.FLAT,
+            borderwidth=0,
+            highlightthickness=0,
+            padx=12,
+            pady=8,
+        )
+        self._human_log.pack(fill=tk.X)
+        self._render_human_log()
         self._log = scrolledtext.ScrolledText(
             log_pad,
             height=18,
@@ -802,9 +1024,13 @@ class BotControlApp(tk.Tk):
         except tk.TclError:
             pass
 
+        missing = next_missing_calibration(config) if config is not None else None
+        calib_line = f"{'✓' if calib_ok else '✗'}  Required calibration (Setup)"
+        if not calib_ok and missing is not None:
+            calib_line += f" — next: {missing.label}"
         self._onboarding_checklist_var.set(
             f"{'✓' if adb_ok else '✗'}  ADB connected\n"
-            f"{'✓' if calib_ok else '✗'}  Required calibration (Setup)\n"
+            f"{calib_line}\n"
             "•  Farm attacks are optional — set them up any time in Setup → Farm"
         )
         show_onboarding = not self._gui_state.onboarding_dismissed
@@ -814,6 +1040,37 @@ class BotControlApp(tk.Tk):
                     self._onboarding_frame.pack(fill=tk.X, pady=(0, 12), before=self._home_anchor)
             else:
                 self._onboarding_frame.pack_forget()
+        except tk.TclError:
+            pass
+        self._refresh_farm_readiness()
+
+    def _refresh_farm_readiness(self) -> None:
+        """Show/hide the Home farm-readiness card and update its summary text."""
+        outer = self._farm_ready_outer
+        label = self._farm_ready_label
+        if outer is None or label is None:
+            return
+        try:
+            readiness: FarmReadiness = farm_readiness()
+        except Exception:  # noqa: BLE001
+            return
+        self._farm_ready_var.set("\n".join(readiness.summary_lines()))
+        try:
+            if label.winfo_exists():
+                label.configure(fg=theme.SUCCESS if readiness.ready_for_manual else theme.DANGER)
+        except tk.TclError:
+            pass
+        try:
+            if not outer.winfo_exists():
+                return
+            if readiness.ready_for_manual:
+                outer.pack_forget()
+            elif not outer.winfo_ismapped():
+                before = self._home_timers_frame
+                if before is not None and before.winfo_exists():
+                    outer.pack(fill=tk.X, pady=(12, 0), before=before)
+                else:
+                    outer.pack(fill=tk.X, pady=(12, 0))
         except tk.TclError:
             pass
 
@@ -889,6 +1146,12 @@ class BotControlApp(tk.Tk):
             style=self._btn_style("Accent"),
             command=self._save_settings,
         ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            footer,
+            text="Detect ADB devices",
+            style=self._btn_style("Secondary"),
+            command=self._pick_adb_device,
+        ).pack(side=tk.LEFT, padx=(8, 0))
 
         canvas, inner = make_scrollable(page)
         self._settings_canvas = canvas
@@ -933,6 +1196,28 @@ class BotControlApp(tk.Tk):
 
         finish_scrollable(inner, canvas)
         self.after_idle(self._sync_wrap_lengths)
+
+        # Dirty guard: snapshot the just-built widget values as the baseline,
+        # then watch every var for edits that diverge from it.
+        self._settings_baseline = settings_snapshot(
+            {key: var.get() for key, var in self._setting_vars.items()}
+        )
+        self._settings_dirty = False
+        for var in self._setting_vars.values():
+            var.trace_add("write", lambda *_a: self._mark_settings_dirty())
+
+    def _mark_settings_dirty(self) -> None:
+        if self._settings_baseline is None:
+            return
+        current: dict[str, str | bool] = {}
+        for key, var in self._setting_vars.items():
+            try:
+                current[key] = var.get()
+            except tk.TclError:
+                continue
+        snapshot = settings_snapshot(current)
+        baseline = {k: v for k, v in self._settings_baseline.items() if k in snapshot}
+        self._settings_dirty = snapshot != baseline
 
     def _attach_setting_hint(
         self, parent: tk.Misc, field, var: tk.Variable, *, side: str
@@ -1097,6 +1382,11 @@ class BotControlApp(tk.Tk):
                 var.set(bool(values[field.key]))
             else:
                 var.set(str(values[field.key]))
+        self._settings_baseline = settings_snapshot(
+            {key: var.get() for key, var in self._setting_vars.items()}
+        )
+        self._settings_dirty = False
+        self._set_practice_var_silent(bool(values.get("gui_practice_mode", self._practice_mode)))
         self._append_log("==> Settings reloaded from disk")
         self._install_log_sink()
 
@@ -1133,6 +1423,14 @@ class BotControlApp(tk.Tk):
             self._append_log(
                 f"==> Dev options {'enabled' if new_dev else 'disabled'} — settings refreshed"
             )
+        else:
+            # Rebuild paths above already refresh the dirty baseline themselves.
+            self._settings_dirty = False
+            self._settings_baseline = settings_snapshot(
+                {key: var.get() for key, var in self._setting_vars.items()}
+            )
+
+        self._set_practice_var_silent(bool(values.get("gui_practice_mode", self._practice_mode)))
 
         extra = ""
         if theme_changed:
@@ -1142,6 +1440,11 @@ class BotControlApp(tk.Tk):
             f"Settings saved to:\n{path}\n\nStop and Start the bot to apply them to a running loop.\n"
             f"Activity log DEBUG filter applies immediately.{extra}",
         )
+
+        if self._bot_running() and messagebox.askyesno(
+            "Apply now?", "Apply & restart the bot now with these settings?"
+        ):
+            self._restart_bot()
 
     def _build_setup_page(self) -> None:
         page = self._pages["setup"]
@@ -1184,8 +1487,10 @@ class BotControlApp(tk.Tk):
         self._calib_tree.heading("#0", text="Step / part")
         self._calib_tree.heading("item", text="Key")
         self._calib_tree.heading("status", text="Status")
-        self._calib_tree.column("#0", width=320, stretch=True)
-        self._calib_tree.column("item", width=160, stretch=False)
+        self._calib_tree.column("#0", width=380, stretch=True)
+        # Narrowed — the internal key is jargon; the detail panel below spells
+        # out what to do in plain language when a part is selected.
+        self._calib_tree.column("item", width=90, stretch=False)
         self._calib_tree.column("status", width=110, stretch=False)
         scroll = ttk.Scrollbar(tree_wrap, orient=tk.VERTICAL, command=self._calib_tree.yview)
         self._calib_tree.configure(yscrollcommand=scroll.set)
@@ -1233,6 +1538,12 @@ class BotControlApp(tk.Tk):
             style=self._btn_style("Secondary"),
             command=self._restore_calibration,
         ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            row2,
+            text="Calibrate what's missing",
+            style=self._btn_style("Accent"),
+            command=self.calibrate_whats_missing,
+        ).pack(side=tk.LEFT, padx=(8, 0))
 
         self._calib_detail = tk.StringVar(value="")
         calib_detail = tk.Label(
@@ -1273,6 +1584,61 @@ class BotControlApp(tk.Tk):
         )
         intro_label.pack(fill=tk.X, pady=(0, 8))
         self._track_wrap_label(intro_label, reserve=40, page_id="tools")
+
+        fixit_body = self._section_header(inner, "tools:fixit", "If something's wrong")
+        for recipe in FIXIT_RECIPES:
+            card = self._card(fixit_body, padx=8, pady=4 if self._modern else 5)
+            block = tk.Frame(card, bg=theme.SURFACE_2)
+            block.pack(fill=tk.X, padx=14, pady=12)
+            if self._modern:
+                block.columnconfigure(0, weight=1)
+                left = tk.Frame(block, bg=theme.SURFACE_2)
+                left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+                tk.Label(
+                    left,
+                    text=recipe.title,
+                    bg=theme.SURFACE_2,
+                    fg=theme.TEXT,
+                    font=ui_font(12),
+                    anchor="w",
+                ).pack(fill=tk.X)
+                desc = tk.Label(
+                    left,
+                    text=recipe.body,
+                    bg=theme.SURFACE_2,
+                    fg=theme.TEXT_SECONDARY,
+                    font=ui_font(10),
+                    wraplength=320,
+                    justify=tk.LEFT,
+                    anchor="w",
+                )
+                desc.pack(fill=tk.X, pady=(4, 0))
+                self._track_wrap_label(desc, reserve=180, page_id="tools")
+                ttk.Button(
+                    block,
+                    text=recipe.action_label,
+                    style=self._btn_style("Secondary"),
+                    command=lambda r=recipe: self._run_fixit(r),
+                ).grid(row=0, column=1, sticky="ne")
+            else:
+                ttk.Button(
+                    block,
+                    text=recipe.title,
+                    style=self._btn_style("Secondary"),
+                    command=lambda r=recipe: self._run_fixit(r),
+                ).pack(anchor=tk.W)
+                desc = tk.Label(
+                    block,
+                    text=f"{recipe.body}\n→ {recipe.action_label}",
+                    bg=theme.SURFACE_2,
+                    fg=theme.TEXT_SECONDARY,
+                    font=ui_font(10),
+                    wraplength=400,
+                    justify=tk.LEFT,
+                    anchor="w",
+                )
+                desc.pack(fill=tk.X, pady=(8, 0))
+                self._track_wrap_label(desc, reserve=56, page_id="tools")
 
         for group_title, actions in DEBUG_GROUPS:
             body = self._section_header(inner, f"tools:{group_title}", group_title)
@@ -1353,6 +1719,19 @@ class BotControlApp(tk.Tk):
         finish_scrollable(inner, canvas)
         self.after_idle(self._sync_wrap_lengths)
         self._update_tool_buttons_state()
+
+    def _run_fixit(self, recipe: FixItRecipe) -> None:
+        """Run the action tied to a Tools → "If something's wrong" recipe card."""
+        actions = {
+            "connect_adb": self.connect_adb,
+            "calib_missing": self.calibrate_whats_missing,
+            "setup": lambda: self._show_page("setup"),
+            "tools_health": lambda: self._run_debug("health_check"),
+            "export_debug": self._export_debug,
+        }
+        action = actions.get(recipe.action)
+        if action is not None:
+            action()
 
     def _run_debug(self, action_id: str) -> None:
         # Shortcut install does not touch ADB / the bot loop.
@@ -1504,6 +1883,10 @@ class BotControlApp(tk.Tk):
             self._log.see(tk.END)
         self._log.configure(state=tk.DISABLED)
 
+        human = humanize_log_line(line)
+        if human:
+            self._append_human(human)
+
     def _cap_log_length(self, max_lines: int = 2000) -> None:
         try:
             line_count = int(self._log.index("end-1c").split(".")[0])
@@ -1512,6 +1895,45 @@ class BotControlApp(tk.Tk):
         if line_count > max_lines:
             excess = line_count - max_lines
             self._log.delete("1.0", f"{excess + 1}.0")
+
+    def _append_human(self, text: str) -> None:
+        """Append a plain-language line to the Activity 'What's happening' feed."""
+        self._human_lines.append(text)
+        if len(self._human_lines) > 100:
+            del self._human_lines[: len(self._human_lines) - 100]
+        human_log = self._human_log
+        if human_log is None:
+            return
+        try:
+            if not human_log.winfo_exists():
+                return
+            human_log.configure(state=tk.NORMAL)
+            human_log.insert(tk.END, text + "\n")
+            line_count = int(human_log.index("end-1c").split(".")[0])
+            if line_count > 100:
+                excess = line_count - 100
+                human_log.delete("1.0", f"{excess + 1}.0")
+            human_log.see(tk.END)
+            human_log.configure(state=tk.DISABLED)
+        except tk.TclError:
+            pass
+
+    def _render_human_log(self) -> None:
+        """Repopulate the human feed widget from stored lines (e.g. after theme rebuild)."""
+        human_log = self._human_log
+        if human_log is None:
+            return
+        try:
+            if not human_log.winfo_exists():
+                return
+            human_log.configure(state=tk.NORMAL)
+            human_log.delete("1.0", tk.END)
+            if self._human_lines:
+                human_log.insert(tk.END, "\n".join(self._human_lines) + "\n")
+            human_log.see(tk.END)
+            human_log.configure(state=tk.DISABLED)
+        except tk.TclError:
+            pass
 
     def _bot_running(self) -> bool:
         return self._bot_thread is not None and self._bot_thread.is_alive()
@@ -1547,6 +1969,8 @@ class BotControlApp(tk.Tk):
         self._stop_btn.configure(state=tk.NORMAL)
         self._status.set("Bot running")
         self._append_log("==> Starting bot")
+        if self._practice_mode:
+            self._append_log("Activity: Practice mode ON — donation taps will be skipped")
         self._sync_run_chip()
         self._update_tool_buttons_state()
 
@@ -1555,7 +1979,7 @@ class BotControlApp(tk.Tk):
                 from coc_bot.main import DonationBot
 
                 self._bot = DonationBot(
-                    dry_run=self._dry_run,
+                    dry_run=self._dry_run or self._practice_mode,
                     debug_save_frames=self._debug_save_frames,
                     debug=self._debug,
                 )
@@ -1588,14 +2012,64 @@ class BotControlApp(tk.Tk):
         if not stopped_something:
             self._on_bot_stopped()
 
+    def _on_practice_toggle(self) -> None:
+        """User flipped the Home Practice toggle — persist it and update state."""
+        if self._practice_sync_guard:
+            return
+        payload = load_user_settings()
+        payload.setdefault("gui", {})["practice_mode"] = bool(self._practice_var.get())
+        save_user_settings(payload)
+        self._practice_mode = bool(self._practice_var.get())
+        if self._practice_mode:
+            self._append_log("Activity: Practice mode enabled — donation taps will be skipped")
+        else:
+            self._append_log("Activity: Practice mode disabled")
+        var = self._setting_vars.get("gui_practice_mode")
+        if var is not None:
+            var.set(self._practice_mode)
+            # Already persisted above — keep the dirty guard from false-flagging it.
+            if self._settings_baseline is not None:
+                self._settings_baseline["gui_practice_mode"] = "1" if self._practice_mode else "0"
+            self._mark_settings_dirty()
+        self._sync_run_chip()
+
+    def _set_practice_var_silent(self, value: bool) -> None:
+        """Update the practice toggle/state without re-triggering a settings write."""
+        self._practice_sync_guard = True
+        try:
+            self._practice_var.set(bool(value))
+        finally:
+            self._practice_sync_guard = False
+        self._practice_mode = bool(value)
+        self._sync_run_chip()
+
+    def _restart_bot(self) -> None:
+        """Stop the bot (if running) and start it again once the thread has exited."""
+        if not self._bot_running():
+            self.start_bot()
+            return
+        self._append_log("==> Restarting bot to apply settings…")
+        self.stop_bot()
+        self._await_restart(0)
+
+    def _await_restart(self, attempts: int) -> None:
+        if self._bot_running():
+            if attempts >= 50:  # ~10s at 200ms per attempt
+                self._append_log("==> Bot did not stop in time — restart cancelled")
+                return
+            self.after(200, lambda: self._await_restart(attempts + 1))
+            return
+        self.start_bot()
+
     def request_farm_attack(self) -> None:
         """Queue a farm attack on the running bot, or run a one-shot if stopped."""
-        config = load_config()
-        if not config.farm_calibrated:
+        readiness = farm_readiness()
+        if not readiness.ready_for_manual:
             messagebox.showerror(
-                "Farm not calibrated",
-                "Open Setup → Farm and set attack_button, unranked Battle, and Return Home.\n"
-                "Leave your farm army as the active preset, and program a deploy sequence.",
+                "Farm not ready",
+                "Farm attack now needs:\n\n"
+                + "\n".join(readiness.summary_lines())
+                + "\n\nOpen Setup → Farm to finish these.",
             )
             self._show_page("setup")
             return
@@ -1720,7 +2194,12 @@ class BotControlApp(tk.Tk):
             self._farm_timer_frozen_text = text
         return text
 
-    def _break_timer_text(self) -> str:
+    def _break_status(self) -> tuple[bool, float]:
+        """Return ``(on_break, remaining_seconds)``.
+
+        When on a session break, ``remaining_seconds`` counts down to the break
+        ending; otherwise it counts down to the next break starting.
+        """
         bot = self._bot
         if self._bot_running() and bot is not None:
             tracker = bot.tracker
@@ -1738,15 +2217,35 @@ class BotControlApp(tk.Tk):
                     until = until.replace(tzinfo=timezone.utc)
                 left = (until - datetime.now(timezone.utc)).total_seconds()
                 if left > 0:
-                    # Time remaining until the break ends / bot resumes.
-                    return format_countdown(left)
+                    return True, left
             except ValueError:
                 pass
 
-        remaining = tracker.remaining_seconds()
-        if remaining <= 0:
+        return False, tracker.remaining_seconds()
+
+    def _break_timer_text(self) -> str:
+        on_break, remaining = self._break_status()
+        if not on_break and remaining <= 0:
             return "due"
         return format_countdown(remaining)
+
+    def _maybe_warn_break_soon(self, *, on_break: bool, remaining: float) -> None:
+        """Fire a one-time desktop notification a few minutes before a session break."""
+        if remaining > 600:
+            self._break_warn_sent_for = None
+            return
+        if not self._bot_running() or on_break:
+            return
+        if 1 <= remaining <= 300:
+            bucket = max(1, int(remaining // 60))
+            marker = f"soon:{bucket}"
+            if self._break_warn_sent_for == marker:
+                return
+            self._break_warn_sent_for = marker
+            notify(
+                "Break soon",
+                f"Clash will close for a session break in about {bucket} minute(s).",
+            )
 
     def _refresh_farm_status(self) -> None:
         try:
@@ -1754,7 +2253,12 @@ class BotControlApp(tk.Tk):
         except Exception:  # noqa: BLE001
             self._farm_timer_var.set("—")
         try:
-            self._break_timer_var.set(self._break_timer_text())
+            on_break, remaining = self._break_status()
+            self._break_timer_var.set(
+                "due" if (not on_break and remaining <= 0) else format_countdown(remaining)
+            )
+            self._break_caption_var.set(break_timer_caption(on_break=on_break))
+            self._maybe_warn_break_soon(on_break=on_break, remaining=remaining)
         except Exception:  # noqa: BLE001
             self._break_timer_var.set("—")
         self._sync_run_chip()
@@ -1763,54 +2267,27 @@ class BotControlApp(tk.Tk):
     def _sync_run_chip(self) -> None:
         if not hasattr(self, "_run_chip"):
             return
-        if self._farm_oneshot_running():
-            self._set_run_chip("Farming…", "accent")
-            return
-
-        # Pending/active session break (even if the process was restarted mid-break).
+        oneshot = self._farm_oneshot_running()
+        bot = self._bot
+        running = self._bot_running() and bot is not None
+        game_state = None
+        on_break = False
         try:
-            bot = self._bot
-            if self._bot_running() and bot is not None:
-                tracker = bot.tracker
-            else:
-                from coc_bot.runtime.tracker import RuntimeTracker
-
-                tracker = RuntimeTracker(load_config())
-            if tracker.state.break_until:
-                from datetime import datetime, timezone
-
-                until = datetime.fromisoformat(tracker.state.break_until)
-                if until.tzinfo is None:
-                    until = until.replace(tzinfo=timezone.utc)
-                if (until - datetime.now(timezone.utc)).total_seconds() > 0:
-                    self._set_run_chip("On break", "accent")
-                    return
+            on_break, _remaining = self._break_status()
+            if running:
+                game_state = bot.game_state.state
         except Exception:  # noqa: BLE001
             pass
 
-        bot = self._bot
-        if self._bot_running() and bot is not None:
-            try:
-                from coc_bot.runtime.game_state import GameState
-
-                state = bot.game_state.state
-                if state == GameState.ON_BREAK:
-                    self._set_run_chip("On break", "accent")
-                    return
-                if state in (
-                    GameState.ATTACK_MENU,
-                    GameState.MATCHMAKING,
-                    GameState.IN_BATTLE,
-                    GameState.BATTLE_RESULTS,
-                    GameState.RETURNING_HOME,
-                ):
-                    self._set_run_chip("Farming…", "accent")
-                    return
-            except Exception:  # noqa: BLE001
-                pass
-            self._set_run_chip("Running", "success")
-            return
-        self._set_run_chip("Stopped", "secondary")
+        label, role = live_status_label(
+            running=running,
+            practice=self._practice_mode,
+            oneshot_farm=oneshot,
+            game_state=game_state,
+            on_break=on_break,
+        )
+        self._set_run_chip(label, role)
+        self._live_status_var.set(label)
 
     def _set_run_chip(self, text: str, role: str) -> None:
         self._run_chip_var.set(text)
@@ -1818,6 +2295,7 @@ class BotControlApp(tk.Tk):
             "secondary": theme.TEXT_SECONDARY,
             "success": theme.SUCCESS,
             "accent": theme.ACCENT,
+            "danger": theme.DANGER,
         }.get(role, theme.TEXT_SECONDARY)
         try:
             if self._run_chip.winfo_exists():
@@ -1975,10 +2453,15 @@ class BotControlApp(tk.Tk):
         total = len(STEP_IDS)
         self._calib_progress.set(f"Setup progress: {done} / {total} steps ready")
         self._refresh_home_status()
-        self._calib_detail.set(
+        self._refresh_farm_readiness()
+        base_detail = (
             f"{done}/{total} steps configured. Expand a step and select a part to "
             "recalibrate only that item (answer n at prompts to keep existing values)."
         )
+        missing: MissingCalibration | None = next_missing_calibration(config)
+        if missing is not None:
+            base_detail = f"Next required: {missing.label}. {missing.hint}\n\n{base_detail}"
+        self._calib_detail.set(base_detail)
 
     def _on_calib_select(self, _event=None) -> None:
         sel = self._calib_tree.selection()
@@ -2006,16 +2489,20 @@ class BotControlApp(tk.Tk):
                     f"Recalibrate Selected runs only “{part.label}” "
                     f"(not the whole “{step.title}” step)."
                 )
+            hint = STEP_SCREEN_HINTS.get(step_id, "")
+            hint_line = f"\n📱 {hint}" if hint else ""
             self._calib_detail.set(
                 f"{step.title} → {part.label}{opt}\n"
-                f"Status: {status} · key: {part.key} · type: {part.kind}{extra}\n\n"
+                f"Status: {status} · key: {part.key} · type: {part.kind}{extra}{hint_line}\n\n"
                 f"{how}"
             )
             return
         status = self._calib_tree.set(iid, "status")
         parts_line = ", ".join(p.label for p in step.parts) if step.parts else step.summary
+        hint = STEP_SCREEN_HINTS.get(step_id, "")
+        hint_line = f"\n📱 {hint}" if hint else ""
         self._calib_detail.set(
-            f"{step.title} — {status}\n{step.summary}\nParts: {parts_line}\n\n"
+            f"{step.title} — {status}\n{step.summary}\nParts: {parts_line}{hint_line}\n\n"
             "Recalibrate Selected runs this whole step (each item can still be denied)."
         )
 
@@ -2062,6 +2549,29 @@ class BotControlApp(tk.Tk):
             return
         self._append_log(f"==> {result}")
         self._refresh_calib_status()
+
+    def calibrate_whats_missing(self) -> None:
+        """Jump straight to the next required-but-missing calibration part."""
+        missing: MissingCalibration | None = next_missing_calibration()
+        if missing is None:
+            messagebox.showinfo(
+                "All set",
+                "All required calibration is done. Optional items can still be "
+                "tuned any time from Setup.",
+            )
+            return
+        self._show_page("setup")
+        try:
+            iid = f"{missing.step_id}::{missing.part.key}"
+            if self._calib_tree.exists(iid):
+                self._calib_tree.selection_set(iid)
+                self._calib_tree.see(iid)
+            elif self._calib_tree.exists(missing.step_id):
+                self._calib_tree.selection_set(missing.step_id)
+        except tk.TclError:
+            pass
+        messagebox.showinfo("Calibrate next", f"{missing.label}\n\n{missing.hint}")
+        self._run_in_app_calibration(missing.step_id, missing.part.key)
 
     def _run_in_app_step(self, step_id: str, *, ask_optional: bool = True) -> None:
         """Calibrate every in-app part of a step; optionally open farm deploy editor."""
@@ -2279,6 +2789,99 @@ class BotControlApp(tk.Tk):
         win.wait_window()
         return result["value"]
 
+    def _pick_from_list(self, *, title: str, prompt: str, items: list[str]) -> int | None:
+        """Generic modal listbox picker; returns the selected index or None if cancelled."""
+        win = tk.Toplevel(self)
+        win.title(title)
+        win.transient(self)
+        win.grab_set()
+        win.configure(bg=theme.BG)
+        result: dict[str, int | None] = {"value": None}
+
+        tk.Label(
+            win,
+            text=prompt,
+            bg=theme.BG,
+            fg=theme.TEXT,
+            font=ui_font(11),
+            anchor="w",
+        ).pack(fill=tk.X, padx=16, pady=(16, 8))
+
+        frame = tk.Frame(win, bg=theme.BG)
+        frame.pack(fill=tk.BOTH, expand=True, padx=16)
+        listbox = tk.Listbox(
+            frame,
+            height=min(12, max(4, len(items))),
+            font=ui_font(10),
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT,
+            selectbackground=theme.ACCENT,
+            activestyle="none",
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=listbox.yview)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        listbox.configure(yscrollcommand=scroll.set)
+        for item in items:
+            listbox.insert(tk.END, item)
+        listbox.selection_set(0)
+
+        btns = tk.Frame(win, bg=theme.BG)
+        btns.pack(fill=tk.X, padx=16, pady=16)
+
+        def accept() -> None:
+            sel = listbox.curselection()
+            if not sel:
+                return
+            result["value"] = int(sel[0])
+            win.destroy()
+
+        def cancel() -> None:
+            result["value"] = None
+            win.destroy()
+
+        ttk.Button(
+            btns, text="Cancel", style=self._btn_style("Secondary"), command=cancel
+        ).pack(side=tk.RIGHT)
+        ttk.Button(
+            btns, text="Select", style=self._btn_style("Accent"), command=accept
+        ).pack(side=tk.RIGHT, padx=(0, 8))
+        listbox.bind("<Double-Button-1>", lambda _e: accept())
+        win.protocol("WM_DELETE_WINDOW", cancel)
+        win.wait_window()
+        return result["value"]
+
+    def _pick_adb_device(self) -> None:
+        """List ``adb devices`` and let the user pick one to save + connect to."""
+        from coc_bot.adb.client import AdbClient
+
+        devices = AdbClient.list_devices()
+        if not devices:
+            messagebox.showinfo(
+                "No devices found",
+                "adb devices returned nothing. Make sure Waydroid/emulator is running "
+                "and adb is on your PATH, then try again.",
+            )
+            return
+        idx = self._pick_from_list(
+            title="Pick ADB device",
+            prompt="Select the device ADB should use:",
+            items=[f"{serial}  ({state})" for serial, state in devices],
+        )
+        if idx is None:
+            return
+        serial = devices[idx][0]
+        payload = load_user_settings()
+        payload.setdefault("adb", {})["device"] = serial
+        save_user_settings(payload)
+        self._append_log(f"==> ADB device set to {serial}")
+        var = self._setting_vars.get("adb_device")
+        if var is not None:
+            var.set(serial)
+        self.connect_adb()
+
     def _launch_calibrate(self, extra_args: list[str]) -> None:
         script = calibrate_script()
         if not script.exists():
@@ -2305,6 +2908,16 @@ class BotControlApp(tk.Tk):
         )
 
     def _on_close(self) -> None:
+        if self._page == "settings" and self._settings_dirty:
+            outcome = self._confirm_settings_dirty_leave()
+            if outcome == "cancel":
+                return
+            if outcome == "save":
+                self._save_settings()
+                if self._settings_dirty:
+                    return
+            elif outcome == "discard":
+                self._settings_dirty = False
         if self._bot_running() or self._farm_oneshot_running():
             if not messagebox.askyesno("Quit", "Bot is running. Stop it and quit?"):
                 return

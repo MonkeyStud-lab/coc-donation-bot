@@ -22,6 +22,7 @@ from coc_bot.donation.navigator import Navigator
 from coc_bot.donation.request_parser import RequestKind
 from coc_bot.logging_utils import setup_logging
 from coc_bot.runtime.breaks import BreakManager
+from coc_bot.runtime.game_state import GameState, GameStateMachine
 from coc_bot.runtime.tracker import RuntimeTracker
 from coc_bot.vision.matcher import TemplateMatcher
 from coc_bot.vision.screens import BotMode, ScreenClassifier, ScreenType, MODE_LABELS
@@ -81,9 +82,17 @@ class DonationBot:
         )
         self.executor = DonationExecutor(self.config, self.capture, self.donation_input, self.matcher)
         self.tracker = RuntimeTracker(self.config)
-        self.break_manager = BreakManager(self.config, self.tracker, self.app, self.navigator)
+        self.game_state = GameStateMachine(GameState.BOOT)
+        self.break_manager = BreakManager(
+            self.config, self.tracker, self.app, self.navigator, self.game_state
+        )
         self.farmer = AttackFarmer(
-            self.config, self.capture, self.nav_input, self.matcher, self.navigator
+            self.config,
+            self.capture,
+            self.nav_input,
+            self.matcher,
+            self.navigator,
+            game_state=self.game_state,
         )
         self._state = "boot"
         self._state_entered = time.monotonic()
@@ -186,6 +195,7 @@ class DonationBot:
             raise RuntimeError("Could not reach clan chat on startup")
 
         self.set_mode(BotMode.DONATE)
+        self.game_state.transition(GameState.CLAN_CHAT, reason="startup")
         self._set_state("scan_chat")
         self._last_anti_idle = time.monotonic()
 
@@ -299,10 +309,12 @@ class DonationBot:
             max(60, int(self.config.farm_interval_seconds)),
         )
         self._set_state("farm")
+        self.game_state.transition(GameState.HOME, reason="farm start")
         self.set_mode(BotMode.HOME)
         result = self.farmer.run_one_attack()
         if self._stop_requested:
             self.set_mode(BotMode.DONATE)
+            self.game_state.transition(GameState.CLAN_CHAT, reason="farm stopped")
             self._set_state("scan_chat")
             return True
         # Interval clock advances after a fought battle even if leave/chat fails.
@@ -328,6 +340,7 @@ class DonationBot:
         self.set_mode(BotMode.DONATE)
         if not self._stop_requested:
             self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request)
+        self.game_state.transition(GameState.CLAN_CHAT, reason="farm done")
         self._set_state("scan_chat")
         self._last_anti_idle = time.monotonic()
         return True
@@ -546,6 +559,7 @@ class DonationBot:
     def _recover(self) -> None:
         """Desync recovery: BACK, full screen scan, then reopen clan chat."""
         logger.info("Running recovery sequence (full classify)")
+        self.game_state.transition(GameState.RECOVERING, reason="watchdog/desync")
         self.set_mode(BotMode.ANY)
         self.nav_input.back()
         time.sleep(0.5)
@@ -567,6 +581,7 @@ class DonationBot:
                 time.sleep(0.5)
         self.set_mode(BotMode.DONATE)
         self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request)
+        self.game_state.transition(GameState.CLAN_CHAT, reason="recovery done")
         self._set_state("scan_chat")
         self._unknown_streak = 0
 
@@ -576,12 +591,20 @@ class DonationBot:
             return
         elapsed = time.monotonic() - self._state_entered
         if elapsed > self.config.state_watchdog_seconds:
-            logger.warning("Watchdog timeout in state '{}' ({:.0f}s)", self._state, elapsed)
+            logger.warning(
+                "Watchdog timeout in loop '{}' / GameState '{}' ({:.0f}s)",
+                self._state,
+                self.game_state.state.value,
+                elapsed,
+            )
             self._recover()
 
     def _set_state(self, state: str) -> None:
         if state != self._state:
-            logger.debug("State: {} -> {}", self._state, state)
+            logger.debug("Loop state: {} -> {}", self._state, state)
+            # Coarse "farm" is expanded by AttackFarmer into finer GameState steps.
+            if state != "farm":
+                self.game_state.note_loop_state(state)
         self._state = state
         self._state_entered = time.monotonic()
 

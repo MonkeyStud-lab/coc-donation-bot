@@ -9,6 +9,7 @@ from loguru import logger
 from coc_bot.adb.app import AppController
 from coc_bot.config import BotConfig
 from coc_bot.donation.navigator import Navigator
+from coc_bot.runtime.game_state import GameState, GameStateMachine
 from coc_bot.runtime.tracker import RuntimeTracker
 
 
@@ -21,12 +22,18 @@ class BreakManager:
         tracker: RuntimeTracker,
         app: AppController,
         navigator: Navigator,
+        game_state: GameStateMachine | None = None,
     ) -> None:
         self.config = config
         self.tracker = tracker
         self.app = app
         self.navigator = navigator
+        self.game_state = game_state
         self.stop_check = None
+
+    def _gs(self, state: GameState, reason: str) -> None:
+        if self.game_state is not None:
+            self.game_state.transition(state, reason=reason)
 
     def check_and_break_if_needed(self) -> bool:
         """Returns True if a break cycle was executed."""
@@ -53,6 +60,7 @@ class BreakManager:
             return True
         remaining = (until - now).total_seconds()
         logger.info("Resuming pending break for {:.0f}s", remaining)
+        self._gs(GameState.ON_BREAK, "resume pending break")
         self.tracker.pause()
         from coc_bot.stop import interrupted_sleep
 
@@ -70,6 +78,7 @@ class BreakManager:
             self.tracker.active_seconds,
             break_seconds,
         )
+        self._gs(GameState.ON_BREAK, "session limit")
         self.tracker.pause()
         self.app.force_stop()
 
@@ -89,6 +98,7 @@ class BreakManager:
         self.app.launch()
         self.app.wait_until_ready(loading_template=loading_template)
         self.navigator.ensure_clan_chat()
+        self._gs(GameState.CLAN_CHAT, "break relaunch")
         # Past boot popups / possible Live Replay — stop watching for it.
         from coc_bot.vision.screens import ScreenClassifier
 

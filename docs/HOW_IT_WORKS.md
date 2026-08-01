@@ -111,6 +111,15 @@ scan_chat ──(find Donate)──► open_donation ──► donate ──► 
     └──(none)──► scroll_chat ──────┘
 ```
 
+### GameState logging (diagnostic only)
+
+[`runtime/game_state.py`](../src/coc_bot/runtime/game_state.py) tracks a high-level phase (`clan_chat`, `donating`, `in_battle`, …) in parallel with the loop strings above. Every transition is logged as:
+
+- `GameState [ok]: A → B` — allowed by the sanity graph
+- `GameState [unexpected]: A → B` — should not normally happen (still allowed; nothing is blocked)
+
+Farm expands into finer phases (`home` → `attack_menu` → `matchmaking` → `in_battle` → …). Use unexpected warnings to spot desync; they do not change taps.
+
 | Piece | Location | Role |
 |-------|----------|------|
 | Ensure chat open | `donation/navigator.py` | Open chat, dismiss popups, recover from wrong screens |

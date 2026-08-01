@@ -12,6 +12,7 @@ from coc_bot.attack.deployer import EdgeDeployer
 from coc_bot.attack.navigator import AttackNavigator
 from coc_bot.config import BotConfig
 from coc_bot.donation.navigator import Navigator
+from coc_bot.runtime.game_state import GameState, GameStateMachine
 from coc_bot.vision.matcher import TemplateMatcher
 from coc_bot.vision.screens import BotMode, ScreenType
 
@@ -35,12 +36,14 @@ class AttackFarmer:
         input_ctrl: InputController,
         matcher: TemplateMatcher | None = None,
         donation_navigator: Navigator | None = None,
+        game_state: GameStateMachine | None = None,
     ) -> None:
         self.config = config
         self.capture = capture
         self.input = input_ctrl
         self.matcher = matcher or TemplateMatcher(threshold=config.template_threshold)
         self.donation_nav = donation_navigator
+        self.game_state = game_state
         self.attack_nav = AttackNavigator(
             config, capture, input_ctrl, self.matcher, donation_navigator
         )
@@ -50,6 +53,10 @@ class AttackFarmer:
 
     def _stopping(self) -> bool:
         return bool(self.stop_check and self.stop_check())
+
+    def _gs(self, state: GameState, reason: str) -> None:
+        if self.game_state is not None:
+            self.game_state.transition(state, reason=reason)
 
     def _set_mode(self, mode: BotMode) -> None:
         self.attack_nav.mode = mode
@@ -72,6 +79,7 @@ class AttackFarmer:
 
         # Leave chat with full classify, then lock to attack screens.
         self._set_mode(BotMode.HOME)
+        self._gs(GameState.HOME, "leave chat for farm")
         if not self.attack_nav.leave_chat_for_home():
             if self._stopping():
                 return FarmResult(False, "stopped")
@@ -88,6 +96,7 @@ class AttackFarmer:
             if self.attack_nav.classifier.looks_like_blocking_popup(frame):
                 self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
 
+        self._gs(GameState.ATTACK_MENU, "open Attack menu")
         if not self.attack_nav.open_attack_menu():
             if self._stopping():
                 return FarmResult(False, "stopped")
@@ -97,6 +106,7 @@ class AttackFarmer:
         if self._stopping():
             return FarmResult(False, "stopped")
 
+        self._gs(GameState.MATCHMAKING, "start unranked Battle")
         if not self.attack_nav.start_unranked_battle():
             if self._stopping():
                 return FarmResult(False, "stopped")
@@ -120,10 +130,12 @@ class AttackFarmer:
                 )
             else:
                 logger.warning("Did not reach battle field — aborting without deploy")
+                self._gs(GameState.RETURNING_HOME, "matchmaking timeout")
                 self.attack_nav.return_home_from_attack()
                 self._abort_to_chat()
                 return FarmResult(False, "matchmaking timeout")
 
+        self._gs(GameState.IN_BATTLE, "battlefield ready")
         if self._stopping():
             return FarmResult(False, "stopped")
 
@@ -150,7 +162,9 @@ class AttackFarmer:
         if self._stopping() or end_screen == ScreenType.UNKNOWN:
             return FarmResult(False, "stopped", counts_toward_interval=True)
 
+        self._gs(GameState.BATTLE_RESULTS, "battle timer done")
         logger.info("Confirming leave after battle timer (screen={})", end_screen.value)
+        self._gs(GameState.RETURNING_HOME, "tap Return Home")
         if not self.attack_nav.return_home_from_attack():
             if self._stopping():
                 return FarmResult(False, "stopped", counts_toward_interval=True)
@@ -161,6 +175,7 @@ class AttackFarmer:
                 counts_toward_interval=True,
             )
 
+        self._gs(GameState.HOME, "home confirmed after farm")
         if self._stopping():
             return FarmResult(False, "stopped", counts_toward_interval=True)
 
@@ -184,12 +199,14 @@ class AttackFarmer:
                     counts_toward_interval=True,
                 )
 
+        self._gs(GameState.CLAN_CHAT, "farm success — chat open")
         logger.info("Farm attack completed successfully")
         return FarmResult(True, "ok", counts_toward_interval=True)
 
     def _abort_to_chat(self) -> None:
         if self._stopping():
             return
+        self._gs(GameState.RECOVERING, "farm abort")
         try:
             self.attack_nav.return_home_from_attack()
         except Exception:  # noqa: BLE001
@@ -200,3 +217,4 @@ class AttackFarmer:
                 self.donation_nav.ensure_clan_chat()
             except Exception:  # noqa: BLE001
                 logger.exception("ensure_clan_chat during farm abort failed")
+        self._gs(GameState.CLAN_CHAT, "farm abort — chat open")

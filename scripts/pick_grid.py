@@ -26,9 +26,9 @@ import cv2
 
 from pick_coordinates import load_frame_from_adb, load_frame_from_path
 
+from coc_bot.calibration.grid_math import build_grid_entry
 from coc_bot.calibration.picker import InteractivePicker
 from coc_bot.config import load_config, save_calibrated
-from coc_bot.vision.rois import ROI, denormalize_roi, normalize_roi
 
 
 def _roi_from_points(points: list[tuple[int, int]]) -> tuple[int, int, int, int] | None:
@@ -37,30 +37,6 @@ def _roi_from_points(points: list[tuple[int, int]]) -> tuple[int, int, int, int]
     x1, y1 = points[0]
     x2, y2 = points[1]
     return min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1)
-
-
-def _grid_relative_to_bar(
-    grid_roi: tuple[int, int, int, int],
-    bar_roi_key: str,
-    config,
-    frame_w: int,
-    frame_h: int,
-) -> dict:
-    gx, gy, gw, gh = grid_roi
-    if bar_roi_key not in config.rois:
-        nr = normalize_roi(gx, gy, gw, gh, frame_w, frame_h)
-        return {"cols": 0, "rows": 0, "x": nr.x, "y": nr.y, "w": nr.w, "h": nr.h}
-
-    bx, by, bw, bh = denormalize_roi(ROI(*config.rois[bar_roi_key]), frame_w, frame_h)
-    if bw <= 0 or bh <= 0:
-        raise ValueError(f"Invalid bar ROI: {bar_roi_key}")
-
-    return {
-        "x": (gx - bx) / bw,
-        "y": (gy - by) / bh,
-        "w": gw / bw,
-        "h": gh / bh,
-    }
 
 
 def _pick_grid(label: str, frame) -> tuple[int, int, int, int] | None:
@@ -124,9 +100,7 @@ def main() -> None:
             continue
         cols = _prompt_int("Columns (slots per row)", default_cols)
         rows = _prompt_int("Rows", default_rows)
-        rel = _grid_relative_to_bar(roi, bar_roi_key, config, fw, fh)
-        rel["cols"] = cols
-        rel["rows"] = rows
+        rel = build_grid_entry(roi, grid_key, config, fw, fh, cols, rows)
         grid[grid_key] = rel
         print(f"Saved {grid_key}: {cols}x{rows} grid, region x={rel['x']:.3f} y={rel['y']:.3f} w={rel['w']:.3f} h={rel['h']:.3f} (within bar ROI)")
 

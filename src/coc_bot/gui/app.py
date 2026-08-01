@@ -39,7 +39,11 @@ from coc_bot.gui.settings_fields import (
     is_raw_timing_field,
     save_settings_from_gui,
 )
-from coc_bot.gui.setup_calib import calibrate_part_in_app, part_supports_in_app
+from coc_bot.gui.setup_calib import (
+    calibrate_part_in_app,
+    part_supports_in_app,
+    should_calibrate_part,
+)
 from coc_bot.gui.theme import (
     active_layout,
     apply_theme,
@@ -1144,10 +1148,10 @@ class BotControlApp(tk.Tk):
         tk.Label(
             page,
             text="Calibration teaches the bot where buttons and bars are on your screen. "
-            "Select a step or part, then Recalibrate Selected — taps, ROIs, and templates "
-            "open an in-app picker. Slot colors / grid use Classic terminal calibrator. "
-            "Open Waydroid and Clash first. Farm deploy: Farm → Deploy tap sequence "
-            "(be in battle first).",
+            "Select a step or part, then Recalibrate Selected — everything runs in-app "
+            "(taps, ROIs, templates, slot colors, grid). Classic terminal is an optional "
+            "fallback. Open Waydroid and Clash first. Farm deploy: Farm → Deploy tap "
+            "sequence (be in battle first).",
             bg=theme.BG,
             fg=theme.TEXT_SECONDARY,
             font=ui_font(10),
@@ -2027,13 +2031,7 @@ class BotControlApp(tk.Tk):
         if "::" in iid:
             part_key = iid.split("::", 1)[1]
             if part_key == "deploy_sequence":
-                if not messagebox.askyesno(
-                    "Program farm deploy",
-                    "Enter an unranked battle first, then continue.\n\n"
-                    "The bot will pan and open the tap editor. Proceed?",
-                ):
-                    return
-                self._run_debug("farm_program_deploy")
+                self._maybe_program_deploy_sequence()
                 return
             part = next((p for p in step.parts if p.key == part_key), None)
             if part is not None and part_supports_in_app(part):
@@ -2042,14 +2040,18 @@ class BotControlApp(tk.Tk):
             self._launch_calibrate(["--step", step_id, "--part", part_key])
             return
 
-        # Whole step selected — run in-app when every part supports it, else fall
-        # back to the terminal wizard (meta/grid/color parts need it).
-        in_app_parts = [p.key for p in step.parts if p.kind != "meta" and part_supports_in_app(p)]
-        other_parts = [p for p in step.parts if p.kind == "meta" or not part_supports_in_app(p)]
-        if step.parts and not other_parts:
-            self._run_in_app_calibration_sequence(step_id, in_app_parts)
-            return
-        self._launch_calibrate(["--step", step_id])
+        # Whole step — prefer full in-app sequence (including color/grid/frame size).
+        self._run_in_app_step(step_id)
+
+    def _maybe_program_deploy_sequence(self) -> bool:
+        if not messagebox.askyesno(
+            "Program farm deploy",
+            "Enter an unranked battle first, then continue.\n\n"
+            "The bot will pan and open the tap editor. Proceed?",
+        ):
+            return False
+        self._run_debug("farm_program_deploy")
+        return True
 
     def _run_in_app_calibration(self, step_id: str, part_key: str) -> None:
         try:
@@ -2059,6 +2061,47 @@ class BotControlApp(tk.Tk):
             self._append_log(f"Calibration cancelled/failed ({part_key}): {exc}")
             return
         self._append_log(f"==> {result}")
+        self._refresh_calib_status()
+
+    def _run_in_app_step(self, step_id: str, *, ask_optional: bool = True) -> None:
+        """Calibrate every in-app part of a step; optionally open farm deploy editor."""
+        step = STEPS[step_id]
+        config = load_config()
+        for part in step.parts:
+            if part.key == "deploy_sequence":
+                continue
+            if not part_supports_in_app(part):
+                self._append_log(f"Skipping unsupported part {part.key}")
+                continue
+            if ask_optional and not should_calibrate_part(self, part, config):
+                self._append_log(f"Skipped optional {part.key}")
+                continue
+            try:
+                result = calibrate_part_in_app(self, step_id, part.key)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "In-app calibration failed for {}::{}: {}", step_id, part.key, exc
+                )
+                self._append_log(f"Calibration cancelled/failed ({part.key}): {exc}")
+                if not messagebox.askyesno(
+                    "Continue?",
+                    f"“{part.label}” was cancelled or failed.\n\n"
+                    "Continue with the remaining parts?",
+                    parent=self,
+                ):
+                    break
+                continue
+            self._append_log(f"==> {result}")
+            config = load_config()
+
+        if any(p.key == "deploy_sequence" for p in step.parts):
+            if messagebox.askyesno(
+                "Deploy sequence",
+                "Program the farm deploy tap sequence now?\n"
+                "(Be in an unranked battle first.)",
+                parent=self,
+            ):
+                self._run_debug("farm_program_deploy")
         self._refresh_calib_status()
 
     def _run_in_app_calibration_sequence(self, step_id: str, part_keys: list[str]) -> None:
@@ -2079,10 +2122,30 @@ class BotControlApp(tk.Tk):
     def _recalibrate_all(self) -> None:
         if not messagebox.askyesno(
             "Recalibrate all",
-            "Run the full setup wizard in a new terminal? Existing values can be kept per prompt.",
+            "Run the full Setup calibration in the app?\n\n"
+            "You will walk through each step with on-screen pickers. "
+            "Optional items can be skipped. Classic terminal remains available "
+            "from the Classic button if you prefer.",
         ):
             return
-        self._launch_calibrate(["--all"])
+        self._append_log("==> Starting full in-app calibration")
+        for step_id in STEP_IDS:
+            step = STEPS[step_id]
+            if not messagebox.askyesno(
+                "Next step",
+                f"Calibrate “{step.title}”?\n\n{step.summary}",
+                parent=self,
+            ):
+                self._append_log(f"Skipped step {step_id}")
+                continue
+            self._run_in_app_step(step_id, ask_optional=True)
+        self._append_log("==> Full in-app calibration finished")
+        self._refresh_calib_status()
+        messagebox.showinfo(
+            "Setup finished",
+            "Full calibration walkthrough complete.\n"
+            "Check the Setup list for any remaining Missing items.",
+        )
 
     def _classic_calibrate_selected(self) -> None:
         """Open the classic terminal calibrator for the current selection (or --all)."""

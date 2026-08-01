@@ -124,12 +124,12 @@ Every screen size is a bit different. Calibration shows a screenshot so you can 
 
 1. Open Waydroid and Clash of Clans (home village or clan chat as needed).
 2. In the app, open **Setup**.
-3. Select a step or part → **Recalibrate Selected**. Taps, ROIs, and templates open an **in-app picker**. Slot colors and grid layout use **Classic terminal calibrator**.
-4. Finish all required steps (Home Get started checklist turns green when ADB + required calibration are OK).
+3. Select a step or part → **Recalibrate Selected**, or use **Recalibrate All** for a full walkthrough. Everything uses an **in-app picker** (taps, ROIs, templates, slot colors, grid). **Classic terminal calibrator** is optional.
+4. Finish all required steps (Home Get started checklist turns green when ADB + required calibration are OK). Tip: **Backup calibration** before experimenting.
 
 Files land under `data/calibrated.yaml` and `data/templates/`.
 
-You can still run the full terminal wizard: **Setup → Recalibrate All**, or:
+Optional terminal wizard:
 
 ```bash
 source .venv/bin/activate
@@ -207,7 +207,7 @@ That last command shows a live log. Press `Ctrl+C` to stop watching (the service
 | `adb devices` is empty or “offline” | Start Waydroid; Home → **Connect ADB**, or `adb connect YOUR_IP:5555` |
 | Bot says not calibrated | Open **Setup** and finish required steps (Get started checklist) |
 | Taps miss buttons | Recalibrate that part in Setup; check Settings → ADB device |
-| No donation slots found | Recalibrate **slot colors** and **grid** (Classic terminal calibrator) |
+| No donation slots found | Recalibrate **slot colors** and **grid** in Setup (in-app) |
 | Screencap / screenshot fails | Restart Waydroid, wait ~15 seconds, try again |
 | Need logs for help | Home → **Copy logs** or **Export debug** (`data/debug/export_…`) |
 | New computer | `./scripts/get_started.sh` (or `setup_linux.sh`), then calibrate if the screen size differs |

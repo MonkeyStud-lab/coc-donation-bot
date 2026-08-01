@@ -103,11 +103,14 @@ class BotControlApp(tk.Tk):
         self._run_chip_var = tk.StringVar(value="Stopped")
         self._farm_timer_var = tk.StringVar(value="—")
         self._break_timer_var = tk.StringVar(value="—")
+        # Frozen farm countdown while the bot is stopped (wall clock still advances).
+        self._farm_timer_frozen_text: str | None = None
         self._calib_progress = tk.StringVar(value="")
         self._log_autoscroll = tk.BooleanVar(value=True)
         self._section_collapsed: dict[str, bool] = {}
         self._tool_buttons: list[ttk.Button] = []
         self._settings_canvas: tk.Canvas | None = None
+        self._tools_canvas: tk.Canvas | None = None
         self._sidebar_chrome: list[tk.Misc] = []
         self._statusbar_chrome: list[tk.Misc] = []
         # (page_id, label, horizontal reserve px) — wraplength tracks content width.
@@ -455,24 +458,18 @@ class BotControlApp(tk.Tk):
         inner.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
         return inner
 
-    def _section_header(
-        self,
-        parent: tk.Misc,
-        section_key: str,
-        title: str,
-        on_toggle,
-    ) -> bool:
+    def _section_header(self, parent: tk.Misc, section_key: str, title: str) -> tk.Frame:
         """
-        Pack a clickable collapsible section header (▾/▸ TITLE).
+        Pack a clickable collapsible section header and return its body frame.
 
-        Collapse state persists in ``self._section_collapsed`` across rebuilds.
-        Returns True when the section is expanded (caller should pack the body).
+        Toggle only shows/hides the body (no page rebuild). Collapse state is
+        kept in ``self._section_collapsed`` across rebuilds.
         """
         collapsed = self._section_collapsed.get(section_key, False)
-        arrow = "▸" if collapsed else "▾"
+        title_upper = title.upper()
         header = tk.Label(
             parent,
-            text=f"{arrow} {title.upper()}",
+            text=f"{'▸' if collapsed else '▾'} {title_upper}",
             bg=theme.BG,
             fg=theme.ACCENT,
             font=ui_font(10, "bold"),
@@ -480,15 +477,34 @@ class BotControlApp(tk.Tk):
             cursor="hand2",
         )
         header.pack(fill=tk.X, padx=8, pady=(18, 8))
+        body = tk.Frame(parent, bg=theme.BG)
+        if not collapsed:
+            body.pack(fill=tk.X)
 
         def _toggle(_event: tk.Event | None = None) -> None:
-            self._section_collapsed[section_key] = not self._section_collapsed.get(
-                section_key, False
-            )
-            on_toggle()
+            now_collapsed = not self._section_collapsed.get(section_key, False)
+            self._section_collapsed[section_key] = now_collapsed
+            header.configure(text=f"{'▸' if now_collapsed else '▾'} {title_upper}")
+            if now_collapsed:
+                body.pack_forget()
+            else:
+                body.pack(fill=tk.X, after=header)
+            self._refresh_scroll_regions()
 
         header.bind("<Button-1>", _toggle)
-        return not collapsed
+        return body
+
+    def _refresh_scroll_regions(self) -> None:
+        """Update scrollregion for Settings/Tools canvases after collapse toggles."""
+        for canvas in (self._settings_canvas, self._tools_canvas):
+            if canvas is None:
+                continue
+            try:
+                if canvas.winfo_exists():
+                    canvas.update_idletasks()
+                    canvas.configure(scrollregion=canvas.bbox("all"))
+            except tk.TclError:
+                continue
 
     def _build_home_page(self) -> None:
         page = self._pages["home"]
@@ -597,11 +613,18 @@ class BotControlApp(tk.Tk):
             font=ui_font(13, "bold"),
             anchor="w",
         ).pack(side=tk.LEFT)
-        ttk.Checkbutton(
-            log_header,
+        autoscroll_row = tk.Frame(log_header, bg=theme.SURFACE_2)
+        autoscroll_row.pack(side=tk.RIGHT)
+        tk.Label(
+            autoscroll_row,
             text="Auto-scroll",
-            variable=self._log_autoscroll,
-        ).pack(side=tk.RIGHT)
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT_SECONDARY,
+            font=ui_font(10),
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        ToggleSwitch(autoscroll_row, self._log_autoscroll, bg=theme.SURFACE_2).pack(
+            side=tk.LEFT
+        )
         self._log = scrolledtext.ScrolledText(
             log_pad,
             height=18,
@@ -669,17 +692,12 @@ class BotControlApp(tk.Tk):
         for field in SETTINGS:
             if field.section != current_section:
                 current_section = field.section
-                expanded = self._section_header(
+                section_body = self._section_header(
                     inner,
                     f"settings:{current_section}",
                     current_section,
-                    self._build_settings_page,
                 )
-                section_body = tk.Frame(inner, bg=theme.BG)
-                if expanded:
-                    section_body.pack(fill=tk.X)
 
-            # Always build controls (even when collapsed) so Save still sees every var.
             assert section_body is not None
             if self._modern:
                 self._add_setting_row_modern(section_body, field, values[field.key])
@@ -976,6 +994,7 @@ class BotControlApp(tk.Tk):
         self._clear_wrap_labels("tools")
         self._tool_buttons.clear()
         canvas, inner = make_scrollable(page)
+        self._tools_canvas = canvas
 
         intro = tk.Frame(inner, bg=theme.BG)
         intro.pack(fill=tk.X, padx=8, pady=(4, 4))
@@ -994,12 +1013,7 @@ class BotControlApp(tk.Tk):
         self._track_wrap_label(intro_label, reserve=40, page_id="tools")
 
         for group_title, actions in DEBUG_GROUPS:
-            expanded = self._section_header(
-                inner, f"tools:{group_title}", group_title, self._build_tools_page
-            )
-            body = tk.Frame(inner, bg=theme.BG)
-            if expanded:
-                body.pack(fill=tk.X)
+            body = self._section_header(inner, f"tools:{group_title}", group_title)
 
             for action_id, label, description in actions:
                 card = self._card(body, padx=8, pady=4 if self._modern else 5)
@@ -1236,6 +1250,7 @@ class BotControlApp(tk.Tk):
                 "A one-shot farm attack is running. Press Stop first, or wait for it to finish.",
             )
             return
+        self._farm_timer_frozen_text = None
         config = load_config()
         if not config.calibrated:
             messagebox.showerror(
@@ -1378,23 +1393,33 @@ class BotControlApp(tk.Tk):
 
     def _farm_timer_text(self) -> str:
         if self._farm_oneshot_running():
+            self._farm_timer_frozen_text = None
             return "running"
         config = load_config()
         if not config.farm_enabled:
+            self._farm_timer_frozen_text = None
             return "off"
         if not config.farm_calibrated:
+            self._farm_timer_frozen_text = None
             return "—"
         from coc_bot.config import normalize_farm_deploy_sequence
 
         if not normalize_farm_deploy_sequence(config.farm_deploy_sequence).get("taps"):
+            self._farm_timer_frozen_text = None
             return "—"
 
         bot = self._bot
-        if self._bot_running() and bot is not None:
+        running = self._bot_running() and bot is not None
+        if running:
+            self._farm_timer_frozen_text = None
             if getattr(bot, "farm_queued", False):
                 return "due"
             tracker = bot.tracker
         else:
+            # Auto-farm does not run while stopped — freeze the display so it
+            # does not keep counting down from wall-clock time.
+            if self._farm_timer_frozen_text is not None:
+                return self._farm_timer_frozen_text
             from coc_bot.runtime.tracker import RuntimeTracker
 
             tracker = RuntimeTracker(config)
@@ -1402,11 +1427,16 @@ class BotControlApp(tk.Tk):
         since = tracker.seconds_since_last_farm()
         interval = tracker.effective_farm_interval_seconds()
         if since is None:
-            return "due"
-        remaining = max(0.0, interval - since)
-        if remaining <= 0:
-            return "due"
-        return format_countdown(remaining)
+            text = "due"
+        else:
+            remaining = max(0.0, interval - since)
+            text = "due" if remaining <= 0 else format_countdown(remaining)
+
+        if not running:
+            if text != "due":
+                text = f"{text} · paused"
+            self._farm_timer_frozen_text = text
+        return text
 
     def _break_timer_text(self) -> str:
         bot = self._bot
@@ -1563,6 +1593,13 @@ class BotControlApp(tk.Tk):
         self._start_btn.configure(state=tk.NORMAL)
         self._stop_btn.configure(state=tk.DISABLED)
         self._bot_thread = None
+        # Capture a frozen farm countdown for the stopped state (refreshed once).
+        self._farm_timer_frozen_text = None
+        try:
+            self._farm_timer_var.set(self._farm_timer_text())
+        except Exception:  # noqa: BLE001
+            pass
+        self._sync_run_chip()
         self._sync_run_chip()
         self._update_tool_buttons_state()
 

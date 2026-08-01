@@ -159,7 +159,7 @@ STEPS: dict[str, CalibrationStep] = {
     "farm": CalibrationStep(
         "farm",
         "Farm / unranked attack",
-        "Attack button, unranked Battle, Find a Match, Return Home, optional hero slots",
+        "Attack button, unranked Battle, Return Home, and deploy tap sequence",
         ("attack_button", "unranked_battle", "return_home"),
         (
             CalibrationPart(
@@ -192,52 +192,7 @@ STEPS: dict[str, CalibrationStep] = {
                 "Deploy tap sequence",
                 "meta",
                 optional=True,
-                description="Program army+map taps after pan (Setup button or Tools)",
-            ),
-            CalibrationPart(
-                "edrag_slot",
-                "First troop army slot",
-                "tap",
-                optional=True,
-                description="First troop card on the bottom battle bar",
-            ),
-            CalibrationPart(
-                "siege_slot",
-                "Siege machine slot",
-                "tap",
-                optional=True,
-                description="Siege card on the bottom battle bar",
-            ),
-            CalibrationPart(
-                "rage_slot",
-                "Rage spell slot",
-                "tap",
-                optional=True,
-                description="Rage spell card on the bottom battle bar",
-            ),
-            CalibrationPart(
-                "hero_1",
-                "Hero 1 slot",
-                "tap",
-                optional=True,
-            ),
-            CalibrationPart(
-                "hero_2",
-                "Hero 2 slot",
-                "tap",
-                optional=True,
-            ),
-            CalibrationPart(
-                "hero_3",
-                "Hero 3 slot",
-                "tap",
-                optional=True,
-            ),
-            CalibrationPart(
-                "hero_4",
-                "Hero 4 slot",
-                "tap",
-                optional=True,
+                description="Program army+map taps after pan (required to farm)",
             ),
         ),
     ),
@@ -1002,46 +957,6 @@ class CalibrationWizard:
         if "deploy_strip" in self.config.rois:
             del self.config.rois["deploy_strip"]
             logger.info("Removed obsolete deploy_strip ROI (not used anymore)")
-
-        army_keys = (
-            "edrag_slot",
-            "siege_slot",
-            "rage_slot",
-            "hero_1",
-            "hero_2",
-            "hero_3",
-            "hero_4",
-        )
-        want_army = [k for k in army_keys if self._want_part(k)]
-        if want_army:
-            if self._only_part is None:
-                print(
-                    "\n--- Army bar slots (optional) ---\n"
-                    "On a BATTLE screen with the army bar visible. Skip any you do not need."
-                )
-                if not prompt_yes_no("Calibrate any army-bar taps now?"):
-                    for key in army_keys:
-                        if key in self.config.tap_points:
-                            _keeping(key)
-                    want_army = []
-            if want_army:
-                print("Open any battle so the army bar is visible, then press Enter.")
-                _press_enter()
-                labels = {
-                    "edrag_slot": "first troop card on the army bar",
-                    "siege_slot": "siege machine card",
-                    "rage_slot": "rage spell card",
-                    "hero_1": "hero card #1",
-                    "hero_2": "hero card #2",
-                    "hero_3": "hero card #3",
-                    "hero_4": "hero card #4",
-                }
-                for key in want_army:
-                    if self._should_update(key, exists=self._has_tap(key), optional=True):
-                        frame = self.capture.screenshot()
-                        pt = self._pick_point(f"CENTER of the {labels[key]}", frame)
-                        self.config.tap_points[key] = list(pt)
-                        logger.info("Saved tap point {}", key)
 
         if self._only_part is None:
             print(

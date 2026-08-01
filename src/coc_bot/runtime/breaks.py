@@ -14,7 +14,7 @@ from coc_bot.runtime.tracker import RuntimeTracker
 
 
 class BreakManager:
-    """Handle 4-hour session limit with randomized breaks and fast resume."""
+    """Handle session-limit breaks with randomized length and fast resume."""
 
     def __init__(
         self,

@@ -16,6 +16,8 @@ class RuntimeState:
     last_farm_at: str | None = None  # UTC ISO timestamp of last successful farm
     # Rolled wait until the next auto farm (base interval ± variance); None = roll on read.
     next_farm_interval_seconds: int | None = None
+    # Rolled session length before break (base limit ± variance); None = roll on read.
+    next_session_limit_seconds: int | None = None
 
     @classmethod
     def fresh(cls) -> RuntimeState:
@@ -32,6 +34,16 @@ class RuntimeState:
             next_interval = None
         if next_interval is not None and next_interval < 60:
             next_interval = None
+
+        raw_limit = data.get("next_session_limit_seconds")
+        next_limit: int | None
+        try:
+            next_limit = int(raw_limit) if raw_limit is not None else None
+        except (TypeError, ValueError):
+            next_limit = None
+        if next_limit is not None and next_limit < 60:
+            next_limit = None
+
         return cls(
             session_started_at=data.get("session_started_at", datetime.now(timezone.utc).isoformat()),
             active_seconds=float(data.get("active_seconds", 0)),
@@ -40,6 +52,7 @@ class RuntimeState:
             break_until=data.get("break_until"),
             last_farm_at=data.get("last_farm_at"),
             next_farm_interval_seconds=next_interval,
+            next_session_limit_seconds=next_limit,
         )
 
 

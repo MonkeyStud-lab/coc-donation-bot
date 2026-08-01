@@ -24,6 +24,11 @@ def roll_farm_interval_seconds(base: int, variance: int) -> int:
     return random.randint(lo, hi)
 
 
+def roll_session_limit_seconds(base: int, variance: int) -> int:
+    """Pick a session length in [base-variance, base+variance], never below 60s."""
+    return roll_farm_interval_seconds(base, variance)
+
+
 class RuntimeTracker:
     """Track active donation-loop runtime with persisted state."""
 
@@ -40,7 +45,7 @@ class RuntimeTracker:
 
     @property
     def limit_reached(self) -> bool:
-        return self.state.active_seconds >= self.config.session_limit_seconds
+        return self.state.active_seconds >= self.effective_session_limit_seconds()
 
     def start_loop_timing(self) -> None:
         if self._loop_start is None:
@@ -72,12 +77,20 @@ class RuntimeTracker:
         self.state.last_break_seconds = break_seconds
         self.state.cycle_count += 1
         self.state.break_until = None
+        rolled = self._roll_next_session_limit()
+        self.state.next_session_limit_seconds = rolled
         save_runtime_state(self.state_path, self.state)
         self._loop_start = time.monotonic()
+        base = max(60, int(self.config.session_limit_seconds))
+        variance = max(0, int(self.config.session_limit_variance_seconds))
         logger.info(
-            "Runtime reset after break ({}s). Cycle count: {}",
+            "Runtime reset after break ({}s). Cycle count: {}. Next session limit {}s "
+            "(base {}s ± {}s)",
             break_seconds,
             self.state.cycle_count,
+            rolled,
+            base,
+            variance,
         )
 
     def set_break_until(self, iso_timestamp: str, break_seconds: int | None = None) -> None:
@@ -86,9 +99,36 @@ class RuntimeTracker:
             self.state.last_break_seconds = break_seconds
         save_runtime_state(self.state_path, self.state)
 
+    def _roll_next_session_limit(self) -> int:
+        return roll_session_limit_seconds(
+            self.config.session_limit_seconds,
+            self.config.session_limit_variance_seconds,
+        )
+
+    def effective_session_limit_seconds(self) -> int:
+        """
+        Session length used for the current run before a forced break.
+
+        Persists a rolled value so status and limit checks stay aligned until
+        the next break re-rolls it.
+        """
+        stored = self.state.next_session_limit_seconds
+        if stored is not None and int(stored) >= 60:
+            return int(stored)
+        rolled = self._roll_next_session_limit()
+        self.state.next_session_limit_seconds = rolled
+        save_runtime_state(self.state_path, self.state)
+        logger.debug(
+            "Rolled session limit target {}s (base {} ± {})",
+            rolled,
+            max(60, int(self.config.session_limit_seconds)),
+            max(0, int(self.config.session_limit_variance_seconds)),
+        )
+        return rolled
+
     def remaining_seconds(self) -> float:
         self._flush()
-        return max(0.0, self.config.session_limit_seconds - self.state.active_seconds)
+        return max(0.0, self.effective_session_limit_seconds() - self.state.active_seconds)
 
     def last_farm_at(self) -> datetime | None:
         raw = self.state.last_farm_at

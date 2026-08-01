@@ -991,7 +991,7 @@ class BotControlApp(tk.Tk):
             messagebox.showerror(
                 "Farm not calibrated",
                 "Open Setup → Farm and set attack_button, unranked Battle, and Return Home.\n"
-                "Leave electro dragons as the active army preset.",
+                "Leave your farm army as the active preset, and program a deploy sequence.",
             )
             self._show_page("setup")
             return

@@ -190,8 +190,8 @@ Dry-run mode still navigates but skips donation taps (navigation input stays liv
 ## Runtime: stop, breaks, farm timing
 
 - **Stop** sets a cooperative flag. Long sleeps use `interrupted_sleep` ([`src/coc_bot/stop.py`](../src/coc_bot/stop.py)). Clash stays open unless you use **Close Waydroid + Clash**.
-- **Breaks** ([`runtime/breaks.py`](../src/coc_bot/runtime/breaks.py)): after enough active time, force-stop CoC, wait a random break window, relaunch, reopen chat. State lives in `data/runtime_state.json`.
-- **Farm clock:** any fought battle (deploy happened) advances `last_farm_at` for the interval, even if leave/chat confirm fails. Failures *before* deploy use the shorter retry cooldown.
+- **Breaks** ([`runtime/breaks.py`](../src/coc_bot/runtime/breaks.py)): after a rolled session limit (`session_limit_seconds` ± `session_limit_variance_seconds`), force-stop CoC, wait a random break window, relaunch, reopen chat. State lives in `data/runtime_state.json`.
+- **Farm clock:** any fought battle (deploy happened) advances `last_farm_at` for the interval (± variance), even if leave/chat confirm fails. Failures *before* deploy use the shorter retry cooldown.
 
 GUI one-shot farm (**Farm attack now** without Start) wires the same stop flag into the farmer/navigator/deployer.
 

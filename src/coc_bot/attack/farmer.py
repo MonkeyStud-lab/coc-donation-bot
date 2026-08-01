@@ -27,7 +27,7 @@ class FarmResult:
 
 
 class AttackFarmer:
-    """Orchestrate one unranked e-drag side-dump attack."""
+    """Orchestrate one unranked farm attack via the programmed deploy sequence."""
 
     def __init__(
         self,

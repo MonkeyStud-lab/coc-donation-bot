@@ -196,7 +196,7 @@ STEPS: dict[str, CalibrationStep] = {
             ),
             CalibrationPart(
                 "edrag_slot",
-                "E-drag army slot",
+                "First troop army slot",
                 "tap",
                 optional=True,
                 description="First troop card on the bottom battle bar",
@@ -875,7 +875,7 @@ class CalibrationWizard:
             "  python scripts/pick_grid.py\n"
         )
         if self._only_part is None and prompt_yes_no(
-            "Launch grid picker now (needs display / RustDesk)?"
+            "Launch grid picker now (needs a visible display or remote desktop)?"
         ):
             import subprocess
             import sys
@@ -918,7 +918,7 @@ class CalibrationWizard:
         if self._only_part is None:
             print(
                 "\n=== Farm / unranked attack ===\n"
-                "IMPORTANT: Leave your electro dragon army as the ACTIVE army preset.\n"
+                "IMPORTANT: Leave your farm army as the ACTIVE army preset.\n"
                 "The bot does not train troops or switch armies.\n"
                 "Deploy tap sequence: Setup → Farm → Deploy tap sequence.\n"
             )
@@ -1028,7 +1028,7 @@ class CalibrationWizard:
                 print("Open any battle so the army bar is visible, then press Enter.")
                 _press_enter()
                 labels = {
-                    "edrag_slot": "electro dragon (first troop) card",
+                    "edrag_slot": "first troop card on the army bar",
                     "siege_slot": "siege machine card",
                     "rage_slot": "rage spell card",
                     "hero_1": "hero card #1",

@@ -9,7 +9,8 @@ WorkingDirectory=%h/Projects/coc-donation-bot
 ExecStart=%h/Projects/coc-donation-bot/.venv/bin/python -m coc_bot.main
 Restart=on-failure
 RestartSec=15
-Environment=ADB_DEVICE=192.168.240.112:5555
+# Set ADB_DEVICE to the address from `adb devices` (often 127.0.0.1:5555 or a LAN IP).
+Environment=ADB_DEVICE=127.0.0.1:5555
 Environment=COC_BOT_CONFIG=%h/Projects/coc-donation-bot/data/calibrated.yaml
 Environment=PYTHONUNBUFFERED=1
 

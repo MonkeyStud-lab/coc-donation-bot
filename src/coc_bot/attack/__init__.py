@@ -1,4 +1,4 @@
-"""Unranked multiplayer farm attacks (electro dragon edge dump)."""
+"""Unranked multiplayer farm attacks (programmed deploy sequence)."""
 
 from coc_bot.attack.farmer import AttackFarmer, FarmResult
 

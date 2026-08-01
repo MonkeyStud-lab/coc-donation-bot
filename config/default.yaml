@@ -1,7 +1,7 @@
 adb:
-  # Waydroid ADB address — run `adb devices` to find yours.
-  # Common values: 127.0.0.1:5555 or a LAN IP like 192.168.240.112:5555
-  device: "192.168.240.112:5555"
+  # ADB address for the Android session — run `adb devices` to find yours.
+  # Common values: 127.0.0.1:5555 or a host:port shown by adb (Waydroid often uses a LAN IP).
+  device: "127.0.0.1:5555"
   coc_package: "com.supercell.clashofclans"
   reconnect_max_attempts: 5
   reconnect_backoff_seconds: 2
@@ -19,9 +19,10 @@ timing:
   anti_idle_seconds: 60   # small screen nudge so CoC does not idle-kick
 
 runtime:
-  session_limit_seconds: 14400  # 4 hours
-  break_min_seconds: 600        # 10 minutes
-  break_max_seconds: 900        # 15 minutes
+  session_limit_seconds: 14400           # base seconds before a forced break (4 hours)
+  session_limit_variance_seconds: 300    # random ±N seconds around session limit (0 = exact)
+  break_min_seconds: 600                 # 10 minutes
+  break_max_seconds: 900                 # 15 minutes
   game_load_timeout_seconds: 90
   state_watchdog_seconds: 45
 

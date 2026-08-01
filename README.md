@@ -3,7 +3,7 @@
 A helper program for **Clash of Clans on Waydroid (Ubuntu)** that:
 
 1. Watches clan chat and **donates** troops, spells, and siege machines
-2. Optionally runs **unranked Battle** attacks to farm elixir (electro dragons)
+2. Optionally runs **unranked Battle** attacks to farm elixir using a programmed deploy sequence
 
 It works by looking at the game screen through ADB (Android Debug Bridge) and tapping buttons — the same idea as controlling a phone from your computer.
 
@@ -97,12 +97,12 @@ The bot talks to the Android session through **ADB**. Think of ADB as a cable be
 adb devices
 ```
 
-You want a line that looks like `192.168.240.112:5555` or `127.0.0.1:5555` with the word **device** (not “offline”).
+You want a line that looks like `127.0.0.1:5555` or `HOST:5555` with the word **device** (not “offline”).
 
-If the list is empty, try connecting (common Waydroid address):
+If the list is empty, try connecting:
 
 ```bash
-adb connect 192.168.240.112:5555
+adb connect 127.0.0.1:5555
 adb devices
 ```
 
@@ -124,7 +124,7 @@ adb connect YOUR_IP:5555
 - **Or in a terminal for this session:**
 
 ```bash
-export ADB_DEVICE=192.168.240.112:5555
+export ADB_DEVICE=YOUR_IP:5555
 ```
 
 (Replace with your real address from `adb devices`.)
@@ -191,13 +191,14 @@ Then use the **CoC Donation Bot** icon on your desktop (choose **Allow Launching
 
 ## Optional — Farm attacks (elixir)
 
-Farming runs **unranked Battle** (not ranked multiplayer): leave chat → Attack → Battle → deploy electro dragons along the village edge → wait → Return Home → reopen chat.
+Farming runs **unranked Battle** (not ranked multiplayer): leave chat → Attack → Battle → run your programmed deploy taps → wait → Return Home → reopen chat.
 
 1. In **Setup**, run the **Farm** calibration step (Attack button, unranked Battle, Return Home, army slots as needed).
-2. In game, leave your **electro dragon** army as the active preset.
-3. In **Settings**, turn on farm and set the interval if you want.
-4. Save Settings, then **Stop** and **Start** the bot so it reloads.
-5. Or press **Farm attack now** on Home for a single attack.
+2. In game, leave your **farm army** as the active preset.
+3. In **Setup → Farm**, program a **deploy tap sequence** (army bar + map taps).
+4. In **Settings**, turn on farm and set the interval if you want.
+5. Save Settings, then **Stop** and **Start** the bot so it reloads.
+6. Or press **Farm attack now** on Home for a single attack.
 
 ---
 
@@ -271,7 +272,7 @@ Environment variables:
 
 | Variable | Typical use |
 |----------|-------------|
-| `ADB_DEVICE` | Override device address (e.g. `192.168.240.112:5555`) |
+| `ADB_DEVICE` | Override device address (e.g. `127.0.0.1:5555`) |
 | `COC_BOT_CONFIG` | Alternate calibrated YAML path |
 
 ### Project layout
@@ -301,5 +302,5 @@ docs/
 - Troops, spells, and siege donations; partial fills when inventory is low
 - Interactive setup wizard for unknown resolutions
 - Session time limits with randomized breaks, then resume
-- Optional unranked elixir farm with electro dragons
+- Optional unranked elixir farm with a programmed deploy sequence
 - Dry-run and offline replay for testing

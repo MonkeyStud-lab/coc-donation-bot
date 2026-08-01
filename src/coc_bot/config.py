@@ -36,6 +36,7 @@ class BotConfig:
     scan_interval_ms: tuple[int, int]
     anti_idle_seconds: int
     session_limit_seconds: int
+    session_limit_variance_seconds: int
     break_min_seconds: int
     break_max_seconds: int
     game_load_timeout_seconds: int
@@ -214,6 +215,9 @@ def load_config(
         scan_interval_ms=tuple(timing.get("scan_interval_ms", [800, 1500])),
         anti_idle_seconds=int(timing.get("anti_idle_seconds", 60)),
         session_limit_seconds=runtime.get("session_limit_seconds", 4 * 3600),
+        session_limit_variance_seconds=max(
+            0, int(runtime.get("session_limit_variance_seconds", 300))
+        ),
         break_min_seconds=runtime.get("break_min_seconds", 600),
         break_max_seconds=runtime.get("break_max_seconds", 900),
         game_load_timeout_seconds=runtime.get("game_load_timeout_seconds", 90),

@@ -137,7 +137,7 @@ SETTINGS: list[SettingField] = [
         "Your clan level — used for max housing you can donate per action (from clan_perks.yaml).",
         "int",
         lambda c: c.clan_level,
-        "Clan / device",
+        "Clan",
         ("clan", "level"),
     ),
     SettingField(
@@ -236,22 +236,33 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "adb_device",
         "ADB device address",
-        "Waydroid ADB target, e.g. 192.168.240.112:5555 or 127.0.0.1:5555. "
+        "ADB target for the Android session, e.g. 127.0.0.1:5555 or host:5555. "
         "Check with: adb devices",
         "str",
         lambda c: c.adb_device,
-        "Clan / device",
+        "Device",
         ("adb", "device"),
     ),
     SettingField(
         "session_limit_seconds",
         "Session limit before break (seconds)",
-        "How long the bot runs before a forced break (default 14400 = 4 hours) to reduce "
+        "Base how long the bot runs before a forced break (default 14400 = 4 hours) to reduce "
         "Clash “take a break” / anti-bot risk.",
         "int",
         lambda c: c.session_limit_seconds,
         "Breaks",
         ("runtime", "session_limit_seconds"),
+    ),
+    SettingField(
+        "session_limit_variance_seconds",
+        "Session limit variance (± seconds)",
+        "Random ± this many seconds around the session limit so breaks are not metronomic "
+        "(300 ≈ ±5 minutes). Set 0 for an exact limit. The rolled length is saved until "
+        "the next break.",
+        "int",
+        lambda c: c.session_limit_variance_seconds,
+        "Breaks",
+        ("runtime", "session_limit_variance_seconds"),
     ),
     SettingField(
         "break_min_seconds",
@@ -348,10 +359,16 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
             parsed: Any = bool(raw)
         elif field.kind == "int":
             parsed = int(str(raw).strip())
-            if field.key == "farm_interval_variance_seconds" and parsed < 0:
-                raise ValueError("Farm interval variance cannot be negative")
-            if field.key == "farm_interval_variance_seconds" and parsed > 24 * 3600:
-                raise ValueError("Farm interval variance must be at most 86400 seconds")
+            if field.key in (
+                "farm_interval_variance_seconds",
+                "session_limit_variance_seconds",
+            ) and parsed < 0:
+                raise ValueError(f"{field.label} cannot be negative")
+            if field.key in (
+                "farm_interval_variance_seconds",
+                "session_limit_variance_seconds",
+            ) and parsed > 24 * 3600:
+                raise ValueError(f"{field.label} must be at most 86400 seconds")
         elif field.kind == "float":
             parsed = float(str(raw).strip())
             if field.key == "farm_pan_swipes" and parsed < 0:
@@ -415,6 +432,27 @@ def save_settings_from_gui(values: dict[str, str | bool]) -> None:
         ):
             _reroll_next_farm_interval(new_interval, new_variance)
 
+    # Re-roll the next session limit when limit / variance changes.
+    runtime_in = incoming.get("runtime") or {}
+    if isinstance(runtime_in, dict) and (
+        "session_limit_seconds" in runtime_in
+        or "session_limit_variance_seconds" in runtime_in
+    ):
+        new_limit = int(
+            runtime_in.get("session_limit_seconds", previous.session_limit_seconds)
+        )
+        new_limit_var = int(
+            runtime_in.get(
+                "session_limit_variance_seconds",
+                previous.session_limit_variance_seconds,
+            )
+        )
+        if (
+            new_limit != previous.session_limit_seconds
+            or new_limit_var != previous.session_limit_variance_seconds
+        ):
+            _reroll_next_session_limit(new_limit, new_limit_var)
+
 
 def _reroll_next_farm_interval(base: int, variance: int) -> None:
     from coc_bot.runtime.persistence import load_runtime_state, save_runtime_state
@@ -424,4 +462,15 @@ def _reroll_next_farm_interval(base: int, variance: int) -> None:
     path = config.data_dir / "runtime_state.json"
     state = load_runtime_state(path)
     state.next_farm_interval_seconds = roll_farm_interval_seconds(base, variance)
+    save_runtime_state(path, state)
+
+
+def _reroll_next_session_limit(base: int, variance: int) -> None:
+    from coc_bot.runtime.persistence import load_runtime_state, save_runtime_state
+    from coc_bot.runtime.tracker import roll_session_limit_seconds
+
+    config = load_config()
+    path = config.data_dir / "runtime_state.json"
+    state = load_runtime_state(path)
+    state.next_session_limit_seconds = roll_session_limit_seconds(base, variance)
     save_runtime_state(path, state)

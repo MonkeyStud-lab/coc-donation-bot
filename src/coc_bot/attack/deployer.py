@@ -133,13 +133,13 @@ class EdgeDeployer:
         return int(w * nx), int(h * 0.93)
 
     def select_edrag_slot(self, frame: np.ndarray) -> None:
-        """Tap the first troop card (e-drags expected as the active army)."""
+        """Tap the first troop card on the army bar (calibrated as edrag_slot)."""
         point = self.config.tap_points.get("edrag_slot") or self.config.tap_points.get("troop_slot_0")
         if point:
             self.input.tap(int(point[0]), int(point[1]))
         else:
             x, y = self._army_bar_point(frame, 0.10)
-            logger.info("Selecting e-drag slot at bottom bar ({}, {})", x, y)
+            logger.info("Selecting first troop slot at bottom bar ({}, {})", x, y)
             self.input.tap(x, y)
         time.sleep(0.25)
 
@@ -328,7 +328,7 @@ class EdgeDeployer:
         Pan using the programmed sequence, then replay its ordered taps.
 
         Returns total sequence taps, or 0 if no sequence is programmed.
-        The built-in e-drag recipe was removed — farm requires a tap sequence.
+        Farm requires a programmed tap sequence (no built-in deploy recipe).
         """
         del side  # sequence stores its own deploy side
         custom = self._custom_sequence_taps()

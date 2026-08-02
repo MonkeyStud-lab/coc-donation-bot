@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import messagebox, ttk
 
@@ -110,7 +111,10 @@ class BotControlApp(tk.Tk):
         dry_run: bool = False,
         debug_save_frames: bool = False,
         debug: bool = False,
+        progress: Callable[[float, str], None] | None = None,
     ) -> None:
+        self._startup_progress = progress
+        self._report_startup(0.50, "Opening window…")
         super().__init__()
         self.title("CoC Donation Bot")
         self.geometry("1040x720")
@@ -121,6 +125,7 @@ class BotControlApp(tk.Tk):
                 self.geometry(self._gui_state.geometry)
             except tk.TclError:
                 pass
+        self._report_startup(0.55, "Applying theme…")
         self._theme_id = normalize_theme_id(load_config().gui_theme)
         apply_theme(self, self._theme_id)
 
@@ -211,10 +216,15 @@ class BotControlApp(tk.Tk):
             page = ttk.Frame(self._content)
             self._pages[page_id] = page
 
+        self._report_startup(0.62, "Building Home…")
         self._build_home_page()
+        self._report_startup(0.72, "Building Settings…")
         self._build_settings_page()
+        self._report_startup(0.82, "Building Setup…")
         self._build_setup_page()
+        self._report_startup(0.92, "Building Tools…")
         self._build_tools_page()
+        self._report_startup(0.97, "Finishing…")
 
         status = ttk.Frame(right, style="StatusBar.TFrame", padding=(16, 8))
         status.pack(fill=tk.X, side=tk.BOTTOM)
@@ -239,6 +249,26 @@ class BotControlApp(tk.Tk):
         self.after(1000, self._refresh_farm_status)
         self.after(1500, self._poll_adb_status)
         self._install_log_sink()
+        # Hide until splash closes when launched via bootstrap.
+        if self._startup_progress is not None:
+            self.withdraw()
+
+    def _report_startup(self, fraction: float, message: str) -> None:
+        cb = self._startup_progress
+        if cb is not None:
+            try:
+                cb(fraction, message)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def reveal(self) -> None:
+        """Show the main window after the startup splash is dismissed."""
+        try:
+            self.deiconify()
+            self.lift()
+            self.focus_force()
+        except tk.TclError:
+            pass
 
     @staticmethod
     def _window_geometry_path() -> Path:
@@ -2199,7 +2229,7 @@ class BotControlApp(tk.Tk):
 
         def worker() -> None:
             try:
-                from coc_bot.main import DonationBot
+                from coc_bot.bot import DonationBot
 
                 self._bot = DonationBot(
                     dry_run=self._dry_run or self._practice_mode,
@@ -3235,9 +3265,11 @@ class BotControlApp(tk.Tk):
 
 
 def run_gui(*, dry_run: bool = False, debug_save_frames: bool = False, debug: bool = False) -> None:
-    app = BotControlApp(
+    """Launch the control window (with startup splash)."""
+    from coc_bot.gui.bootstrap import run_gui as _run_gui_with_splash
+
+    _run_gui_with_splash(
         dry_run=dry_run,
         debug_save_frames=debug_save_frames,
         debug=debug,
     )
-    app.mainloop()

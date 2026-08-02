@@ -70,12 +70,16 @@ from coc_bot.gui.ui_helpers import (
     load_gui_window_state,
     save_gui_window_state,
 )
+from coc_bot.gui.calib_instructions import (
+    format_part_instruction,
+    format_step_instruction,
+    part_instruction,
+)
 from coc_bot.gui.ux_helpers import (
     FIXIT_RECIPES,
     FarmReadiness,
     FixItRecipe,
     MissingCalibration,
-    STEP_SCREEN_HINTS,
     break_timer_caption,
     farm_readiness,
     live_status_label,
@@ -142,7 +146,9 @@ class BotControlApp(tk.Tk):
         self._last_adb_ok: bool | None = None
         self._adb_banner: tk.Frame | None = None
         self._onboarding_frame: tk.Frame | None = None
+        self._onboarding_title_var = tk.StringVar(value="Get started")
         self._onboarding_checklist_var = tk.StringVar(value="")
+        self._onboarding_dismiss_btn: ttk.Button | None = None
         self._home_anchor: tk.Misc | None = None
         self._log_lines: list[str] = []
         self._run_chip_var = tk.StringVar(value="Stopped")
@@ -716,7 +722,7 @@ class BotControlApp(tk.Tk):
         ob_pad.pack(fill=tk.X, padx=18, pady=14)
         tk.Label(
             ob_pad,
-            text="Get started",
+            textvariable=self._onboarding_title_var,
             bg=theme.SURFACE_2,
             fg=theme.TEXT,
             font=ui_font(13, "bold"),
@@ -759,12 +765,13 @@ class BotControlApp(tk.Tk):
             style=self._btn_style("Accent"),
             command=self.calibrate_whats_missing,
         ).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(
+        self._onboarding_dismiss_btn = ttk.Button(
             ob_btns,
             text="Dismiss",
             style=self._btn_style("Secondary"),
-            command=self._dismiss_onboarding,
-        ).pack(side=tk.RIGHT)
+            command=self._exit_first_launch_preview,
+        )
+        self._onboarding_dismiss_btn.pack(side=tk.RIGHT)
         onboarding_outer.pack_forget()
 
         actions_outer, actions = self._card(page, pady=(0, 12), return_outer=True)
@@ -1002,7 +1009,18 @@ class BotControlApp(tk.Tk):
             f"{calib_line}\n"
             "•  Farm attacks are optional — set them up any time in Setup → Farm"
         )
-        show_onboarding = not self._gui_state.onboarding_dismissed
+        preview = bool(self._gui_state.first_launch_preview)
+        self._onboarding_title_var.set(
+            "Get started (first-launch preview)" if preview else "Get started"
+        )
+        if self._onboarding_dismiss_btn is not None:
+            try:
+                self._onboarding_dismiss_btn.configure(
+                    text="Exit first-launch preview" if preview else "Dismiss"
+                )
+            except tk.TclError:
+                pass
+        show_onboarding = preview or not self._gui_state.onboarding_dismissed
         try:
             if show_onboarding:
                 if not self._onboarding_frame.winfo_ismapped():
@@ -1044,9 +1062,98 @@ class BotControlApp(tk.Tk):
             pass
 
     def _dismiss_onboarding(self) -> None:
-        self._gui_state.onboarding_dismissed = True
+        """Hide Get started (same as exiting first-launch preview)."""
+        self._exit_first_launch_preview(confirm=False)
+
+    def _enter_first_launch_preview(self) -> None:
+        """Show Home Get-started as on a brand-new install (keeps calibration)."""
+        if not messagebox.askyesno(
+            "First-launch preview",
+            "Show the Home “Get started” checklist as if this were the first "
+            "time opening the bot?\n\n"
+            "Calibration and Settings are NOT wiped — this only resets the "
+            "first-launch UI.\n\n"
+            "Continue?",
+            parent=self,
+        ):
+            return
+        self._gui_state.onboarding_dismissed = False
+        self._gui_state.first_launch_preview = True
+        self._gui_state.last_page = "home"
         self._save_gui_state()
+        self._append_log("==> First-launch preview ON (Get started shown)")
+        restart = messagebox.askyesno(
+            "Restart window?",
+            "Restart the control window now so it opens on Home like a first launch?\n\n"
+            "Yes = quit and relaunch this app.\n"
+            "No = switch to Home immediately without restarting.",
+            parent=self,
+        )
+        if restart:
+            self._restart_gui_process()
+            return
+        self._show_page("home")
         self._refresh_home_status()
+        if load_config().gui_dev_options:
+            self._build_tools_page()
+
+    def _exit_first_launch_preview(self, *, confirm: bool = True) -> None:
+        """Leave first-launch preview / dismiss Get started."""
+        if confirm and self._gui_state.first_launch_preview:
+            if not messagebox.askyesno(
+                "Exit first-launch preview",
+                "Hide the Get started card and return to normal Home?",
+                parent=self,
+            ):
+                return
+        was_preview = bool(self._gui_state.first_launch_preview)
+        self._gui_state.onboarding_dismissed = True
+        self._gui_state.first_launch_preview = False
+        self._save_gui_state()
+        if was_preview:
+            self._append_log("==> First-launch preview OFF")
+        self._refresh_home_status()
+        if load_config().gui_dev_options:
+            self._build_tools_page()
+
+    def _restart_gui_process(self) -> None:
+        """Quit and re-exec the same GUI entrypoint (used by first-launch preview)."""
+        if self._bot_running() or self._farm_oneshot_running():
+            if not messagebox.askyesno(
+                "Restart",
+                "The bot is running. Stop it and restart the window?",
+                parent=self,
+            ):
+                return
+            self.stop_bot()
+            if self._bot_thread is not None:
+                self._bot_thread.join(timeout=3.0)
+            if self._farm_oneshot_thread is not None:
+                self._farm_oneshot_thread.join(timeout=3.0)
+
+        self._gui_state.last_page = "home"
+        self._save_gui_state()
+        cmd = [sys.executable, "-m", "coc_bot"]
+        if self._dry_run:
+            cmd.append("--dry-run")
+        if self._debug_save_frames:
+            cmd.append("--debug-save-frames")
+        if self._debug:
+            cmd.append("--debug")
+        try:
+            cwd = str(project_root())
+            env = os.environ.copy()
+            # Ensure `python -m coc_bot` finds src/ layouts.
+            src = str(Path(cwd) / "src")
+            if Path(src).is_dir():
+                existing = env.get("PYTHONPATH", "")
+                env["PYTHONPATH"] = src if not existing else f"{src}{os.pathsep}{existing}"
+            subprocess.Popen(cmd, cwd=cwd, env=env)  # noqa: S603
+        except OSError as exc:
+            messagebox.showerror("Restart failed", str(exc), parent=self)
+            return
+        self._append_log("==> Relaunching control window…")
+        self.destroy()
 
     def _copy_logs(self) -> None:
         text = "\n".join(self._log_lines)
@@ -1440,8 +1547,10 @@ class BotControlApp(tk.Tk):
             self._append_log(f"==> Theme → {theme_label(new_theme)}")
         elif dev_changed:
             self._build_settings_page()
+            self._build_tools_page()
             self._append_log(
-                f"==> Dev options {'enabled' if new_dev else 'disabled'} — settings refreshed"
+                f"==> Dev options {'enabled' if new_dev else 'disabled'} — "
+                "Settings/Tools refreshed"
             )
         else:
             # Rebuild paths above already refresh the dirty baseline themselves.
@@ -1720,6 +1829,9 @@ class BotControlApp(tk.Tk):
                 run_btn._allow_while_running = allow_while_running  # type: ignore[attr-defined]
                 self._tool_buttons.append(run_btn)
 
+        if bool(load_config().gui_dev_options):
+            self._build_tools_dev_section(inner)
+
         self._debug_result = tk.StringVar(value="")
         result_label = tk.Label(
             inner,
@@ -1737,6 +1849,64 @@ class BotControlApp(tk.Tk):
         finish_scrollable(inner, canvas)
         self.after_idle(self._sync_wrap_lengths)
         self._update_tool_buttons_state()
+
+    def _build_tools_dev_section(self, inner: tk.Frame) -> None:
+        """Dev-only Tools rows (Settings → Interface → Dev options)."""
+        body = self._section_header(inner, "tools:Dev", "Dev")
+        preview_on = bool(self._gui_state.first_launch_preview)
+        status = "ON" if preview_on else "off"
+        rows = (
+            (
+                "Simulate first launch",
+                "Show Home “Get started” as on a brand-new install. "
+                "Does not wipe calibration or settings. Optionally restarts the window.",
+                "Enter",
+                self._enter_first_launch_preview,
+                True,
+            ),
+            (
+                "Exit first-launch preview",
+                f"Hide Get started and leave preview mode (currently {status}). "
+                "Same as Dismiss on the Home card.",
+                "Exit",
+                lambda: self._exit_first_launch_preview(confirm=True),
+                True,
+            ),
+        )
+        for title, description, button_text, command, allow_while_running in rows:
+            card = self._card(body, padx=8, pady=4 if self._modern else 5)
+            block = tk.Frame(card, bg=theme.SURFACE_2)
+            block.pack(fill=tk.X, padx=14, pady=12)
+            if self._modern:
+                run_btn = self._add_tools_row_modern(
+                    block,
+                    title=title,
+                    description=description,
+                    button_text=button_text,
+                    command=command,
+                )
+            else:
+                run_btn = ttk.Button(
+                    block,
+                    text=title,
+                    style=self._btn_style("Secondary"),
+                    command=command,
+                )
+                run_btn.pack(anchor=tk.W)
+                desc = tk.Label(
+                    block,
+                    text=description,
+                    bg=theme.SURFACE_2,
+                    fg=theme.TEXT_SECONDARY,
+                    font=ui_font(10),
+                    wraplength=400,
+                    justify=tk.LEFT,
+                    anchor="w",
+                )
+                desc.pack(fill=tk.X, pady=(8, 0))
+                self._track_wrap_label(desc, reserve=56, page_id="tools")
+            run_btn._allow_while_running = allow_while_running  # type: ignore[attr-defined]
+            self._tool_buttons.append(run_btn)
 
     def _run_fixit(self, recipe: FixItRecipe) -> None:
         """Run the action tied to a Tools → "If something's wrong" recipe card."""
@@ -1934,6 +2104,7 @@ class BotControlApp(tk.Tk):
             )
             notify("Start blocked", "Required calibration is incomplete — open Setup.")
             self._gui_state.onboarding_dismissed = False
+            # Incomplete setup prompt — not a full first-launch preview session.
             self._save_gui_state()
             self._refresh_home_status()
             self._show_page("setup")
@@ -2434,7 +2605,9 @@ class BotControlApp(tk.Tk):
         )
         missing: MissingCalibration | None = next_missing_calibration(config)
         if missing is not None:
-            base_detail = f"Next required: {missing.label}. {missing.hint}\n\n{base_detail}"
+            base_detail = (
+                f"Next required: {missing.label}\n\n{missing.hint}\n\n{base_detail}"
+            )
         self._calib_detail.set(base_detail)
 
     def _on_calib_select(self, _event=None) -> None:
@@ -2451,33 +2624,32 @@ class BotControlApp(tk.Tk):
                 self._calib_detail.set(step.summary)
                 return
             status = self._calib_tree.set(iid, "status")
-            extra = f"\n{part.description}" if part.description else ""
             opt = " (optional)" if part.optional else ""
             if part_key == "deploy_sequence":
                 how = (
-                    "Recalibrate Selected opens the farm deploy click editor "
-                    "(be on the battlefield first)."
+                    "Recalibrate Selected opens the farm deploy click editor."
                 )
             else:
                 how = (
                     f"Recalibrate Selected runs only “{part.label}” "
                     f"(not the whole “{step.title}” step)."
                 )
-            hint = STEP_SCREEN_HINTS.get(step_id, "")
-            hint_line = f"\n{hint}" if hint else ""
+            instr = format_part_instruction(step_id, part_key)
             self._calib_detail.set(
                 f"{step.title} → {part.label}{opt}\n"
-                f"Status: {status}{extra}{hint_line}\n\n"
+                f"Status: {status}\n\n"
+                f"{instr}\n\n"
                 f"{how}"
             )
             return
         status = self._calib_tree.set(iid, "status")
         parts_line = ", ".join(p.label for p in step.parts) if step.parts else step.summary
-        hint = STEP_SCREEN_HINTS.get(step_id, "")
-        hint_line = f"\n{hint}" if hint else ""
         self._calib_detail.set(
-            f"{step.title} — {status}\n{step.summary}\nParts: {parts_line}{hint_line}\n\n"
-            "Recalibrate Selected runs this whole step (each item can still be denied)."
+            f"{format_step_instruction(step_id)}\n"
+            f"Status: {status}\n"
+            f"Parts: {parts_line}\n\n"
+            "Recalibrate Selected walks through each item in this step "
+            "(you can skip optional ones)."
         )
 
     def _recalibrate_selected(self) -> None:
@@ -2505,10 +2677,10 @@ class BotControlApp(tk.Tk):
         self._run_in_app_step(step_id)
 
     def _maybe_program_deploy_sequence(self) -> bool:
+        instr = part_instruction("farm", "deploy_sequence")
         if not messagebox.askyesno(
             "Program farm deploy",
-            "Enter an unranked battle first, then continue.\n\n"
-            "The bot will pan and open the tap editor. Proceed?",
+            f"{instr.as_text()}\n\nProceed?",
         ):
             return False
         self._run_debug("farm_program_deploy")
@@ -2544,7 +2716,7 @@ class BotControlApp(tk.Tk):
                 self._calib_tree.selection_set(missing.step_id)
         except tk.TclError:
             pass
-        messagebox.showinfo("Calibrate next", f"{missing.label}\n\n{missing.hint}")
+        self._append_log(f"==> Next required: {missing.label}")
         self._run_in_app_calibration(missing.step_id, missing.part.key)
 
     def _run_in_app_step(self, step_id: str, *, ask_optional: bool = True) -> None:
@@ -2579,10 +2751,10 @@ class BotControlApp(tk.Tk):
             config = load_config()
 
         if any(p.key == "deploy_sequence" for p in step.parts):
+            instr = part_instruction("farm", "deploy_sequence")
             if messagebox.askyesno(
                 "Deploy sequence",
-                "Program the farm deploy tap sequence now?\n"
-                "(Be in an unranked battle first.)",
+                f"Program the farm deploy tap sequence now?\n\n{instr.as_text()}",
                 parent=self,
             ):
                 self._run_debug("farm_program_deploy")
@@ -2617,7 +2789,7 @@ class BotControlApp(tk.Tk):
             step = STEPS[step_id]
             if not messagebox.askyesno(
                 "Next step",
-                f"Calibrate “{step.title}”?\n\n{step.summary}",
+                f"Calibrate “{step.title}”?\n\n{format_step_instruction(step_id)}",
                 parent=self,
             ):
                 self._append_log(f"Skipped step {step_id}")

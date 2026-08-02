@@ -85,6 +85,8 @@ class GuiWindowState:
     geometry: str | None = None
     last_page: str = "home"
     onboarding_dismissed: bool = False
+    # Dev: Home Get-started card is forced visible (does not wipe calibration).
+    first_launch_preview: bool = False
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> GuiWindowState:
@@ -98,6 +100,7 @@ class GuiWindowState:
             geometry=geom,
             last_page=page,
             onboarding_dismissed=bool(data.get("onboarding_dismissed", False)),
+            first_launch_preview=bool(data.get("first_launch_preview", False)),
         )
 
 

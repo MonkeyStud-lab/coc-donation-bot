@@ -8,19 +8,11 @@ from typing import Any
 
 from coc_bot.calibration.wizard import STEP_IDS, STEPS, CalibrationPart, part_is_configured
 from coc_bot.config import BotConfig, load_config, normalize_farm_deploy_sequence
+from coc_bot.gui.calib_instructions import STEP_INSTRUCTIONS, part_instruction
 from coc_bot.runtime.game_state import GameState
 
-# Short “be on this screen” tips for Setup.
-STEP_SCREEN_HINTS: dict[str, str] = {
-    "home": "Be on your home village.",
-    "clan_chat": "Open clan chat.",
-    "donation_request": "Show a Donate button in clan chat if you can.",
-    "donation_panel": "Open a donation panel (tap Donate on a request).",
-    "slot_colors": "Keep a donation panel open with colored and grey slots visible.",
-    "grid": "Keep the donation panel open so troop/spell bars are visible.",
-    "farm": "Be on home for Attack taps; enter unranked battle for deploy sequence.",
-    "optional": "Show the loading screen or popup you want to teach.",
-}
+# Step-level “where should I be?” tips (also used by Setup detail panel).
+STEP_SCREEN_HINTS = STEP_INSTRUCTIONS
 
 _LOG_PREFIX_RE = re.compile(
     r"^(?:\d{2}:\d{2}:\d{2}\s*\|\s*[A-Za-z]+\s*\|\s*)?(?:==>\s*)?"
@@ -39,7 +31,7 @@ class MissingCalibration:
 
     @property
     def hint(self) -> str:
-        return STEP_SCREEN_HINTS.get(self.step_id, "Open Clash of Clans where this UI is visible.")
+        return part_instruction(self.step_id, self.part.key).as_text()
 
 
 @dataclass(frozen=True)

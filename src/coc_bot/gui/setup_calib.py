@@ -20,6 +20,7 @@ from coc_bot.calibration.picker import InteractivePicker
 from coc_bot.calibration.template_capture import sample_center_color
 from coc_bot.calibration.wizard import CalibrationPart, STEPS, part_is_configured
 from coc_bot.config import BotConfig, load_config, save_calibrated
+from coc_bot.gui.calib_instructions import format_part_instruction
 from coc_bot.vision.rois import normalize_roi
 
 # Taps that benefit from an image crop + center tap (wizard-style).
@@ -179,12 +180,6 @@ def _calibrate_color(
     part: CalibrationPart,
     refresh: Callable[[], np.ndarray],
 ) -> str:
-    messagebox.showinfo(
-        part.label,
-        f"Draw a small box on a {part.label.lower()}.\n"
-        "The bot samples the center pixel color.",
-        parent=master,
-    )
     result, used = pick_on_master(
         master,
         frame,
@@ -214,12 +209,6 @@ def _calibrate_grid(
             f"Calibrate the donation panel bar ROI ({bar_key or part.key}) first "
             "(Setup → Donation panel)."
         )
-    messagebox.showinfo(
-        part.label,
-        "Draw a box around ALL visible slot cells in this bar "
-        "(top-left, then bottom-right), then Confirm.",
-        parent=master,
-    )
     result, used = pick_on_master(
         master,
         frame,
@@ -257,9 +246,10 @@ def _calibrate_tap(
     if part.key in _TEMPLATE_TAP_KEYS:
         use_crop = messagebox.askyesno(
             part.label,
-            f"Crop an image for “{part.label}” (recommended)?\n\n"
-            "Yes = draw a box (saves template + tap at center).\n"
-            "No = click a single tap point.",
+            f"How do you want to teach “{part.label}”?\n\n"
+            "Yes (recommended) = draw a box around it "
+            "(saves a picture and taps the center).\n"
+            "No = click once in the center of it.",
             parent=master,
         )
         if use_crop:
@@ -379,6 +369,16 @@ def calibrate_part_in_app(master, step_id: str, part_key: str) -> str:
 
     if part.key == "deploy_sequence":
         raise ValueError("Use the farm deploy sequence editor for this part.")
+
+    prep = format_part_instruction(step_id, part.key)
+    if not messagebox.askokcancel(
+        "Get Clash ready",
+        f"{prep}\n\n"
+        "Click OK when Clash looks right — the bot will take a screenshot next.\n"
+        "Cancel to stop.",
+        parent=master,
+    ):
+        raise ValueError("Calibration cancelled")
 
     config = load_config()
     try:

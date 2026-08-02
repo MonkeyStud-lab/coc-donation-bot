@@ -55,6 +55,7 @@ from coc_bot.gui.setup_calib import (
 from coc_bot.gui.theme import (
     active_layout,
     apply_theme,
+    bind_yview_mousewheel,
     finish_scrollable,
     make_scrollable,
     normalize_theme_id,
@@ -968,6 +969,7 @@ class BotControlApp(tk.Tk):
         self._log.configure(yscrollcommand=log_scroll.set)
         self._log.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        bind_yview_mousewheel(self._log)
         self._configure_log_tags()
         self._refresh_home_status()
 
@@ -1267,6 +1269,57 @@ class BotControlApp(tk.Tk):
             self._setting_vars[field.key] = var
             self._attach_setting_hint(block, field, var, side="below")
 
+    def _add_tools_row_modern(
+        self,
+        block: tk.Frame,
+        *,
+        title: str,
+        description: str,
+        button_text: str,
+        command,
+    ) -> ttk.Button:
+        """Settings-style Tools row: wrapped text left, action button right."""
+        block.columnconfigure(0, weight=1)
+        block.columnconfigure(1, weight=0)
+
+        left = tk.Frame(block, bg=theme.SURFACE_2)
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
+
+        title_lbl = tk.Label(
+            left,
+            text=title,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT,
+            font=ui_font(12),
+            anchor="w",
+            justify=tk.LEFT,
+            wraplength=200,
+        )
+        title_lbl.pack(anchor=tk.W, fill=tk.X)
+        desc_lbl = tk.Label(
+            left,
+            text=description,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT_SECONDARY,
+            font=ui_font(10),
+            wraplength=200,
+            justify=tk.LEFT,
+            anchor="w",
+        )
+        desc_lbl.pack(anchor=tk.W, fill=tk.X, pady=(4, 0))
+
+        right = tk.Frame(block, bg=theme.SURFACE_2)
+        right.grid(row=0, column=1, sticky="ne")
+        btn = ttk.Button(
+            right,
+            text=button_text,
+            style=self._btn_style("Secondary"),
+            command=command,
+        )
+        btn.pack(anchor=tk.E)
+        self._bind_modern_row_wrap([title_lbl, desc_lbl], block, right, gap=20)
+        return btn
+
     def _add_setting_row_modern(self, parent: tk.Misc, field, value) -> None:
         """Cursor-like row: title/description left, control right."""
         card = self._card(parent, padx=8, pady=4)
@@ -1517,15 +1570,12 @@ class BotControlApp(tk.Tk):
             style=self._btn_style("Secondary"),
             command=self._refresh_calib_status,
         ).pack(side=tk.LEFT, padx=(8, 0))
-
-        advanced_row = tk.Frame(actions_pad, bg=theme.SURFACE_2)
-        advanced_row.pack(fill=tk.X, pady=(10, 0))
         ttk.Button(
-            advanced_row,
+            actions_pad,
             text="Classic terminal calibrator",
             style=self._btn_style("Secondary"),
             command=self._classic_calibrate_selected,
-        ).pack(side=tk.LEFT)
+        ).pack(side=tk.LEFT, padx=(8, 0))
 
         backups_body = self._section_header(inner, "setup:backups", "Backups")
         backups_card = self._card(backups_body, padx=8, pady=4 if self._modern else 5)
@@ -1604,35 +1654,13 @@ class BotControlApp(tk.Tk):
             block = tk.Frame(card, bg=theme.SURFACE_2)
             block.pack(fill=tk.X, padx=14, pady=12)
             if self._modern:
-                block.columnconfigure(0, weight=1)
-                left = tk.Frame(block, bg=theme.SURFACE_2)
-                left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
-                tk.Label(
-                    left,
-                    text=recipe.title,
-                    bg=theme.SURFACE_2,
-                    fg=theme.TEXT,
-                    font=ui_font(12),
-                    anchor="w",
-                ).pack(fill=tk.X)
-                desc = tk.Label(
-                    left,
-                    text=recipe.body,
-                    bg=theme.SURFACE_2,
-                    fg=theme.TEXT_SECONDARY,
-                    font=ui_font(10),
-                    wraplength=320,
-                    justify=tk.LEFT,
-                    anchor="w",
-                )
-                desc.pack(fill=tk.X, pady=(4, 0))
-                self._track_wrap_label(desc, reserve=180, page_id="tools")
-                ttk.Button(
+                self._add_tools_row_modern(
                     block,
-                    text=recipe.action_label,
-                    style=self._btn_style("Secondary"),
+                    title=recipe.title,
+                    description=recipe.body,
+                    button_text=recipe.action_label,
                     command=lambda r=recipe: self._run_fixit(r),
-                ).grid(row=0, column=1, sticky="ne")
+                )
             else:
                 ttk.Button(
                     block,
@@ -1662,36 +1690,13 @@ class BotControlApp(tk.Tk):
                 block.pack(fill=tk.X, padx=14, pady=12)
                 allow_while_running = action_id == "install_desktop_shortcut"
                 if self._modern:
-                    block.columnconfigure(0, weight=1)
-                    left = tk.Frame(block, bg=theme.SURFACE_2)
-                    left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
-                    tk.Label(
-                        left,
-                        text=label,
-                        bg=theme.SURFACE_2,
-                        fg=theme.TEXT,
-                        font=ui_font(12),
-                        anchor="w",
-                    ).pack(fill=tk.X)
-                    desc = tk.Label(
-                        left,
-                        text=description,
-                        bg=theme.SURFACE_2,
-                        fg=theme.TEXT_SECONDARY,
-                        font=ui_font(10),
-                        wraplength=320,
-                        justify=tk.LEFT,
-                        anchor="w",
-                    )
-                    desc.pack(fill=tk.X, pady=(4, 0))
-                    self._track_wrap_label(desc, reserve=180, page_id="tools")
-                    run_btn = ttk.Button(
+                    run_btn = self._add_tools_row_modern(
                         block,
-                        text="Run",
-                        style=self._btn_style("Secondary"),
+                        title=label,
+                        description=description,
+                        button_text="Run",
                         command=lambda aid=action_id: self._run_debug(aid),
                     )
-                    run_btn.grid(row=0, column=1, sticky="ne")
                 else:
                     run_btn = ttk.Button(
                         block,

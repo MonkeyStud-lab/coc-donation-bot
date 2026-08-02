@@ -709,8 +709,37 @@ def apply_theme(root: tk.Tk | None = None, theme_id: str | None = None) -> ttk.S
     return style
 
 
+def bind_yview_mousewheel(widget: tk.Misc) -> None:
+    """Scroll ``widget`` with the mouse wheel (Treeview / Text / Listbox)."""
+
+    def _on_linux_up(_event: tk.Event) -> str | None:
+        widget.yview_scroll(-3, "units")  # type: ignore[attr-defined]
+        return "break"
+
+    def _on_linux_down(_event: tk.Event) -> str | None:
+        widget.yview_scroll(3, "units")  # type: ignore[attr-defined]
+        return "break"
+
+    def _on_wheel(event: tk.Event) -> str | None:
+        delta = getattr(event, "delta", 0)
+        if delta:
+            # Windows uses multiples of 120; some X11 Tk builds use smaller deltas.
+            steps = int(-1 * (delta / 120)) if abs(delta) >= 120 else (-1 if delta > 0 else 1)
+            widget.yview_scroll(steps, "units")  # type: ignore[attr-defined]
+            return "break"
+        return None
+
+    widget.bind("<MouseWheel>", _on_wheel, add="+")
+    widget.bind("<Button-4>", _on_linux_up, add="+")
+    widget.bind("<Button-5>", _on_linux_down, add="+")
+
+
 def bind_mousewheel(widget: tk.Misc, canvas: tk.Canvas) -> None:
-    """Scroll `canvas` for wheel events on `widget` and its descendants."""
+    """Scroll `canvas` for wheel events on `widget` and its descendants.
+
+    Nested scrollables (``ttk.Treeview``, ``tk.Text``, ``tk.Listbox``) scroll
+    themselves instead of the outer canvas — otherwise the checklist never moves.
+    """
 
     def _on_linux_up(_event: tk.Event) -> str | None:
         canvas.yview_scroll(-3, "units")
@@ -726,7 +755,13 @@ def bind_mousewheel(widget: tk.Misc, canvas: tk.Canvas) -> None:
             return "break"
         return None
 
+    def _is_self_scrolling(w: tk.Misc) -> bool:
+        return isinstance(w, (ttk.Treeview, tk.Text, tk.Listbox))
+
     def _bind_recursive(w: tk.Misc) -> None:
+        if _is_self_scrolling(w):
+            bind_yview_mousewheel(w)
+            return
         w.bind("<MouseWheel>", _on_wheel, add="+")
         w.bind("<Button-4>", _on_linux_up, add="+")
         w.bind("<Button-5>", _on_linux_down, add="+")

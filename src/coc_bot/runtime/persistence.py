@@ -14,6 +14,8 @@ class RuntimeState:
     cycle_count: int
     break_until: str | None = None
     last_farm_at: str | None = None  # UTC ISO timestamp of last successful farm
+    # When set, farm interval clock is frozen at this UTC time (bot stopped).
+    farm_paused_at: str | None = None
     # Rolled wait until the next auto farm (base interval ± variance); None = roll on read.
     next_farm_interval_seconds: int | None = None
     # Rolled session length before break (base limit ± variance); None = roll on read.
@@ -51,6 +53,7 @@ class RuntimeState:
             cycle_count=int(data.get("cycle_count", 0)),
             break_until=data.get("break_until"),
             last_farm_at=data.get("last_farm_at"),
+            farm_paused_at=data.get("farm_paused_at"),
             next_farm_interval_seconds=next_interval,
             next_session_limit_seconds=next_limit,
         )

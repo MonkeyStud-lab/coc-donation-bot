@@ -2523,13 +2523,11 @@ class BotControlApp(tk.Tk):
                 return "due"
             tracker = bot.tracker
         else:
-            # Auto-farm does not run while stopped — freeze the display so it
-            # does not keep counting down from wall-clock time.
-            if self._farm_timer_frozen_text is not None:
-                return self._farm_timer_frozen_text
             from coc_bot.runtime.tracker import RuntimeTracker
 
             tracker = RuntimeTracker(config)
+            # Ensure the persisted farm clock is frozen while stopped (idempotent).
+            tracker.pause_farm_clock()
 
         since = tracker.seconds_since_last_farm()
         interval = tracker.effective_farm_interval_seconds()
@@ -2543,6 +2541,8 @@ class BotControlApp(tk.Tk):
             if text != "due":
                 text = f"{text} · paused"
             self._farm_timer_frozen_text = text
+        else:
+            self._farm_timer_frozen_text = None
         return text
 
     def _break_status(self) -> tuple[bool, float]:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from loguru import logger
@@ -175,6 +175,7 @@ class RuntimeTracker:
     def mark_farm_success(self) -> None:
         """Record that a farm battle was fought (success or post-deploy leave fail)."""
         self.state.last_farm_at = datetime.now(timezone.utc).isoformat()
+        self.state.farm_paused_at = None
         rolled = self._roll_next_farm_interval()
         self.state.next_farm_interval_seconds = rolled
         save_runtime_state(self.state_path, self.state)
@@ -186,6 +187,48 @@ class RuntimeTracker:
             rolled,
             base,
             variance,
+        )
+
+    def pause_farm_clock(self) -> None:
+        """Freeze the farm interval while the bot is stopped (no wall-clock drift)."""
+        if self.state.farm_paused_at:
+            return
+        if not self.state.last_farm_at:
+            return
+        self.state.farm_paused_at = datetime.now(timezone.utc).isoformat()
+        save_runtime_state(self.state_path, self.state)
+        logger.debug("Farm interval clock paused at {}", self.state.farm_paused_at)
+
+    def resume_farm_clock(self) -> None:
+        """
+        Unfreeze the farm interval, preserving remaining wait from when we paused.
+
+        Shifts ``last_farm_at`` forward by the pause duration so Start continues
+        from the same countdown the Home timer showed while stopped.
+        """
+        raw_pause = self.state.farm_paused_at
+        if not raw_pause:
+            return
+        try:
+            paused_at = datetime.fromisoformat(raw_pause)
+        except ValueError:
+            self.state.farm_paused_at = None
+            save_runtime_state(self.state_path, self.state)
+            return
+        now = datetime.now(timezone.utc)
+        if paused_at.tzinfo is None:
+            paused_at = paused_at.replace(tzinfo=timezone.utc)
+        pause_seconds = max(0.0, (now - paused_at).total_seconds())
+        last = self.last_farm_at()
+        if last is not None and pause_seconds > 0:
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            self.state.last_farm_at = (last + timedelta(seconds=pause_seconds)).isoformat()
+        self.state.farm_paused_at = None
+        save_runtime_state(self.state_path, self.state)
+        logger.debug(
+            "Farm interval clock resumed (shifted last_farm_at by {:.0f}s)",
+            pause_seconds,
         )
 
     def _roll_next_farm_interval(self) -> int:
@@ -216,11 +259,24 @@ class RuntimeTracker:
         return rolled
 
     def seconds_since_last_farm(self) -> float | None:
-        """Seconds since last fought farm battle, or None if never farmed."""
+        """Seconds since last fought farm battle, or None if never farmed.
+
+        While the farm clock is paused (bot stopped), uses the pause timestamp
+        as \"now\" so remaining wait does not shrink until Start.
+        """
         last = self.last_farm_at()
         if last is None:
             return None
-        now = datetime.now(timezone.utc)
         if last.tzinfo is None:
             last = last.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        raw_pause = self.state.farm_paused_at
+        if raw_pause:
+            try:
+                paused_at = datetime.fromisoformat(raw_pause)
+                if paused_at.tzinfo is None:
+                    paused_at = paused_at.replace(tzinfo=timezone.utc)
+                now = paused_at
+            except ValueError:
+                pass
         return max(0.0, (now - last).total_seconds())

@@ -202,43 +202,49 @@ class DonationBot:
             raise
 
         self.break_manager.resume_pending_break()
+        self.tracker.resume_farm_clock()
         self.tracker.start_loop_timing()
 
         self.set_mode(BotMode.DONATE)
-        if not self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request):
-            if self._stop_requested:
-                logger.info("Bot stopped")
-                return
-            logger.error("Could not reach clan chat on startup")
-            raise RuntimeError("Could not reach clan chat on startup")
-
-        self.set_mode(BotMode.DONATE)
-        self.game_state.transition(GameState.CLAN_CHAT, reason="startup")
-        self._set_state("scan_chat")
-        self._last_anti_idle = time.monotonic()
-
-        while not self._stop_requested:
-            try:
-                self._loop_tick()
-            except KeyboardInterrupt:
-                logger.info("Shutting down...")
-                self.tracker.tick()
-                break
-            except AdbError as exc:
+        try:
+            if not self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request):
                 if self._stop_requested:
-                    break
-                logger.error("ADB error: {} — reconnecting...", exc)
-                time.sleep(3)
-                self.client.ensure_connected()
-            except Exception as exc:
-                if self._stop_requested:
-                    break
-                logger.exception("Unexpected error: {}", exc)
-                self._recover()
-                time.sleep(2)
+                    logger.info("Bot stopped")
+                    return
+                logger.error("Could not reach clan chat on startup")
+                raise RuntimeError("Could not reach clan chat on startup")
 
-        self.tracker.tick()
-        logger.info("Bot stopped")
+            self.set_mode(BotMode.DONATE)
+            self.game_state.transition(GameState.CLAN_CHAT, reason="startup")
+            self._set_state("scan_chat")
+            self._last_anti_idle = time.monotonic()
+
+            while not self._stop_requested:
+                try:
+                    self._loop_tick()
+                except KeyboardInterrupt:
+                    logger.info("Shutting down...")
+                    self.tracker.tick()
+                    break
+                except AdbError as exc:
+                    if self._stop_requested:
+                        break
+                    logger.error("ADB error: {} — reconnecting...", exc)
+                    time.sleep(3)
+                    self.client.ensure_connected()
+                except Exception as exc:
+                    if self._stop_requested:
+                        break
+                    logger.exception("Unexpected error: {}", exc)
+                    self._recover()
+                    time.sleep(2)
+
+            self.tracker.tick()
+            logger.info("Bot stopped")
+        finally:
+            # Freeze farm interval so Stop → Start keeps the same remaining wait.
+            self.tracker.pause()
+            self.tracker.pause_farm_clock()
 
     def _loop_tick(self) -> None:
         if self._stop_requested:

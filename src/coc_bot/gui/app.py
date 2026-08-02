@@ -111,11 +111,26 @@ class BotControlApp(tk.Tk):
         dry_run: bool = False,
         debug_save_frames: bool = False,
         debug: bool = False,
-        progress: Callable[[float, str], None] | None = None,
+        show_startup_splash: bool = False,
     ) -> None:
-        self._startup_progress = progress
-        self._report_startup(0.50, "Opening window…")
         super().__init__()
+        # Splash teardown can leave tk._default_root pointing at a dead window;
+        # force this app to own Variable() defaults for the whole session.
+        try:
+            tk._default_root = self  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            pass
+        self._startup_splash = None
+        self._startup_progress: Callable[[float, str], None] | None = None
+        if show_startup_splash:
+            # Overlay on this root only — never a second Tk() (breaks StringVars).
+            self.withdraw()
+            from coc_bot.gui.splash import StartupSplash
+
+            self._startup_splash = StartupSplash(master=self)
+            self._startup_progress = self._startup_splash.set
+            self._report_startup(0.50, "Opening window…")
+
         self.title("CoC Donation Bot")
         self.geometry("1040x720")
         self.minsize(860, 600)
@@ -144,27 +159,32 @@ class BotControlApp(tk.Tk):
         self._nav_buttons: dict[str, ttk.Button] = {}
         self._nav_accents: dict[str, tk.Frame] = {}
         self._pages: dict[str, ttk.Frame] = {}
-        self._page_title = tk.StringVar(value="Home")
-        self._page_subtitle = tk.StringVar(value=PAGES[0][2])
+        # Bind vars to this root explicitly (avoids attaching to a destroyed splash Tk).
+        self._page_title = tk.StringVar(master=self, value="Home")
+        self._page_subtitle = tk.StringVar(master=self, value=PAGES[0][2])
         self._status = tk.StringVar(
-            value="Ready — open Waydroid and Clash of Clans, then press Start"
+            master=self,
+            value="Ready — open Waydroid and Clash of Clans, then press Start",
         )
-        self._adb_status_var = tk.StringVar(value="ADB · …")
+        self._adb_status_var = tk.StringVar(master=self, value="ADB · …")
         self._last_adb_ok: bool | None = None
         self._adb_banner: tk.Frame | None = None
         self._onboarding_frame: tk.Frame | None = None
-        self._onboarding_title_var = tk.StringVar(value="Get started")
-        self._onboarding_checklist_var = tk.StringVar(value="")
+        self._onboarding_title_var = tk.StringVar(master=self, value="Get started")
+        self._onboarding_checklist_var = tk.StringVar(master=self, value="")
         self._onboarding_dismiss_btn: ttk.Button | None = None
         self._home_anchor: tk.Misc | None = None
         self._log_lines: list[str] = []
-        self._run_chip_var = tk.StringVar(value="Stopped")
-        self._farm_timer_var = tk.StringVar(value="—")
-        self._break_timer_var = tk.StringVar(value="—")
+        self._run_chip_var = tk.StringVar(master=self, value="Stopped")
+        self._farm_timer_var = tk.StringVar(master=self, value="—")
+        self._break_timer_var = tk.StringVar(master=self, value="—")
+        self._farm_timer_label: tk.Label | None = None
+        self._break_timer_label: tk.Label | None = None
+        self._break_caption_label: tk.Label | None = None
         # Frozen farm countdown while the bot is stopped (wall clock still advances).
         self._farm_timer_frozen_text: str | None = None
-        self._calib_progress = tk.StringVar(value="")
-        self._log_autoscroll = tk.BooleanVar(value=True)
+        self._calib_progress = tk.StringVar(master=self, value="")
+        self._log_autoscroll = tk.BooleanVar(master=self, value=True)
         self._section_collapsed: dict[str, bool] = {}
         self._tool_buttons: list[ttk.Button] = []
         self._settings_canvas: tk.Canvas | None = None
@@ -177,7 +197,9 @@ class BotControlApp(tk.Tk):
 
         # UX polish: practice mode, dirty-settings guard, human activity feed,
         # break warnings, and ADB device picker / auto-reconnect state.
-        self._practice_var = tk.BooleanVar(value=bool(load_config().gui_practice_mode))
+        self._practice_var = tk.BooleanVar(
+            master=self, value=bool(load_config().gui_practice_mode)
+        )
         self._practice_mode = bool(self._practice_var.get())
         self._practice_sync_guard = False
         self._practice_var.trace_add("write", lambda *_a: self._on_practice_toggle())
@@ -186,11 +208,11 @@ class BotControlApp(tk.Tk):
         self._break_warn_sent_for: str | None = None
         self._adb_reconnect_attempts = 0
         self._adb_reconnecting = False
-        self._farm_ready_var = tk.StringVar(value="")
+        self._farm_ready_var = tk.StringVar(master=self, value="")
         self._farm_ready_outer: tk.Frame | None = None
         self._farm_ready_label: tk.Label | None = None
         self._home_timers_frame: tk.Frame | None = None
-        self._break_caption_var = tk.StringVar(value="NEXT BREAK")
+        self._break_caption_var = tk.StringVar(master=self, value="NEXT BREAK")
 
         shell = ttk.Frame(self)
         shell.pack(fill=tk.BOTH, expand=True)
@@ -249,9 +271,7 @@ class BotControlApp(tk.Tk):
         self.after(1000, self._refresh_farm_status)
         self.after(1500, self._poll_adb_status)
         self._install_log_sink()
-        # Hide until splash closes when launched via bootstrap.
-        if self._startup_progress is not None:
-            self.withdraw()
+        self._finish_startup_splash()
 
     def _report_startup(self, fraction: float, message: str) -> None:
         cb = self._startup_progress
@@ -261,14 +281,83 @@ class BotControlApp(tk.Tk):
             except Exception:  # noqa: BLE001
                 pass
 
-    def reveal(self) -> None:
-        """Show the main window after the startup splash is dismissed."""
+    def _str_var(self, value: str = "") -> tk.StringVar:
+        """StringVar pinned to this app root (safe after splash teardown)."""
+        return tk.StringVar(master=self, value=value)
+
+    def _bool_var(self, value: bool = False) -> tk.BooleanVar:
+        """BooleanVar pinned to this app root (safe after splash teardown)."""
+        return tk.BooleanVar(master=self, value=bool(value))
+
+    def _finish_startup_splash(self) -> None:
+        """Close the overlay splash and show the main window."""
+        self._report_startup(1.0, "Ready")
+        splash = self._startup_splash
+        self._startup_splash = None
+        self._startup_progress = None
+        if splash is not None:
+            splash.close()
+        # Recreate Home live vars on this root after any splash teardown.
+        self._rebind_home_live_vars()
         try:
             self.deiconify()
             self.lift()
             self.focus_force()
         except tk.TclError:
             pass
+        try:
+            self._push_home_timers()
+            self._sync_run_chip()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _rebind_home_live_vars(self) -> None:
+        """Point chip/timer labels at fresh StringVars owned by this Tk root."""
+        try:
+            tk._default_root = self  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            pass
+        self._run_chip_var = self._str_var("Stopped")
+        self._farm_timer_var = self._str_var("—")
+        self._break_timer_var = self._str_var("—")
+        self._break_caption_var = self._str_var("NEXT BREAK")
+        pairs = (
+            ("_run_chip", self._run_chip_var),
+            ("_farm_timer_label", self._farm_timer_var),
+            ("_break_timer_label", self._break_timer_var),
+            ("_break_caption_label", self._break_caption_var),
+        )
+        for attr, var in pairs:
+            widget = getattr(self, attr, None)
+            if widget is None:
+                continue
+            try:
+                if widget.winfo_exists():
+                    widget.configure(textvariable=var)
+            except tk.TclError:
+                continue
+
+    def _push_home_timers(self) -> None:
+        """Update farm/break timer StringVars once (no reschedule)."""
+        try:
+            self._farm_timer_var.set(self._farm_timer_text())
+        except Exception:  # noqa: BLE001
+            try:
+                self._farm_timer_var.set("—")
+            except tk.TclError:
+                pass
+        try:
+            on_break, remaining = self._break_status()
+            self._break_timer_var.set(
+                "due" if (not on_break and remaining <= 0) else format_countdown(remaining)
+            )
+            self._break_caption_var.set(break_timer_caption(on_break=on_break))
+            self._maybe_warn_break_soon(on_break=on_break, remaining=remaining)
+        except Exception:  # noqa: BLE001
+            try:
+                self._break_timer_var.set("—")
+            except tk.TclError:
+                pass
 
     @staticmethod
     def _window_geometry_path() -> Path:
@@ -919,33 +1008,36 @@ class BotControlApp(tk.Tk):
             font=ui_font(9, "bold"),
             anchor="w",
         ).pack(anchor=tk.W)
-        tk.Label(
+        self._farm_timer_label = tk.Label(
             farm_cell,
             textvariable=self._farm_timer_var,
             bg=theme.SURFACE_2,
             fg=theme.TEXT,
             font=ui_font(12, "bold"),
             anchor="w",
-        ).pack(anchor=tk.W)
+        )
+        self._farm_timer_label.pack(anchor=tk.W)
 
         break_cell = tk.Frame(timers, bg=theme.SURFACE_2)
         break_cell.grid(row=0, column=1, sticky="w", padx=(16, 0))
-        tk.Label(
+        self._break_caption_label = tk.Label(
             break_cell,
             textvariable=self._break_caption_var,
             bg=theme.SURFACE_2,
             fg=theme.TEXT_SECONDARY,
             font=ui_font(9, "bold"),
             anchor="w",
-        ).pack(anchor=tk.W)
-        tk.Label(
+        )
+        self._break_caption_label.pack(anchor=tk.W)
+        self._break_timer_label = tk.Label(
             break_cell,
             textvariable=self._break_timer_var,
             bg=theme.SURFACE_2,
             fg=theme.TEXT,
             font=ui_font(12, "bold"),
             anchor="w",
-        ).pack(anchor=tk.W)
+        )
+        self._break_timer_label.pack(anchor=tk.W)
 
         log_card = self._card(page, fill=tk.BOTH, expand=True)
         log_pad = tk.Frame(log_card, bg=theme.SURFACE_2)
@@ -1459,11 +1551,11 @@ class BotControlApp(tk.Tk):
         self._track_wrap_label(desc, reserve=56, page_id="settings")
 
         if field.kind == "bool":
-            var: tk.Variable = tk.BooleanVar(value=bool(value))
+            var: tk.Variable = self._bool_var(bool(value))
             ttk.Checkbutton(block, text="Enabled", variable=var).pack(anchor=tk.W)
             self._setting_vars[field.key] = var
         elif field.kind == "choice":
-            var = tk.StringVar(value=str(value))
+            var = self._str_var(str(value))
             box = ttk.Combobox(
                 block,
                 textvariable=var,
@@ -1474,7 +1566,7 @@ class BotControlApp(tk.Tk):
             box.pack(anchor=tk.W)
             self._setting_vars[field.key] = var
         else:
-            var = tk.StringVar(value=str(value))
+            var = self._str_var(str(value))
             entry = ttk.Entry(block, textvariable=var, width=42)
             entry.pack(anchor=tk.W, ipady=2)
             self._setting_vars[field.key] = var
@@ -1569,11 +1661,11 @@ class BotControlApp(tk.Tk):
         right.grid(row=0, column=1, sticky="ne")
 
         if field.kind == "bool":
-            var = tk.BooleanVar(value=bool(value))
+            var = self._bool_var(bool(value))
             ToggleSwitch(right, var, bg=theme.SURFACE_2).pack(anchor=tk.E, pady=(2, 0))
             self._setting_vars[field.key] = var
         elif field.kind == "choice":
-            var = tk.StringVar(value=str(value))
+            var = self._str_var(str(value))
             box = ttk.Combobox(
                 right,
                 textvariable=var,
@@ -1586,7 +1678,7 @@ class BotControlApp(tk.Tk):
             box.pack(anchor=tk.E)
             self._setting_vars[field.key] = var
         else:
-            var = tk.StringVar(value=str(value))
+            var = self._str_var(str(value))
             width = 12 if field.kind in ("int", "float") else 18
             control_row = tk.Frame(right, bg=theme.SURFACE_2)
             control_row.pack(anchor=tk.E)
@@ -1738,7 +1830,7 @@ class BotControlApp(tk.Tk):
         self._calib_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self._calib_detail = tk.StringVar(value="")
+        self._calib_detail = self._str_var("")
         detail_pad = tk.Frame(tree_card, bg=theme.SURFACE_2)
         detail_pad.pack(fill=tk.X, padx=14, pady=(0, 12))
         calib_detail = tk.Label(
@@ -1936,7 +2028,7 @@ class BotControlApp(tk.Tk):
         if bool(load_config().gui_dev_options):
             self._build_tools_dev_section(inner)
 
-        self._debug_result = tk.StringVar(value="")
+        self._debug_result = self._str_var("")
         result_label = tk.Label(
             inner,
             textvariable=self._debug_result,
@@ -2502,20 +2594,14 @@ class BotControlApp(tk.Tk):
 
     def _refresh_farm_status(self) -> None:
         try:
-            self._farm_timer_var.set(self._farm_timer_text())
-        except Exception:  # noqa: BLE001
-            self._farm_timer_var.set("—")
-        try:
-            on_break, remaining = self._break_status()
-            self._break_timer_var.set(
-                "due" if (not on_break and remaining <= 0) else format_countdown(remaining)
-            )
-            self._break_caption_var.set(break_timer_caption(on_break=on_break))
-            self._maybe_warn_break_soon(on_break=on_break, remaining=remaining)
-        except Exception:  # noqa: BLE001
-            self._break_timer_var.set("—")
-        self._sync_run_chip()
-        self.after(2000, self._refresh_farm_status)
+            self._push_home_timers()
+            self._sync_run_chip()
+        finally:
+            # Always reschedule — a dead StringVar must not stop the timer loop.
+            try:
+                self.after(2000, self._refresh_farm_status)
+            except tk.TclError:
+                pass
 
     def _sync_run_chip(self) -> None:
         if not hasattr(self, "_run_chip"):

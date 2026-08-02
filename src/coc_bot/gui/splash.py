@@ -7,10 +7,24 @@ from tkinter import ttk
 
 
 class StartupSplash:
-    """Indeterminate-friendly determinate progress window shown before the main GUI."""
+    """
+    Progress window shown while the GUI loads.
 
-    def __init__(self) -> None:
-        self.root = tk.Tk()
+    - ``master is None``: owns a temporary ``tk.Tk`` (import phase only).
+    - ``master`` set: ``Toplevel`` on the real app root (safe for StringVars).
+    """
+
+    def __init__(self, master: tk.Misc | None = None) -> None:
+        self._owns_root = master is None
+        if master is None:
+            self.root = tk.Tk()
+        else:
+            self.root = tk.Toplevel(master)
+            try:
+                self.root.transient(master)
+            except tk.TclError:
+                pass
+
         self.root.title("CoC Donation Bot")
         self.root.resizable(False, False)
         self.root.configure(bg="#1b2838")
@@ -30,7 +44,7 @@ class StartupSplash:
             font=("Segoe UI", 14, "bold"),
         ).pack(anchor=tk.W)
 
-        self._status = tk.StringVar(value="Starting…")
+        self._status = tk.StringVar(master=self.root, value="Starting…")
         tk.Label(
             frame,
             textvariable=self._status,
@@ -39,7 +53,7 @@ class StartupSplash:
             font=("Segoe UI", 10),
         ).pack(anchor=tk.W, pady=(8, 12))
 
-        self._value = tk.DoubleVar(value=0.0)
+        self._value = tk.DoubleVar(master=self.root, value=0.0)
         style = ttk.Style(self.root)
         try:
             style.theme_use("clam")

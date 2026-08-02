@@ -149,7 +149,7 @@ class SequencePicker:
         jitter_row = ttk.Frame(self.root, padding=(6, 0, 6, 4))
         jitter_row.pack(side=tk.TOP, fill=tk.X)
         ttk.Label(jitter_row, text="Farm deploy jitter (px):").pack(side=tk.LEFT)
-        self._jitter_var = tk.IntVar(value=self.jitter_px)
+        self._jitter_var = tk.IntVar(master=self.root, value=self.jitter_px)
         self._jitter_label = ttk.Label(jitter_row, text=str(self.jitter_px), width=4)
         self._jitter_label.pack(side=tk.LEFT, padx=(4, 8))
         self._jitter_scale = ttk.Scale(

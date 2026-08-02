@@ -206,7 +206,7 @@ def _calibrate_grid(
     bar_key = GRID_BAR_ROI_KEYS.get(part.key)
     if not bar_key or bar_key not in config.rois:
         raise ValueError(
-            f"Calibrate the donation panel bar ROI ({bar_key or part.key}) first "
+            f"Calibrate the donation panel bar area ({bar_key or part.key}) first "
             "(Setup → Donation panel)."
         )
     result, used = pick_on_master(

@@ -124,7 +124,7 @@ Every screen size is a bit different. Calibration shows a screenshot so you can 
 
 1. Open Waydroid and Clash of Clans (home village or clan chat as needed).
 2. In the app, open **Setup**.
-3. Select a step or part → **Recalibrate Selected**, or use **Recalibrate All** for a full walkthrough. Everything uses an **in-app picker** (taps, ROIs, templates, slot colors, grid). **Classic terminal calibrator** is optional.
+3. Select a step or part → **Recalibrate Selected**, or use **Recalibrate All** for a full walkthrough. Everything uses an **in-app picker** (taps, screen areas, templates, slot colors, grid). **Classic terminal calibrator** is optional.
 4. Finish all required steps (Home Get started checklist turns green when ADB + required calibration are OK). Tip: **Backup calibration** before experimenting.
 
 Files land under `data/calibrated.yaml` and `data/templates/`.

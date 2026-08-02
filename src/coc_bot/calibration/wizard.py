@@ -91,13 +91,13 @@ STEPS: dict[str, CalibrationStep] = {
         (
             CalibrationPart(
                 "chat_panel",
-                "Chat panel ROI",
+                "Chat panel area",
                 "roi",
                 description="Open clan chat — box the whole chat panel",
             ),
             CalibrationPart(
                 "chat_requests",
-                "Chat requests ROI",
+                "Donate requests area",
                 "roi",
                 description="Open clan chat — box where Donate requests appear",
             ),
@@ -159,13 +159,13 @@ STEPS: dict[str, CalibrationStep] = {
             ),
             CalibrationPart(
                 "donation_troop_bar",
-                "Troop + siege bar ROI",
+                "Troop + siege bar area",
                 "roi",
                 description="Donation panel open — box the troop + siege icon row",
             ),
             CalibrationPart(
                 "donation_spell_bar",
-                "Spell bar ROI",
+                "Spell bar area",
                 "roi",
                 description="Donation panel open — box the spell icon row",
             ),
@@ -723,9 +723,9 @@ class CalibrationWizard:
         frame = self.capture.screenshot()
 
         if self._want_part("chat_panel"):
-            self._maybe_update_roi("chat_panel", "chat panel ROI", w, h)
+            self._maybe_update_roi("chat_panel", "chat panel area", w, h)
         if self._want_part("chat_requests"):
-            self._maybe_update_roi("chat_requests", "chat requests ROI", w, h)
+            self._maybe_update_roi("chat_requests", "donate requests area", w, h)
 
         if self._want_part("clan_chat"):
             print(
@@ -844,10 +844,10 @@ class CalibrationWizard:
             )
         if self._want_part("donation_troop_bar"):
             self._maybe_update_roi(
-                "donation_troop_bar", "troop donation bar ROI (troops + siege)", w, h
+                "donation_troop_bar", "troop + siege bar area", w, h
             )
         if self._want_part("donation_spell_bar"):
-            self._maybe_update_roi("donation_spell_bar", "spell donation bar ROI", w, h)
+            self._maybe_update_roi("donation_spell_bar", "spell bar area", w, h)
 
         # Legacy — siege shared troop bar in current CoC UI
         self.config.rois.pop("donation_siege_bar", None)

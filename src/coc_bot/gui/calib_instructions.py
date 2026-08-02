@@ -210,7 +210,7 @@ PART_INSTRUCTIONS: dict[str, CalibInstruction] = {
     "troop_bar": CalibInstruction(
         prepare=(
             "OPEN the donation panel so the troop + siege icons are visible.\n"
-            "(Calibrate the troop bar ROI in Donation panel first if this fails.)"
+            "(Calibrate the troop + siege bar area in Donation panel first if this fails.)"
         ),
         do=(
             "Draw a box around ALL visible troop/siege slot cells "
@@ -221,7 +221,7 @@ PART_INSTRUCTIONS: dict[str, CalibInstruction] = {
     "spell_bar": CalibInstruction(
         prepare=(
             "OPEN the donation panel so the spell icons are visible.\n"
-            "(Calibrate the spell bar ROI in Donation panel first if this fails.)"
+            "(Calibrate the spell bar area in Donation panel first if this fails.)"
         ),
         do=(
             "Draw a box around ALL visible spell slot cells, Confirm, "

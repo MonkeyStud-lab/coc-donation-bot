@@ -16,14 +16,11 @@ def run_gui(
     """
     Show a loading bar, then open the control window.
 
-    Import-phase splash uses a disposable root that is fully destroyed before
-    ``BotControlApp`` is constructed. Leaving that root as tk's default made
-    later StringVars (Home chip/timers, Settings entries, Setup/Tools labels)
-    attach to a dead window and stop updating.
+    Import-phase splash owns its own temporary Tk (so it stays visible), then
+    that root is destroyed before ``BotControlApp`` is constructed. App
+    StringVars must use ``master=app`` so they never attach to the splash.
     """
-    boot = tk.Tk()
-    boot.withdraw()
-    splash = StartupSplash(master=boot)
+    splash = StartupSplash()
     try:
         splash.set(0.05, "Starting…")
         splash.set(0.15, "Loading libraries (OpenCV)…")
@@ -36,11 +33,6 @@ def run_gui(
             splash.close()
         except Exception:  # noqa: BLE001
             pass
-        try:
-            boot.destroy()
-        except Exception:  # noqa: BLE001
-            pass
-        # Ensure the next Tk() becomes the sole default root.
         try:
             tk._default_root = None  # type: ignore[attr-defined]
         except Exception:  # noqa: BLE001

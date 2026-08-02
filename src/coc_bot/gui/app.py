@@ -123,13 +123,19 @@ class BotControlApp(tk.Tk):
         self._startup_splash = None
         self._startup_progress: Callable[[float, str], None] | None = None
         if show_startup_splash:
-            # Overlay on this root only — never a second Tk() (breaks StringVars).
+            # Hide the main shell; splash uses its own Tk so the bar stays visible.
+            # App StringVars must keep master=self (see _str_var / _bool_var).
             self.withdraw()
             from coc_bot.gui.splash import StartupSplash
 
-            self._startup_splash = StartupSplash(master=self)
+            self._startup_splash = StartupSplash()
             self._startup_progress = self._startup_splash.set
             self._report_startup(0.50, "Opening window…")
+            # Re-assert ownership after splash creates its temporary Tk.
+            try:
+                tk._default_root = self  # type: ignore[attr-defined]
+            except Exception:  # noqa: BLE001
+                pass
 
         self.title("CoC Donation Bot")
         self.geometry("1040x720")

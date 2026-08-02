@@ -17,6 +17,7 @@ class StartupSplash:
     def __init__(self, master: tk.Misc | None = None) -> None:
         self._owns_root = master is None
         if master is None:
+            # Own Tk so the bar stays visible even when the app root is withdrawn.
             self.root = tk.Tk()
         else:
             self.root = tk.Toplevel(master)
@@ -30,6 +31,11 @@ class StartupSplash:
         self.root.configure(bg="#1b2838")
         try:
             self.root.attributes("-topmost", True)
+        except tk.TclError:
+            pass
+        try:
+            self.root.deiconify()
+            self.root.lift()
         except tk.TclError:
             pass
 

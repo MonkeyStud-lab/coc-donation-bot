@@ -203,14 +203,14 @@ GUI one-shot farm (**Farm attack now** without Start) wires the same stop flag i
 
 | Page | Role |
 |------|------|
-| Home | Start / Stop, Connect ADB / Pick device, Get started, calibrate what’s missing, practice mode, farm readiness, live status, human activity feed + raw log, copy/export debug |
+| Home | Start / Stop, Connect ADB / Pick device, Get started, calibrate what’s missing, practice mode, farm readiness, status chip, activity log, copy/export debug |
 | Settings | Fields from `gui/settings_fields.py` → `user_settings.yaml`; Timing presets, practice mode, Dev options; unsaved-change guard; Apply & restart when bot is running |
 | Setup | Full in-app pickers + Recalibrate All; screen hints; backup/restore; classic terminal fallback |
 | Tools | Fix-it recipes + one-shot debug actions (`gui/debug_actions.py`); desktop shortcut |
 
 Window chrome (`last_page`, geometry, onboarding dismissed) lives in `data/gui_window.json`. Timing / practice / Dev options live under `gui:` in `user_settings.yaml`. Desktop toasts use `gui/notify.py` (`notify-send`). ADB auto-reconnects while the bot runs if the link drops.
 
-Activity log is a loguru sink; a parallel “What’s happening” feed shows plain-language lines (`Activity:` / `humanize_log_line`). **Show DEBUG messages in activity log** controls raw DEBUG noise (default off).
+Activity log is a loguru sink. The Play status chip shows the current phase (watching chat / donating / farming / break). **Show DEBUG messages in activity log** controls raw DEBUG noise (default off).
 
 ---
 

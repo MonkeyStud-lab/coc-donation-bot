@@ -10,7 +10,7 @@ import sys
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, scrolledtext, ttk
+from tkinter import messagebox, ttk
 
 from loguru import logger
 
@@ -32,7 +32,9 @@ from coc_bot.config import (
 from coc_bot.gui.calib_backup import (
     CalibrationBackup,
     create_backup,
+    delete_backup,
     list_backups,
+    rename_backup,
     restore_backup,
 )
 from coc_bot.gui.debug_actions import DEBUG_GROUPS, DebugSession, run_debug_action
@@ -75,7 +77,6 @@ from coc_bot.gui.ux_helpers import (
     STEP_SCREEN_HINTS,
     break_timer_caption,
     farm_readiness,
-    humanize_log_line,
     live_status_label,
     next_missing_calibration,
     settings_snapshot,
@@ -154,6 +155,7 @@ class BotControlApp(tk.Tk):
         self._tool_buttons: list[ttk.Button] = []
         self._settings_canvas: tk.Canvas | None = None
         self._tools_canvas: tk.Canvas | None = None
+        self._setup_canvas: tk.Canvas | None = None
         self._sidebar_chrome: list[tk.Misc] = []
         self._statusbar_chrome: list[tk.Misc] = []
         # (page_id, label, horizontal reserve px) — wraplength tracks content width.
@@ -167,12 +169,9 @@ class BotControlApp(tk.Tk):
         self._practice_var.trace_add("write", lambda *_a: self._on_practice_toggle())
         self._settings_dirty = False
         self._settings_baseline: dict[str, str] | None = None
-        self._human_lines: list[str] = []
-        self._human_log: scrolledtext.ScrolledText | None = None
         self._break_warn_sent_for: str | None = None
         self._adb_reconnect_attempts = 0
         self._adb_reconnecting = False
-        self._live_status_var = tk.StringVar(value="")
         self._farm_ready_var = tk.StringVar(value="")
         self._farm_ready_outer: tk.Frame | None = None
         self._farm_ready_label: tk.Label | None = None
@@ -658,8 +657,8 @@ class BotControlApp(tk.Tk):
         return body
 
     def _refresh_scroll_regions(self) -> None:
-        """Update scrollregion for Settings/Tools canvases after collapse toggles."""
-        for canvas in (self._settings_canvas, self._tools_canvas):
+        """Update scrollregion for Settings/Tools/Setup canvases after collapse toggles."""
+        for canvas in (self._settings_canvas, self._tools_canvas, self._setup_canvas):
             if canvas is None:
                 continue
             try:
@@ -805,19 +804,6 @@ class BotControlApp(tk.Tk):
         ).pack(side=tk.LEFT, padx=(0, 6))
         ToggleSwitch(practice_row, self._practice_var, bg=theme.SURFACE_2).pack(side=tk.LEFT)
 
-        status_row = tk.Frame(pad, bg=theme.SURFACE_2)
-        status_row.pack(fill=tk.X, pady=(4, 0))
-        status_label = tk.Label(
-            status_row,
-            textvariable=self._live_status_var,
-            bg=theme.SURFACE_2,
-            fg=theme.TEXT_SECONDARY,
-            font=ui_font(9),
-            anchor="w",
-        )
-        status_label.pack(anchor=tk.W, fill=tk.X)
-        self._track_wrap_label(status_label, reserve=40, page_id="home")
-
         primary = tk.Frame(pad, bg=theme.SURFACE_2)
         primary.pack(fill=tk.X, pady=(12, 0))
         primary.columnconfigure(0, weight=1, uniform="home_play")
@@ -960,33 +946,11 @@ class BotControlApp(tk.Tk):
         ToggleSwitch(autoscroll_row, self._log_autoscroll, bg=theme.SURFACE_2).pack(
             side=tk.LEFT
         )
-        tk.Label(
-            log_pad,
-            text="What's happening",
-            bg=theme.SURFACE_2,
-            fg=theme.TEXT_SECONDARY,
-            font=ui_font(10, "bold"),
-            anchor="w",
-        ).pack(fill=tk.X, pady=(10, 4))
-        self._human_log = scrolledtext.ScrolledText(
-            log_pad,
-            height=4,
-            state=tk.DISABLED,
-            wrap=tk.WORD,
-            font=ui_font(10),
-            bg=theme.LOG_BG,
-            fg=theme.LOG_FG,
-            insertbackground=theme.LOG_FG,
-            relief=tk.FLAT,
-            borderwidth=0,
-            highlightthickness=0,
-            padx=12,
-            pady=8,
-        )
-        self._human_log.pack(fill=tk.X)
-        self._render_human_log()
-        self._log = scrolledtext.ScrolledText(
-            log_pad,
+        # Use ttk.Scrollbar (themed) instead of ScrolledText's native grey bar.
+        log_wrap = tk.Frame(log_pad, bg=theme.SURFACE_2)
+        log_wrap.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+        self._log = tk.Text(
+            log_wrap,
             height=18,
             state=tk.DISABLED,
             wrap=tk.WORD,
@@ -1000,7 +964,10 @@ class BotControlApp(tk.Tk):
             padx=12,
             pady=10,
         )
-        self._log.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+        log_scroll = ttk.Scrollbar(log_wrap, orient=tk.VERTICAL, command=self._log.yview)
+        self._log.configure(yscrollcommand=log_scroll.set)
+        self._log.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self._configure_log_tags()
         self._refresh_home_status()
 
@@ -1448,107 +1415,20 @@ class BotControlApp(tk.Tk):
 
     def _build_setup_page(self) -> None:
         page = self._pages["setup"]
-        tk.Label(
-            page,
-            text="Calibration teaches the bot where buttons and bars are on your screen. "
-            "Select a step or part, then Recalibrate Selected — everything runs in-app "
-            "(taps, ROIs, templates, slot colors, grid). Classic terminal is an optional "
-            "fallback. Open Waydroid and Clash first. Farm deploy: Farm → Deploy tap "
-            "sequence (be in battle first).",
-            bg=theme.BG,
-            fg=theme.TEXT_SECONDARY,
-            font=ui_font(10),
-            wraplength=720,
-            justify=tk.LEFT,
-            anchor="w",
-        ).pack(fill=tk.X, pady=(0, 12))
+        for child in page.winfo_children():
+            child.destroy()
+        self._clear_wrap_labels("setup")
 
-        tk.Label(
-            page,
-            textvariable=self._calib_progress,
-            bg=theme.BG,
-            fg=theme.ACCENT,
-            font=ui_font(11, "bold"),
-            anchor="w",
-        ).pack(fill=tk.X, pady=(0, 8))
+        canvas, inner = make_scrollable(page)
+        self._setup_canvas = canvas
 
-        card = self._card(page, pady=(0, 10))
-        tree_wrap = tk.Frame(card, bg=theme.SURFACE_2)
-        tree_wrap.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
-
-        cols = ("item", "status")
-        self._calib_tree = ttk.Treeview(
-            tree_wrap,
-            columns=cols,
-            show="tree headings",
-            height=14,
-            selectmode="browse",
-        )
-        self._calib_tree.heading("#0", text="Step / part")
-        self._calib_tree.heading("item", text="Key")
-        self._calib_tree.heading("status", text="Status")
-        self._calib_tree.column("#0", width=380, stretch=True)
-        # Narrowed — the internal key is jargon; the detail panel below spells
-        # out what to do in plain language when a part is selected.
-        self._calib_tree.column("item", width=90, stretch=False)
-        self._calib_tree.column("status", width=110, stretch=False)
-        scroll = ttk.Scrollbar(tree_wrap, orient=tk.VERTICAL, command=self._calib_tree.yview)
-        self._calib_tree.configure(yscrollcommand=scroll.set)
-        self._calib_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        row = tk.Frame(page, bg=theme.BG)
-        row.pack(fill=tk.X, pady=(4, 0))
-        ttk.Button(
-            row,
-            text="Refresh",
-            style=self._btn_style("Secondary"),
-            command=self._refresh_calib_status,
-        ).pack(side=tk.LEFT)
-        ttk.Button(
-            row,
-            text="Recalibrate Selected",
-            style=self._btn_style("Secondary"),
-            command=self._recalibrate_selected,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(
-            row,
-            text="Recalibrate All",
-            style=self._btn_style("Accent"),
-            command=self._recalibrate_all,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(
-            row,
-            text="Classic terminal calibrator",
-            style=self._btn_style("Secondary"),
-            command=self._classic_calibrate_selected,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-
-        row2 = tk.Frame(page, bg=theme.BG)
-        row2.pack(fill=tk.X, pady=(8, 0))
-        ttk.Button(
-            row2,
-            text="Backup calibration",
-            style=self._btn_style("Secondary"),
-            command=self._backup_calibration,
-        ).pack(side=tk.LEFT)
-        ttk.Button(
-            row2,
-            text="Restore calibration",
-            style=self._btn_style("Secondary"),
-            command=self._restore_calibration,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(
-            row2,
-            text="Calibrate what's missing",
-            style=self._btn_style("Accent"),
-            command=self.calibrate_whats_missing,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-
-        self._calib_detail = tk.StringVar(value="")
-        calib_detail = tk.Label(
-            page,
-            textvariable=self._calib_detail,
+        intro = tk.Frame(inner, bg=theme.BG)
+        intro.pack(fill=tk.X, padx=8, pady=(4, 4))
+        intro_label = tk.Label(
+            intro,
+            text="Teach the bot where buttons and bars are on your screen. "
+            "Open Waydroid and Clash first, pick a step or part below, then "
+            "Recalibrate Selected. Everything runs in-app; Classic terminal is optional.",
             bg=theme.BG,
             fg=theme.TEXT_SECONDARY,
             font=ui_font(10),
@@ -1556,9 +1436,142 @@ class BotControlApp(tk.Tk):
             justify=tk.LEFT,
             anchor="w",
         )
-        calib_detail.pack(fill=tk.X, pady=(12, 0))
-        self._track_wrap_label(calib_detail, reserve=40, page_id="setup")
+        intro_label.pack(fill=tk.X, pady=(0, 4))
+        self._track_wrap_label(intro_label, reserve=40, page_id="setup")
+        progress_label = tk.Label(
+            intro,
+            textvariable=self._calib_progress,
+            bg=theme.BG,
+            fg=theme.ACCENT,
+            font=ui_font(11, "bold"),
+            anchor="w",
+        )
+        progress_label.pack(fill=tk.X, pady=(0, 8))
+
+        checklist_body = self._section_header(inner, "setup:checklist", "Checklist")
+        tree_card = self._card(checklist_body, padx=8, pady=4 if self._modern else 5)
+        tree_wrap = tk.Frame(tree_card, bg=theme.SURFACE_2)
+        tree_wrap.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        cols = ("status",)
+        self._calib_tree = ttk.Treeview(
+            tree_wrap,
+            columns=cols,
+            show="tree headings",
+            height=12,
+            selectmode="browse",
+        )
+        self._calib_tree.heading("#0", text="Step / part")
+        self._calib_tree.heading("status", text="Status")
+        self._calib_tree.column("#0", width=420, stretch=True)
+        self._calib_tree.column("status", width=110, stretch=False)
+        tree_scroll = ttk.Scrollbar(
+            tree_wrap, orient=tk.VERTICAL, command=self._calib_tree.yview
+        )
+        self._calib_tree.configure(yscrollcommand=tree_scroll.set)
+        self._calib_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self._calib_detail = tk.StringVar(value="")
+        detail_pad = tk.Frame(tree_card, bg=theme.SURFACE_2)
+        detail_pad.pack(fill=tk.X, padx=14, pady=(0, 12))
+        calib_detail = tk.Label(
+            detail_pad,
+            textvariable=self._calib_detail,
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT_SECONDARY,
+            font=ui_font(10),
+            wraplength=400,
+            justify=tk.LEFT,
+            anchor="w",
+        )
+        calib_detail.pack(fill=tk.X)
+        self._track_wrap_label(calib_detail, reserve=56, page_id="setup")
         self._calib_tree.bind("<<TreeviewSelect>>", self._on_calib_select)
+
+        actions_body = self._section_header(inner, "setup:actions", "Calibrate")
+        actions_card = self._card(actions_body, padx=8, pady=4 if self._modern else 5)
+        actions_pad = tk.Frame(actions_card, bg=theme.SURFACE_2)
+        actions_pad.pack(fill=tk.X, padx=14, pady=12)
+        ttk.Button(
+            actions_pad,
+            text="Calibrate what's missing",
+            style=self._btn_style("Accent"),
+            command=self.calibrate_whats_missing,
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            actions_pad,
+            text="Recalibrate Selected",
+            style=self._btn_style("Secondary"),
+            command=self._recalibrate_selected,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            actions_pad,
+            text="Recalibrate All",
+            style=self._btn_style("Secondary"),
+            command=self._recalibrate_all,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            actions_pad,
+            text="Refresh",
+            style=self._btn_style("Secondary"),
+            command=self._refresh_calib_status,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+
+        advanced_row = tk.Frame(actions_pad, bg=theme.SURFACE_2)
+        advanced_row.pack(fill=tk.X, pady=(10, 0))
+        ttk.Button(
+            advanced_row,
+            text="Classic terminal calibrator",
+            style=self._btn_style("Secondary"),
+            command=self._classic_calibrate_selected,
+        ).pack(side=tk.LEFT)
+
+        backups_body = self._section_header(inner, "setup:backups", "Backups")
+        backups_card = self._card(backups_body, padx=8, pady=4 if self._modern else 5)
+        backups_pad = tk.Frame(backups_card, bg=theme.SURFACE_2)
+        backups_pad.pack(fill=tk.X, padx=14, pady=12)
+        backups_hint = tk.Label(
+            backups_pad,
+            text="Snapshots of calibrated.yaml + templates under data/calibration_backups/.",
+            bg=theme.SURFACE_2,
+            fg=theme.TEXT_SECONDARY,
+            font=ui_font(10),
+            wraplength=400,
+            justify=tk.LEFT,
+            anchor="w",
+        )
+        backups_hint.pack(fill=tk.X, pady=(0, 10))
+        self._track_wrap_label(backups_hint, reserve=56, page_id="setup")
+        btn_row = tk.Frame(backups_pad, bg=theme.SURFACE_2)
+        btn_row.pack(fill=tk.X)
+        ttk.Button(
+            btn_row,
+            text="Backup",
+            style=self._btn_style("Secondary"),
+            command=self._backup_calibration,
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            btn_row,
+            text="Restore",
+            style=self._btn_style("Secondary"),
+            command=self._restore_calibration,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            btn_row,
+            text="Rename",
+            style=self._btn_style("Secondary"),
+            command=self._rename_calibration_backup,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            btn_row,
+            text="Delete",
+            style=self._btn_style("Secondary"),
+            command=self._delete_calibration_backup,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+
+        finish_scrollable(inner, canvas)
+        self.after_idle(self._sync_wrap_lengths)
 
     def _build_tools_page(self) -> None:
         page = self._pages["tools"]
@@ -1883,10 +1896,6 @@ class BotControlApp(tk.Tk):
             self._log.see(tk.END)
         self._log.configure(state=tk.DISABLED)
 
-        human = humanize_log_line(line)
-        if human:
-            self._append_human(human)
-
     def _cap_log_length(self, max_lines: int = 2000) -> None:
         try:
             line_count = int(self._log.index("end-1c").split(".")[0])
@@ -1895,45 +1904,6 @@ class BotControlApp(tk.Tk):
         if line_count > max_lines:
             excess = line_count - max_lines
             self._log.delete("1.0", f"{excess + 1}.0")
-
-    def _append_human(self, text: str) -> None:
-        """Append a plain-language line to the Activity 'What's happening' feed."""
-        self._human_lines.append(text)
-        if len(self._human_lines) > 100:
-            del self._human_lines[: len(self._human_lines) - 100]
-        human_log = self._human_log
-        if human_log is None:
-            return
-        try:
-            if not human_log.winfo_exists():
-                return
-            human_log.configure(state=tk.NORMAL)
-            human_log.insert(tk.END, text + "\n")
-            line_count = int(human_log.index("end-1c").split(".")[0])
-            if line_count > 100:
-                excess = line_count - 100
-                human_log.delete("1.0", f"{excess + 1}.0")
-            human_log.see(tk.END)
-            human_log.configure(state=tk.DISABLED)
-        except tk.TclError:
-            pass
-
-    def _render_human_log(self) -> None:
-        """Repopulate the human feed widget from stored lines (e.g. after theme rebuild)."""
-        human_log = self._human_log
-        if human_log is None:
-            return
-        try:
-            if not human_log.winfo_exists():
-                return
-            human_log.configure(state=tk.NORMAL)
-            human_log.delete("1.0", tk.END)
-            if self._human_lines:
-                human_log.insert(tk.END, "\n".join(self._human_lines) + "\n")
-            human_log.see(tk.END)
-            human_log.configure(state=tk.DISABLED)
-        except tk.TclError:
-            pass
 
     def _bot_running(self) -> bool:
         return self._bot_thread is not None and self._bot_thread.is_alive()
@@ -2287,7 +2257,6 @@ class BotControlApp(tk.Tk):
             on_break=on_break,
         )
         self._set_run_chip(label, role)
-        self._live_status_var.set(label)
 
     def _set_run_chip(self, text: str, role: str) -> None:
         self._run_chip_var.set(text)
@@ -2429,7 +2398,7 @@ class BotControlApp(tk.Tk):
                 tk.END,
                 iid=step_id,
                 text=step.title,
-                values=(step_id, "Done" if ok else "Missing"),
+                values=("Done" if ok else "Missing",),
                 open=True,
             )
             for part in step.parts:
@@ -2448,7 +2417,7 @@ class BotControlApp(tk.Tk):
                     tk.END,
                     iid=f"{step_id}::{part.key}",
                     text=f"  · {label}",
-                    values=(part.key, part_status),
+                    values=(part_status,),
                 )
         total = len(STEP_IDS)
         self._calib_progress.set(f"Setup progress: {done} / {total} steps ready")
@@ -2490,17 +2459,17 @@ class BotControlApp(tk.Tk):
                     f"(not the whole “{step.title}” step)."
                 )
             hint = STEP_SCREEN_HINTS.get(step_id, "")
-            hint_line = f"\n📱 {hint}" if hint else ""
+            hint_line = f"\n{hint}" if hint else ""
             self._calib_detail.set(
                 f"{step.title} → {part.label}{opt}\n"
-                f"Status: {status} · key: {part.key} · type: {part.kind}{extra}{hint_line}\n\n"
+                f"Status: {status}{extra}{hint_line}\n\n"
                 f"{how}"
             )
             return
         status = self._calib_tree.set(iid, "status")
         parts_line = ", ".join(p.label for p in step.parts) if step.parts else step.summary
         hint = STEP_SCREEN_HINTS.get(step_id, "")
-        hint_line = f"\n📱 {hint}" if hint else ""
+        hint_line = f"\n{hint}" if hint else ""
         self._calib_detail.set(
             f"{step.title} — {status}\n{step.summary}\nParts: {parts_line}{hint_line}\n\n"
             "Recalibrate Selected runs this whole step (each item can still be denied)."
@@ -2691,15 +2660,11 @@ class BotControlApp(tk.Tk):
         )
 
     def _restore_calibration(self) -> None:
-        backups = list_backups()
-        if not backups:
-            messagebox.showinfo(
-                "No backups",
-                "No calibration backups found yet.\n"
-                "Use Backup calibration first.",
-            )
-            return
-        chosen = self._pick_calibration_backup(backups)
+        chosen = self._choose_calibration_backup(
+            title="Restore calibration",
+            prompt="Select a backup to restore (newest first):",
+            confirm_label="Restore",
+        )
         if chosen is None:
             return
         if not messagebox.askyesno(
@@ -2723,12 +2688,86 @@ class BotControlApp(tk.Tk):
             "If the bot is running, Stop and Start so it reloads the files.",
         )
 
+    def _rename_calibration_backup(self) -> None:
+        from tkinter import simpledialog
+
+        chosen = self._choose_calibration_backup(
+            title="Rename backup",
+            prompt="Select a backup to rename:",
+            confirm_label="Rename…",
+        )
+        if chosen is None:
+            return
+        new_name = simpledialog.askstring(
+            "Rename backup",
+            "New name (letters, numbers, . _ -):",
+            initialvalue=chosen.stamp,
+            parent=self,
+        )
+        if new_name is None:
+            return
+        try:
+            renamed = rename_backup(chosen, new_name)
+        except (ValueError, OSError) as exc:
+            messagebox.showerror("Rename failed", str(exc))
+            return
+        self._append_log(f"==> Renamed backup {chosen.stamp} → {renamed.stamp}")
+        messagebox.showinfo("Backup renamed", f"Now named:\n{renamed.stamp}")
+
+    def _delete_calibration_backup(self) -> None:
+        chosen = self._choose_calibration_backup(
+            title="Delete backup",
+            prompt="Select a backup to delete permanently:",
+            confirm_label="Delete…",
+        )
+        if chosen is None:
+            return
+        if not messagebox.askyesno(
+            "Delete backup?",
+            f"Permanently delete this calibration backup?\n\n{chosen.stamp}\n\n"
+            "This cannot be undone. Your live calibration is not affected.",
+            parent=self,
+        ):
+            return
+        try:
+            delete_backup(chosen)
+        except (OSError, FileNotFoundError, ValueError) as exc:
+            messagebox.showerror("Delete failed", str(exc))
+            return
+        self._append_log(f"==> Deleted calibration backup {chosen.stamp}")
+        messagebox.showinfo("Backup deleted", f"Removed:\n{chosen.stamp}")
+
+    def _choose_calibration_backup(
+        self,
+        *,
+        title: str,
+        prompt: str,
+        confirm_label: str = "Select",
+    ) -> CalibrationBackup | None:
+        """Pick one stored backup, or None if none exist / cancelled."""
+        backups = list_backups()
+        if not backups:
+            messagebox.showinfo(
+                "No backups",
+                "No calibration backups found yet.\n"
+                "Use Backup calibration first.",
+            )
+            return None
+        return self._pick_calibration_backup(
+            backups, title=title, prompt=prompt, confirm_label=confirm_label
+        )
+
     def _pick_calibration_backup(
-        self, backups: list[CalibrationBackup]
+        self,
+        backups: list[CalibrationBackup],
+        *,
+        title: str = "Restore calibration",
+        prompt: str = "Select a backup (newest first):",
+        confirm_label: str = "Restore",
     ) -> CalibrationBackup | None:
         """Modal list picker; returns a CalibrationBackup or None if cancelled."""
         win = tk.Toplevel(self)
-        win.title("Restore calibration")
+        win.title(title)
         win.transient(self)
         win.grab_set()
         win.configure(bg=theme.BG)
@@ -2736,7 +2775,7 @@ class BotControlApp(tk.Tk):
 
         tk.Label(
             win,
-            text="Select a backup to restore (newest first):",
+            text=prompt,
             bg=theme.BG,
             fg=theme.TEXT,
             font=ui_font(11),
@@ -2782,7 +2821,7 @@ class BotControlApp(tk.Tk):
             btns, text="Cancel", style=self._btn_style("Secondary"), command=cancel
         ).pack(side=tk.RIGHT)
         ttk.Button(
-            btns, text="Restore", style=self._btn_style("Accent"), command=accept
+            btns, text=confirm_label, style=self._btn_style("Accent"), command=accept
         ).pack(side=tk.RIGHT, padx=(0, 8))
         listbox.bind("<Double-Button-1>", lambda _e: accept())
         win.protocol("WM_DELETE_WINDOW", cancel)

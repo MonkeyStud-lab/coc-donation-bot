@@ -148,7 +148,7 @@ If you move to another PC with the **same** screen resolution, you can copy thos
 
 | Sidebar | What it does |
 |---------|----------------|
-| **Home** | **Start** / **Stop**, Connect/Pick ADB, Get started, practice mode, farm readiness, live status, activity feed |
+| **Home** | **Start** / **Stop**, Connect/Pick ADB, Get started, practice mode, farm readiness, status chip, activity log |
 | **Settings** | Timing presets, practice mode, donations, farm, breaks; Dev options; Apply & restart when running |
 | **Setup** | Full in-app calibration; Calibrate what’s missing; backup/restore; classic fallback |
 | **Tools** | Fix-it recipes, ADB health, desktop shortcut, other one-shot tests |

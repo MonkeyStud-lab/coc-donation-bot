@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from coc_bot.config import project_root
+
+# Folder names under data/calibration_backups/ — keep filesystem-safe.
+_BACKUP_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
 
 
 @dataclass(frozen=True)
@@ -122,3 +126,41 @@ def restore_backup(backup: CalibrationBackup, root: Path | None = None) -> None:
         shutil.copytree(tmpl_src, tmpl_dst)
     else:
         tmpl_dst.mkdir(parents=True, exist_ok=True)
+
+
+def normalize_backup_name(raw: str) -> str:
+    """Validate and normalize a backup folder name; raise ValueError if invalid."""
+    name = str(raw or "").strip().replace(" ", "_")
+    if not name:
+        raise ValueError("Name cannot be empty.")
+    if name in (".", "..") or "/" in name or "\\" in name:
+        raise ValueError("Name cannot contain path separators.")
+    if not _BACKUP_NAME_RE.match(name):
+        raise ValueError(
+            "Use letters, numbers, dots, dashes, or underscores (max 80 chars)."
+        )
+    return name
+
+
+def rename_backup(backup: CalibrationBackup, new_name: str) -> CalibrationBackup:
+    """Rename a backup folder. Raises ValueError / OSError on failure."""
+    stamp = normalize_backup_name(new_name)
+    if stamp == backup.stamp:
+        return backup
+    dest = backup.path.parent / stamp
+    if dest.exists():
+        raise ValueError(f"A backup named “{stamp}” already exists.")
+    backup.path.rename(dest)
+    return CalibrationBackup(path=dest, stamp=stamp)
+
+
+def delete_backup(backup: CalibrationBackup) -> None:
+    """Permanently delete a backup folder."""
+    if not backup.path.is_dir():
+        raise FileNotFoundError(f"Backup not found: {backup.path}")
+    # Safety: only delete folders that look like our backups (contain calibrated.yaml).
+    if not backup.has_yaml():
+        raise ValueError(f"Refusing to delete folder without calibrated.yaml: {backup.path}")
+    if backup.path.parent.resolve() != backups_root().resolve():
+        raise ValueError(f"Refusing to delete outside backups directory: {backup.path}")
+    shutil.rmtree(backup.path)

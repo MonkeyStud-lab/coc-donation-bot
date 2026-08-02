@@ -93,26 +93,56 @@ def create_backup(root: Path | None = None, *, stamp_prefix: str = "") -> Calibr
     return CalibrationBackup(path=dest, stamp=stamp)
 
 
-def restore_backup(backup: CalibrationBackup, root: Path | None = None) -> None:
+def clear_live_calibration(root: Path | None = None) -> None:
+    """
+    Remove live ``calibrated.yaml`` and empty ``templates/``.
+
+    Used by Dev first-launch preview after stashing a backup. Safe if missing.
+    """
+    root = root or project_root()
+    yaml_path = calibrated_yaml_path(root)
+    tmpl_path = templates_dir(root)
+    if yaml_path.is_file():
+        yaml_path.unlink()
+    if tmpl_path.is_dir():
+        shutil.rmtree(tmpl_path)
+    tmpl_path.mkdir(parents=True, exist_ok=True)
+
+
+def get_backup(stamp: str, root: Path | None = None) -> CalibrationBackup | None:
+    """Return a backup by folder name, or ``None`` if missing."""
+    path = backups_root(root) / stamp
+    if not path.is_dir() or not (path / "calibrated.yaml").is_file():
+        return None
+    return CalibrationBackup(path=path, stamp=stamp)
+
+
+def restore_backup(
+    backup: CalibrationBackup,
+    root: Path | None = None,
+    *,
+    safety_snapshot: bool = True,
+) -> None:
     """
     Replace live ``calibrated.yaml`` and ``templates/`` from ``backup``.
 
     Creates a safety snapshot of the current live files first (best-effort)
     under ``data/calibration_backups/pre_restore_<stamp>/`` so a bad restore
-    is still recoverable.
+    is still recoverable, unless ``safety_snapshot`` is False.
     """
     root = root or project_root()
     if not backup.has_yaml():
         raise FileNotFoundError(f"Backup missing calibrated.yaml: {backup.path}")
 
-    # Safety copy of whatever is live now (ignore if empty / missing).
-    try:
-        create_backup(root, stamp_prefix="pre_restore_")
-    except FileNotFoundError:
-        pass
-    except OSError:
-        # Still proceed with restore; user explicitly asked to restore.
-        pass
+    if safety_snapshot:
+        # Safety copy of whatever is live now (ignore if empty / missing).
+        try:
+            create_backup(root, stamp_prefix="pre_restore_")
+        except FileNotFoundError:
+            pass
+        except OSError:
+            # Still proceed with restore; user explicitly asked to restore.
+            pass
 
     yaml_dst = calibrated_yaml_path(root)
     tmpl_dst = templates_dir(root)

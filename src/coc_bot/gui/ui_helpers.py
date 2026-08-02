@@ -85,8 +85,10 @@ class GuiWindowState:
     geometry: str | None = None
     last_page: str = "home"
     onboarding_dismissed: bool = False
-    # Dev: Home Get-started card is forced visible (does not wipe calibration).
+    # Dev: Home Get-started card is forced visible.
     first_launch_preview: bool = False
+    # Dev: backup stamp of calibration stashed while testing Setup from scratch.
+    first_launch_calib_stash: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> GuiWindowState:
@@ -96,11 +98,15 @@ class GuiWindowState:
         page = str(data.get("last_page") or "home").strip().lower()
         if page not in ("home", "settings", "setup", "tools"):
             page = "home"
+        stash = data.get("first_launch_calib_stash")
+        if stash is not None:
+            stash = str(stash).strip() or None
         return cls(
             geometry=geom,
             last_page=page,
             onboarding_dismissed=bool(data.get("onboarding_dismissed", False)),
             first_launch_preview=bool(data.get("first_launch_preview", False)),
+            first_launch_calib_stash=stash,
         )
 
 

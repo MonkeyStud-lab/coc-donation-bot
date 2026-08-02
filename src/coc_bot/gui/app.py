@@ -31,8 +31,10 @@ from coc_bot.config import (
 )
 from coc_bot.gui.calib_backup import (
     CalibrationBackup,
+    clear_live_calibration,
     create_backup,
     delete_backup,
+    get_backup,
     list_backups,
     rename_backup,
     restore_backup,
@@ -1010,9 +1012,15 @@ class BotControlApp(tk.Tk):
             "•  Farm attacks are optional — set them up any time in Setup → Farm"
         )
         preview = bool(self._gui_state.first_launch_preview)
-        self._onboarding_title_var.set(
-            "Get started (first-launch preview)" if preview else "Get started"
-        )
+        stash = self._gui_state.first_launch_calib_stash
+        if preview and stash:
+            self._onboarding_title_var.set(
+                "Get started (first-launch preview · calibration stashed)"
+            )
+        elif preview:
+            self._onboarding_title_var.set("Get started (first-launch preview)")
+        else:
+            self._onboarding_title_var.set("Get started")
         if self._onboarding_dismiss_btn is not None:
             try:
                 self._onboarding_dismiss_btn.configure(
@@ -1066,19 +1074,56 @@ class BotControlApp(tk.Tk):
         self._exit_first_launch_preview(confirm=False)
 
     def _enter_first_launch_preview(self) -> None:
-        """Show Home Get-started as on a brand-new install (keeps calibration)."""
+        """Show Home Get-started; optionally stash calibration to re-test Setup."""
         if not messagebox.askyesno(
             "First-launch preview",
             "Show the Home “Get started” checklist as if this were the first "
             "time opening the bot?\n\n"
-            "Calibration and Settings are NOT wiped — this only resets the "
-            "first-launch UI.\n\n"
             "Continue?",
             parent=self,
         ):
             return
+
+        stash_stamp: str | None = self._gui_state.first_launch_calib_stash
+        if stash_stamp and get_backup(stash_stamp) is not None:
+            messagebox.showinfo(
+                "Stash already active",
+                "Calibration is already stashed from an earlier first-launch "
+                f"preview ({stash_stamp}).\n\n"
+                "Exit that preview (and choose restore) before stashing again.",
+                parent=self,
+            )
+        else:
+            stash = messagebox.askyesno(
+                "Test GUI calibration?",
+                "Stash your current calibration and clear it so you can walk "
+                "through Setup / “Calibrate what’s missing” from scratch?\n\n"
+                "Yes = backup then clear live calibration (restored when you exit).\n"
+                "No = only show Get started (calibration stays as-is).",
+                parent=self,
+            )
+            if stash:
+                try:
+                    backup = create_backup(stamp_prefix="first_launch_stash_")
+                    clear_live_calibration()
+                    stash_stamp = backup.stamp
+                    self._append_log(
+                        f"==> Stashed calibration as {backup.stamp} and cleared live files"
+                    )
+                except FileNotFoundError:
+                    messagebox.showinfo(
+                        "Nothing to stash",
+                        "No calibration files found — continuing with an empty Setup.",
+                        parent=self,
+                    )
+                    stash_stamp = None
+                except OSError as exc:
+                    messagebox.showerror("Stash failed", str(exc), parent=self)
+                    return
+
         self._gui_state.onboarding_dismissed = False
         self._gui_state.first_launch_preview = True
+        self._gui_state.first_launch_calib_stash = stash_stamp
         self._gui_state.last_page = "home"
         self._save_gui_state()
         self._append_log("==> First-launch preview ON (Get started shown)")
@@ -1094,11 +1139,12 @@ class BotControlApp(tk.Tk):
             return
         self._show_page("home")
         self._refresh_home_status()
+        self._refresh_calib_status()
         if load_config().gui_dev_options:
             self._build_tools_page()
 
     def _exit_first_launch_preview(self, *, confirm: bool = True) -> None:
-        """Leave first-launch preview / dismiss Get started."""
+        """Leave first-launch preview / dismiss Get started; optionally restore stash."""
         if confirm and self._gui_state.first_launch_preview:
             if not messagebox.askyesno(
                 "Exit first-launch preview",
@@ -1107,12 +1153,40 @@ class BotControlApp(tk.Tk):
             ):
                 return
         was_preview = bool(self._gui_state.first_launch_preview)
+        stash_stamp = self._gui_state.first_launch_calib_stash
+        if stash_stamp:
+            backup = get_backup(stash_stamp)
+            if backup is not None:
+                restore = messagebox.askyesno(
+                    "Restore stashed calibration?",
+                    f"A calibration stash is available ({stash_stamp}).\n\n"
+                    "Yes = put your previous calibration back (recommended).\n"
+                    "No = keep whatever is live now from this test.",
+                    parent=self,
+                )
+                if restore:
+                    try:
+                        restore_backup(backup, safety_snapshot=False)
+                        self._append_log(f"==> Restored calibration from {stash_stamp}")
+                    except (OSError, FileNotFoundError) as exc:
+                        messagebox.showerror("Restore failed", str(exc), parent=self)
+                        return
+            else:
+                messagebox.showwarning(
+                    "Stash missing",
+                    f"Could not find stash “{stash_stamp}”. "
+                    "Live calibration was left unchanged.",
+                    parent=self,
+                )
+            self._gui_state.first_launch_calib_stash = None
+
         self._gui_state.onboarding_dismissed = True
         self._gui_state.first_launch_preview = False
         self._save_gui_state()
         if was_preview:
             self._append_log("==> First-launch preview OFF")
         self._refresh_home_status()
+        self._refresh_calib_status()
         if load_config().gui_dev_options:
             self._build_tools_page()
 
@@ -1855,19 +1929,22 @@ class BotControlApp(tk.Tk):
         body = self._section_header(inner, "tools:Dev", "Dev")
         preview_on = bool(self._gui_state.first_launch_preview)
         status = "ON" if preview_on else "off"
+        stash = self._gui_state.first_launch_calib_stash
+        stash_note = f" Stash: {stash}." if stash else ""
         rows = (
             (
                 "Simulate first launch",
-                "Show Home “Get started” as on a brand-new install. "
-                "Does not wipe calibration or settings. Optionally restarts the window.",
+                "Show Home “Get started”, then optionally stash & clear calibration "
+                "so you can re-test Setup / Calibrate what’s missing from scratch. "
+                "Exit restores the stash.",
                 "Enter",
                 self._enter_first_launch_preview,
                 True,
             ),
             (
                 "Exit first-launch preview",
-                f"Hide Get started and leave preview mode (currently {status}). "
-                "Same as Dismiss on the Home card.",
+                f"Hide Get started (currently {status}).{stash_note} "
+                "Offers to restore stashed calibration if you cleared it for testing.",
                 "Exit",
                 lambda: self._exit_first_launch_preview(confirm=True),
                 True,

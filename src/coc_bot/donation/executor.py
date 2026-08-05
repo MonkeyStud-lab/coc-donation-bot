@@ -84,12 +84,12 @@ class DonationExecutor:
                 "Not on donation panel, detected screen: {}",
                 self.classifier.classify(frame, mode=BotMode.DONATE).value,
             )
-            self._close_panel()
+            self._finish_donation()
             return False
 
         # CoC can leave "gems" selected on Donation Resource — force elixir first.
         if not self._ensure_elixir_resource():
-            self._close_panel()
+            self._finish_donation()
             return False
 
         resolved_kind = kind
@@ -102,12 +102,12 @@ class DonationExecutor:
             )
             donated_any = self._donate_open_colored_scroll()
             if not self._stopping():
-                self._close_panel()
+                self._finish_donation()
             return donated_any
 
         if not self.config.donate_open_requests:
             logger.info("Open/generic request — skipping donation (specific requests only)")
-            self._close_panel()
+            self._finish_donation()
             return False
 
         if resolved_kind == RequestKind.HYBRID:
@@ -116,7 +116,7 @@ class DonationExecutor:
             )
             donated_any = self._donate_open_colored_scroll()
             if not self._stopping():
-                self._close_panel()
+                self._finish_donation()
             return donated_any
 
         logger.info(
@@ -124,7 +124,7 @@ class DonationExecutor:
         )
         donated_any = self._donate_open_colored_scroll()
         if not self._stopping():
-            self._close_panel()
+            self._finish_donation()
         return donated_any
 
     def _donate_open_colored_scroll(self) -> bool:
@@ -255,6 +255,75 @@ class DonationExecutor:
             if interrupted_sleep(self.BETWEEN_SLOTS_S, self.stop_check):
                 return True
         return True
+
+    def _finish_donation(self) -> None:
+        """Close the donation panel, then leave Chat Groups if a miss opened it."""
+        self._close_panel()
+        self._dismiss_global_chat_if_open()
+
+    def _dismiss_global_chat_if_open(self) -> None:
+        """
+        After a donate fill, recover if we accidentally opened Chat Groups.
+
+        Chat Groups is identified by the title template/OCR. Returning to clan chat
+        requires tapping the swords/shield tab (not BACK).
+        """
+        if self._stopping():
+            return
+        frame = self.capture.screenshot()
+        if not self.classifier.is_global_chat(frame):
+            return
+
+        point = self._clan_chat_tab_point(frame)
+        if point is None:
+            logger.warning(
+                "Chat Groups open after donate, but clan_chat_tab is not calibrated — "
+                "cannot switch back (Setup → Optional UI → Clan chat tab)"
+            )
+            return
+        logger.warning(
+            "Chat Groups open after donate — tapping clan chat tab (swords) at ({}, {})",
+            point[0],
+            point[1],
+        )
+        self.input.tap(point[0], point[1], jitter=0)
+        interrupted_sleep(0.45, self.stop_check)
+
+    def _clan_chat_tab_point(self, frame) -> tuple[int, int] | None:
+        """Screen point for the swords/shield tab that switches back to clan chat."""
+        point = self.config.tap_points.get("clan_chat_tab")
+        if point and len(point) >= 2:
+            return int(point[0]), int(point[1])
+
+        rel = self.config.templates.get("clan_chat_tab")
+        if rel:
+            path = self.config.templates_dir / rel
+            if path.exists():
+                import cv2
+
+                template = cv2.imread(str(path), cv2.IMREAD_COLOR)
+                if template is not None:
+                    match = self.matcher.find(
+                        frame,
+                        template,
+                        threshold=max(0.70, self.config.template_threshold - 0.10),
+                    )
+                    if match:
+                        return match.center
+
+        # Swords tab sits directly above the orange close-chat tab.
+        close_pt = self.config.tap_points.get("close_chat")
+        if close_pt and len(close_pt) >= 2:
+            h = frame.shape[0]
+            dx, dy = int(close_pt[0]), int(close_pt[1]) - max(36, int(h * 0.06))
+            if dy > 0:
+                logger.info(
+                    "clan_chat_tab missing — estimating above close_chat at ({}, {})",
+                    dx,
+                    dy,
+                )
+                return dx, dy
+        return None
 
     def _close_panel(self) -> None:
         from coc_bot.donation.navigator import Navigator

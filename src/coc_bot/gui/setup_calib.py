@@ -28,6 +28,7 @@ _TEMPLATE_TAP_KEYS = frozenset(
     {
         "open_chat",
         "close_chat",
+        "clan_chat_tab",
         "attack_button",
         "unranked_battle",
         "find_match",
@@ -329,6 +330,7 @@ def _calibrate_roi_or_template(
         "home",
         "clan_chat",
         "donation_panel",
+        "chat_groups",
         "loading",
         "popup_dismiss",
         "popup",

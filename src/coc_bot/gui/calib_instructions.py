@@ -49,7 +49,8 @@ STEP_INSTRUCTIONS: dict[str, str] = {
         "Leave your farm army as the active army preset."
     ),
     "optional": (
-        "Only if you want these extras: show the loading screen or a popup when asked."
+        "Only if you want these extras: open Chat Groups (globe) to teach that "
+        "screen and the swords tab back to clan chat, or show loading / a popup."
     ),
 }
 
@@ -282,6 +283,28 @@ PART_INSTRUCTIONS: dict[str, CalibInstruction] = {
         do=(
             "The bot will pan the camera, then open a click editor.\n"
             "Click your deploy taps in order (army bar, then map), then save."
+        ),
+    ),
+    "chat_groups": CalibInstruction(
+        prepare=(
+            "OPEN clan chat, then tap the globe icon (under the orange “<” tab) "
+            "so you see “Chat Groups” and the green “+ New” button."
+        ),
+        do=(
+            "Draw a tight box around the “Chat Groups” title text "
+            "(or the green “+ New” button), then Confirm.\n"
+            "The bot uses this after donating to detect if global chat opened by mistake."
+        ),
+    ),
+    "clan_chat_tab": CalibInstruction(
+        prepare=(
+            "Keep Chat Groups OPEN (globe drawer with “Chat Groups” title).\n"
+            "On the right edge of the chat, find the TOP icon: a bubble with "
+            "crossed swords / shield (above the orange “<” tab)."
+        ),
+        do=(
+            "Crop or click the CENTER of that swords tab, then Confirm.\n"
+            "When the bot is stuck in Chat Groups, it taps this to return to clan chat."
         ),
     ),
     "loading": CalibInstruction(

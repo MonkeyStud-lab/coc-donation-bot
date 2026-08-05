@@ -954,6 +954,65 @@ class ScreenClassifier:
         """True when the donate popup is up (does not require full classify)."""
         return self._donation_panel_heuristic(frame)
 
+    def is_global_chat(self, frame: np.ndarray) -> bool:
+        """True when the Chat Groups (global chat) drawer is open."""
+        return self._chat_groups_visible(frame)
+
+    def _chat_groups_visible(self, frame: np.ndarray) -> bool:
+        """
+        Chat Groups / global chat drawer.
+
+        Strongest signal: calibrated ``chat_groups`` crop of the “Chat Groups”
+        title (or the green “+ New” button). OCR fallback looks for that title
+        in the top of the dark left panel.
+        """
+        if self._template_visible(frame, "chat_groups"):
+            return True
+        return self._chat_groups_title_ocr_visible(frame)
+
+    def _chat_groups_title_ocr_visible(self, frame: np.ndarray) -> bool:
+        """True if “Chat Groups” is readable in the top-left chat drawer."""
+        import re
+        import shutil
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        if shutil.which("tesseract") is None:
+            return False
+        h, w = frame.shape[:2]
+        # Title sits at the top of the dark Chat Groups panel (left half).
+        crop = frame[int(h * 0.05) : int(h * 0.18), int(w * 0.02) : int(w * 0.48)]
+        if crop.size == 0:
+            return False
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        up = cv2.resize(gray, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+        _, bw = cv2.threshold(up, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "chat_groups.png"
+                cv2.imwrite(str(path), bw)
+                proc = subprocess.run(  # noqa: S603
+                    [
+                        "tesseract",
+                        str(path),
+                        "stdout",
+                        "--psm",
+                        "7",
+                        "-l",
+                        "eng",
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
+            text = (proc.stdout or "").lower()
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        compact = re.sub(r"[^a-z]", "", text)
+        return "chatgroups" in compact or ("chat" in compact and "group" in compact)
+
     def wait_for_donation_panel(
         self,
         capture,

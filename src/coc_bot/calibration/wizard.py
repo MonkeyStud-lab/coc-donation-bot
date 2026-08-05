@@ -286,9 +286,29 @@ STEPS: dict[str, CalibrationStep] = {
     "optional": CalibrationStep(
         "optional",
         "Optional UI",
-        "Only if you want extras — show the loading screen or a popup when asked",
-        ("loading",),
+        "Only if you want extras — show Chat Groups, loading, or a popup when asked",
+        ("loading", "chat_groups", "clan_chat_tab"),
         (
+            CalibrationPart(
+                "chat_groups",
+                "Chat Groups title",
+                "template",
+                optional=True,
+                description=(
+                    "Open Chat Groups (globe icon) — crop the “Chat Groups” title "
+                    "(or the green “+ New” button)"
+                ),
+            ),
+            CalibrationPart(
+                "clan_chat_tab",
+                "Clan chat tab (swords)",
+                "tap",
+                optional=True,
+                description=(
+                    "Chat Groups still open — crop/click the swords+shield bubble "
+                    "(top tab) that returns to clan chat"
+                ),
+            ),
             CalibrationPart(
                 "loading",
                 "Loading screen",
@@ -1104,6 +1124,43 @@ class CalibrationWizard:
             )
 
     def step_optional(self) -> None:
+        if self._want_part("chat_groups"):
+            self._maybe_update_template_after_setup(
+                "chat_groups",
+                "Chat Groups title (or + New) template",
+                "ui/chat_groups.png",
+                "Tap the globe icon to open Chat Groups, then crop the “Chat Groups” "
+                "title text (or the green “+ New” button).",
+                optional=True,
+            )
+
+        if self._want_part("clan_chat_tab"):
+            print(
+                "\n--- Clan chat tab (swords + shield bubble, top of the chat edge) ---\n"
+                "Keep Chat Groups OPEN. This is the top icon ABOVE the orange “<” tab.\n"
+                "Tapping it leaves Chat Groups and returns to clan chat."
+            )
+            has_tab = self._has_tap("clan_chat_tab") or self._has_template("clan_chat_tab")
+            if self._should_update("clan_chat_tab control", exists=has_tab, optional=True):
+                if prompt_yes_no("Capture clan_chat_tab as image template?"):
+                    frame = self.capture.screenshot()
+                    coords, picked = self._pick_roi("Swords/shield clan chat tab", frame)
+                    if coords is not None and picked is not None:
+                        self._save_template_from_frame(
+                            picked, coords, "ui/clan_chat_tab.png", "clan_chat_tab"
+                        )
+                        x, y, bw, bh = coords
+                        self.config.tap_points["clan_chat_tab"] = [
+                            int(x + bw / 2),
+                            int(y + bh / 2),
+                        ]
+                        logger.info("Saved clan_chat_tab template + tap at center")
+                else:
+                    frame = self.capture.screenshot()
+                    pt = self._pick_point("Tap CENTER of swords/shield clan chat tab", frame)
+                    self.config.tap_points["clan_chat_tab"] = list(pt)
+                    logger.info("Saved tap point clan_chat_tab")
+
         if self._want_part("loading"):
             self._maybe_update_template_after_setup(
                 "loading",

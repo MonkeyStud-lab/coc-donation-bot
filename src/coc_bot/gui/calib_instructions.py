@@ -33,7 +33,8 @@ STEP_INSTRUCTIONS: dict[str, str] = {
         "(If nobody is requesting, ask a clanmate or wait for one.)"
     ),
     "donation_panel": (
-        "OPEN clan chat, then tap Donate on a request so the white donation panel is open."
+        "OPEN clan chat, then tap Donate on a request so the white donation panel is open.\n"
+        "At the top you should see “Donation Resource” with elixir (left) and gem (right) toggles."
     ),
     "slot_colors": (
         "OPEN the donation panel (tap Donate on a request).\n"
@@ -150,6 +151,19 @@ PART_INSTRUCTIONS: dict[str, CalibInstruction] = {
         do=(
             "Draw a tight box around the “Donation Resource” title text at the top of the panel "
             "(optional but helpful), then Confirm."
+        ),
+    ),
+    "donation_elixir_button": CalibInstruction(
+        prepare=(
+            "Keep the donation panel OPEN.\n"
+            "At the top, next to “Donation Resource”, find the two toggles:\n"
+            "  LEFT  = pink Elixir + Dark Elixir drops (this one)\n"
+            "  RIGHT = green Gem (do not pick this)"
+        ),
+        do=(
+            "Crop or click the CENTER of the LEFT elixir toggle "
+            "(not the gem button), then Confirm.\n"
+            "The bot taps this before donating so costs stay in elixir, not gems."
         ),
     ),
     "donation_troop_bar": CalibInstruction(

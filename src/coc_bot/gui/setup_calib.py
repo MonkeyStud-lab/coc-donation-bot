@@ -33,6 +33,7 @@ _TEMPLATE_TAP_KEYS = frozenset(
         "find_match",
         "return_home",
         "donate_button",
+        "donation_elixir_button",
     }
 )
 

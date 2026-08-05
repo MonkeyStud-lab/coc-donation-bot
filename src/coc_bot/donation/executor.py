@@ -43,6 +43,29 @@ class DonationExecutor:
     def _stopping(self) -> bool:
         return bool(self.stop_check and self.stop_check())
 
+    def _ensure_elixir_resource(self) -> bool:
+        """
+        Tap the calibrated LEFT elixir toggle so donations cost elixir, not gems.
+
+        Safe if elixir is already selected (tap is a no-op / stays on elixir).
+        Returns False only if stop was requested mid-wait.
+        """
+        if self._stopping():
+            return False
+        point = self.config.tap_points.get("donation_elixir_button")
+        if not point or len(point) < 2:
+            logger.warning(
+                "donation_elixir_button not calibrated — donate may spend gems if "
+                "that toggle is selected (Setup → Donation panel → Elixir resource button)"
+            )
+            return True
+        x, y = int(point[0]), int(point[1])
+        logger.info("Ensuring Donation Resource = elixir (tap {}, {})", x, y)
+        self.input.tap(x, y)
+        if interrupted_sleep(0.28, self.stop_check):
+            return False
+        return True
+
     def donate_for_request(
         self,
         *,
@@ -61,6 +84,11 @@ class DonationExecutor:
                 "Not on donation panel, detected screen: {}",
                 self.classifier.classify(frame, mode=BotMode.DONATE).value,
             )
+            self._close_panel()
+            return False
+
+        # CoC can leave "gems" selected on Donation Resource — force elixir first.
+        if not self._ensure_elixir_resource():
             self._close_panel()
             return False
 

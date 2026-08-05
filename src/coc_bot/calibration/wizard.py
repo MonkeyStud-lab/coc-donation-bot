@@ -148,7 +148,12 @@ STEPS: dict[str, CalibrationStep] = {
         "donation_panel",
         "Donation panel",
         "OPEN clan chat, tap Donate, leave the white donation panel open",
-        ("donation_troop_bar", "donation_spell_bar", "tap_outside_donation"),
+        (
+            "donation_elixir_button",
+            "donation_troop_bar",
+            "donation_spell_bar",
+            "tap_outside_donation",
+        ),
         (
             CalibrationPart(
                 "donation_panel",
@@ -156,6 +161,15 @@ STEPS: dict[str, CalibrationStep] = {
                 "template",
                 optional=True,
                 description="Donation panel open — crop the “Donation Resource” title",
+            ),
+            CalibrationPart(
+                "donation_elixir_button",
+                "Elixir resource button",
+                "tap",
+                description=(
+                    "Donation panel open — the left Elixir / Dark Elixir toggle "
+                    "next to “Donation Resource” (not the gem button)"
+                ),
             ),
             CalibrationPart(
                 "donation_troop_bar",
@@ -542,9 +556,13 @@ class CalibrationWizard:
         if step.step_id == "donation_request":
             return "donate_button" in self.config.templates
         if step.step_id == "donation_panel":
-            return "donation_troop_bar" in self.config.rois and bool(
-                self.config.tap_points.get("tap_outside_donation")
-                or self.config.tap_points.get("close_donation")
+            return (
+                "donation_troop_bar" in self.config.rois
+                and bool(
+                    self.config.tap_points.get("tap_outside_donation")
+                    or self.config.tap_points.get("close_donation")
+                )
+                and bool(self.config.tap_points.get("donation_elixir_button"))
             )
         if step.step_id == "slot_colors":
             return bool(self.config.colors.get("donatable_troop")) and bool(
@@ -812,6 +830,7 @@ class CalibrationWizard:
             self._want_part(k)
             for k in (
                 "donation_panel",
+                "donation_elixir_button",
                 "donation_troop_bar",
                 "donation_spell_bar",
                 "tap_outside_donation",
@@ -837,6 +856,35 @@ class CalibrationWizard:
                 frame,
                 optional=True,
             )
+
+        if self._want_part("donation_elixir_button"):
+            print(
+                "\n--- Elixir resource button (not gems) ---\n"
+                "At the top of the panel, next to “Donation Resource”, there are two toggles:\n"
+                "  LEFT  = Elixir + Dark Elixir (use this)\n"
+                "  RIGHT = green Gem (do NOT use — spending gems)\n"
+                "Capture the LEFT elixir toggle so the bot can switch back if gems is selected."
+            )
+            has_elixir = self._has_tap("donation_elixir_button") or self._has_template(
+                "donation_elixir_button"
+            )
+            if self._should_update(
+                "donation_elixir_button (elixir toggle)",
+                exists=has_elixir,
+                optional=False,
+            ):
+                if prompt_yes_no("Capture elixir button as image template?"):
+                    coords, picked = self._pick_roi(
+                        "LEFT Elixir / Dark Elixir toggle (not the gem)", frame
+                    )
+                    self._save_template_from_frame(
+                        picked, coords, "ui/donation_elixir_button.png", "donation_elixir_button"
+                    )
+                pt = self._pick_point(
+                    "Tap point at CENTER of the LEFT elixir toggle", frame
+                )
+                self.config.tap_points["donation_elixir_button"] = list(pt)
+                logger.info("Saved tap point donation_elixir_button")
 
         if self._want_part("donation_troop_bar") or self._want_part("donation_spell_bar"):
             print(

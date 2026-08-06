@@ -1,13 +1,27 @@
 # CoC Donation Bot
 
-A helper program for **Clash of Clans on Waydroid (Ubuntu)** that:
+> ## THIS CAN GET YOUR ACCOUNT PERMANENTLY BANNED
+>
+> Supercell’s [Terms of Service](https://supercell.com/en/terms-of-service/) and [Fair Play policy](https://supercell.com/en/safe-and-fair-play/) **forbid bots and third-party automation**. They run ban waves and **permanently ban** accounts that use this kind of software.
+>
+> - There is **no** “safe,” “undetectable,” or “just donations” mode.
+> - Practice mode does **not** make live use allowed.
+> - If you use this on a main account, expect to lose it.
+>
+> **Do not use this to cheat.** This repo is for learning screen automation / computer vision on your own setup — not for unfair advantage in Clash of Clans.
 
-1. Watches clan chat and **donates** troops, spells, and siege machines
-2. Optionally runs **unranked Battle** attacks to farm elixir using a programmed deploy sequence
+A technical project for **Clash of Clans on Waydroid (Ubuntu)** that demonstrates ADB screen capture + vision-driven taps:
 
-It works by looking at the game screen through ADB (Android Debug Bridge) and tapping buttons — the same idea as controlling a phone from your computer.
+1. Watches clan chat and can **donate** troops, spells, and siege machines
+2. Optionally runs **unranked Battle** attacks with a programmed deploy sequence
 
-**Educational use only.** Automating live gameplay may violate Supercell’s Terms of Service. Use at your own risk.
+It looks at the game screen through ADB and taps UI elements — the same idea as controlling a phone from your computer. **You run it at your own risk; the authors accept no responsibility for bans or lost progress.**
+
+### If you came here to bot for loot / trophies
+
+Stop. Close the tab. Supercell treats bots as cheating and bans for it. This project will not help you evade detection, sell accounts, or run a farm.
+
+Setup is intentionally awkward (Linux + Waydroid + calibration) so it stays a **builder / learner** tool, not a one-click cheat client.
 
 ---
 

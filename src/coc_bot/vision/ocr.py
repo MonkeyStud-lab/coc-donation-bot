@@ -1,10 +1,87 @@
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
 
 import cv2
 import numpy as np
 from loguru import logger
+
+
+def read_short_label(roi_bgr: np.ndarray) -> str | None:
+    """
+    OCR a short UI label (e.g. green Donate / Trade button text).
+
+    Returns compact lowercase a–z only, or None if tesseract is missing / fails.
+    """
+    if roi_bgr is None or roi_bgr.size == 0:
+        return None
+    if shutil.which("tesseract") is None:
+        return None
+
+    if len(roi_bgr.shape) == 3:
+        gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = roi_bgr
+    up = cv2.resize(gray, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
+    # White text on green → invert so tesseract sees dark text on light.
+    _, bright = cv2.threshold(up, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    variants = (cv2.bitwise_not(bright), bright)
+
+    texts: list[str] = []
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            for i, img in enumerate(variants):
+                path = Path(tmp) / f"label_{i}.png"
+                cv2.imwrite(str(path), img)
+                proc = subprocess.run(  # noqa: S603
+                    [
+                        "tesseract",
+                        str(path),
+                        "stdout",
+                        "--psm",
+                        "7",
+                        "-l",
+                        "eng",
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
+                raw = (proc.stdout or "").strip().lower()
+                compact = re.sub(r"[^a-z]", "", raw)
+                if compact:
+                    texts.append(compact)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logger.debug("Button label OCR failed: {}", exc)
+        return None
+
+    if not texts:
+        return None
+    # Prefer a read that looks like a known chat button.
+    for t in texts:
+        if "donat" in t or "trade" in t:
+            return t
+    return texts[0]
+
+
+def is_donate_button_label(roi_bgr: np.ndarray) -> bool | None:
+    """
+    True if OCR says Donate, False if Trade (or other non-donate), None if OCR unavailable.
+    """
+    text = read_short_label(roi_bgr)
+    if text is None:
+        return None
+    if "trade" in text:
+        return False
+    if "donat" in text:
+        return True
+    logger.debug("Green button OCR inconclusive: {!r}", text)
+    return False
 
 
 class QuantityOCR:

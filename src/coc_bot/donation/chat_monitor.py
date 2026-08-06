@@ -14,6 +14,7 @@ from coc_bot.config import BotConfig
 from coc_bot.donation.capacity_parser import RequestCapacity, RequestCapacityParser
 from coc_bot.donation.request_parser import RequestKind, RequestParser
 from coc_bot.vision.matcher import MatchResult, TemplateMatcher
+from coc_bot.vision.ocr import is_donate_button_label
 
 
 @dataclass
@@ -101,16 +102,20 @@ class ChatMonitor:
 
         for match in sorted(matches, key=lambda m: m.y, reverse=True):
             abs_y = match.y + offset_y
-            sig = hashlib.md5(f"{match.x + offset_x}:{abs_y}".encode()).hexdigest()[:12]
+            abs_x = match.x + offset_x
+            sig = hashlib.md5(f"{abs_x}:{abs_y}".encode()).hexdigest()[:12]
             if sig in self._handled:
                 continue
             adjusted = MatchResult(
-                x=match.x + offset_x,
+                x=abs_x,
                 y=abs_y,
                 confidence=match.confidence,
                 width=match.width,
                 height=match.height,
             )
+            # Trade Offer uses the same green pill — OCR the label so we only tap Donate.
+            if not self._match_is_donate_button(frame, adjusted):
+                continue
             capacity = None
             if self.config.parse_request_capacity:
                 capacity = self.capacity_parser.parse(frame, adjusted)
@@ -141,6 +146,38 @@ class ChatMonitor:
             )
 
         return None
+
+    def _match_is_donate_button(self, frame: np.ndarray, match: MatchResult) -> bool:
+        """
+        Confirm a green-button template hit says Donate (not Trade).
+
+        Uses tesseract on the button crop. If OCR is unavailable, keep the
+        template match (legacy behavior).
+        """
+        h, w = frame.shape[:2]
+        x0 = max(0, match.x)
+        y0 = max(0, match.y)
+        x1 = min(w, match.x + match.width)
+        y1 = min(h, match.y + match.height)
+        if x1 <= x0 or y1 <= y0:
+            return False
+        crop = frame[y0:y1, x0:x1]
+        verdict = is_donate_button_label(crop)
+        if verdict is None:
+            logger.debug(
+                "Donate button OCR unavailable — accepting template match at ({}, {})",
+                match.center[0],
+                match.center[1],
+            )
+            return True
+        if not verdict:
+            logger.info(
+                "Skipping green button at ({}, {}) — OCR is not Donate (likely Trade)",
+                match.center[0],
+                match.center[1],
+            )
+            return False
+        return True
 
     def mark_handled(self, request: DonateRequest) -> None:
         self._handled[request.signature] = time.time()

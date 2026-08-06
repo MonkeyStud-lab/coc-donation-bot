@@ -141,9 +141,13 @@ PART_INSTRUCTIONS: dict[str, CalibInstruction] = {
         prepare=(
             "OPEN clan chat.\n"
             "Find a request that shows a green Donate button on the message "
-            "(not inside the donation panel yet)."
+            "(not inside the donation panel yet).\n"
+            "Do not use a Trade Offer “Trade” button — it looks the same green."
         ),
-        do="Draw a tight box around the green Donate button, then Confirm.",
+        do=(
+            "Draw a tight box around the green Donate button, then Confirm.\n"
+            "At runtime the bot also reads the button text so Trade is ignored."
+        ),
     ),
     "donation_panel": CalibInstruction(
         prepare=(

@@ -4,6 +4,18 @@ This guide is for developers who want to change or build on the project. Read [H
 
 ---
 
+## Out of scope — we will not help with
+
+Issues, PRs, and discussions in these areas will be closed without implementation help:
+
+- **Detection evasion** — hiding, randomizing, or otherwise trying to avoid Supercell’s bot / fair-play enforcement
+- **Paid or commercial botting** — selling access, running bot-as-a-service, or scaling farms for profit
+- **Account farming / selling** — bulk accounts, trophy or resource farms for trade, or similar
+
+Welcome contributions improve reliability, calibration UX, docs, and learning value for people running their **own** Waydroid setup. Using this software on live Clash of Clans can get accounts **permanently banned**; that risk is yours. See the README warning and [LICENSE](../LICENSE).
+
+---
+
 ## Setup for development
 
 ```bash

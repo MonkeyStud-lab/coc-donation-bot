@@ -30,7 +30,8 @@ Setup is intentionally awkward (Linux + Waydroid + calibration) so it stays a **
 | Doc | Who it’s for |
 |-----|----------------|
 | [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) | How the bot thinks: architecture, donation + farm flows, vision modes, leave safeguards |
-| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Where to change code to add screens, farm behavior, donation rules, settings |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Extension recipes; also what we will **not** help with (evasion, paid botting, farms) |
+| [LICENSE](LICENSE) | MIT code license + project policy (no support for cheating / commercial farms) |
 
 The rest of this README is the **install and use** guide for Ubuntu + Waydroid.
 
@@ -301,3 +302,9 @@ docs/
 - Session time limits with randomized breaks, then resume
 - Optional unranked elixir farm with a programmed deploy sequence
 - Dry-run and offline replay for testing
+
+---
+
+## License
+
+Code is under the [MIT License](LICENSE). The same file includes a **project policy**: maintainers will not help with detection evasion, paid botting, or account farming. Live use can get you banned — your risk.

@@ -163,8 +163,12 @@ class ScreenClassifier:
 
         Village home and attack-results cards often paint busy pixels into the
         chat ROI — never treat those as clan chat.
+
+        Do not veto solely on ``open_chat`` template matches — a loose open-chat
+        crop can still match while the drawer is open and would trap navigation
+        in a home/open-chat tap loop.
         """
-        if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
+        if self._home_attack_chip_visible(frame):
             return False
         # Defeat/victory card sits where chat ROIs are — big green Return Home.
         if self.find_return_home_button(frame) is not None:
@@ -897,15 +901,6 @@ class ScreenClassifier:
         if self.looks_like_live_replay(frame):
             return ScreenType.LIVE_REPLAY
 
-        # Village home first.
-        if self._open_chat_icon_visible(frame):
-            return ScreenType.HOME
-
-        if self._home_attack_chip_visible(frame) and not self._looks_like_battle(frame):
-            if self._looks_like_attack_menu(frame):
-                return ScreenType.ATTACK_MENU
-            return ScreenType.HOME
-
         # Battle results (silhouettes) before donation panel — results loot card
         # otherwise looks like a white donation popup.
         if self._looks_like_battle_results(frame) or self.looks_like_results_side_silhouettes(
@@ -917,9 +912,14 @@ class ScreenClassifier:
         ):
             return ScreenType.BATTLE_RESULTS
 
-        # Donation popup before clan_chat anchor.
+        # Clan chat / donation before home anchors. open_chat can false-match while
+        # the drawer is open; preferring chat evidence stops the open-chat tap loop.
         if self._donation_panel_heuristic(frame):
             return ScreenType.DONATION_PANEL
+
+        # Template only here — OCR would stall every navigation classify.
+        if self.is_global_chat(frame, allow_ocr=False):
+            return ScreenType.CLAN_CHAT
 
         if self._clan_chat_anchor_visible(frame):
             return ScreenType.CLAN_CHAT
@@ -927,11 +927,20 @@ class ScreenClassifier:
         if self._template_visible(frame, "donate_button"):
             return ScreenType.CLAN_CHAT
 
-        if self._live_battle_chrome_visible(frame):
-            return ScreenType.BATTLE
-
         if self._in_clan_chat_context(frame):
             return ScreenType.CLAN_CHAT
+
+        # Village home (chat closed) — Attack! / open-chat bubble.
+        if self._open_chat_icon_visible(frame):
+            return ScreenType.HOME
+
+        if self._home_attack_chip_visible(frame) and not self._looks_like_battle(frame):
+            if self._looks_like_attack_menu(frame):
+                return ScreenType.ATTACK_MENU
+            return ScreenType.HOME
+
+        if self._live_battle_chrome_visible(frame):
+            return ScreenType.BATTLE
 
         if self._is_home_screen(frame):
             return ScreenType.HOME
@@ -954,20 +963,22 @@ class ScreenClassifier:
         """True when the donate popup is up (does not require full classify)."""
         return self._donation_panel_heuristic(frame)
 
-    def is_global_chat(self, frame: np.ndarray) -> bool:
+    def is_global_chat(self, frame: np.ndarray, *, allow_ocr: bool = True) -> bool:
         """True when the Chat Groups (global chat) drawer is open."""
-        return self._chat_groups_visible(frame)
+        return self._chat_groups_visible(frame, allow_ocr=allow_ocr)
 
-    def _chat_groups_visible(self, frame: np.ndarray) -> bool:
+    def _chat_groups_visible(self, frame: np.ndarray, *, allow_ocr: bool = True) -> bool:
         """
         Chat Groups / global chat drawer.
 
         Strongest signal: calibrated ``chat_groups`` crop of the “Chat Groups”
         title (or the green “+ New” button). OCR fallback looks for that title
-        in the top of the dark left panel.
+        in the top of the dark left panel — skip during hot classify loops.
         """
         if self._template_visible(frame, "chat_groups"):
             return True
+        if not allow_ocr:
+            return False
         return self._chat_groups_title_ocr_visible(frame)
 
     def _chat_groups_title_ocr_visible(self, frame: np.ndarray) -> bool:

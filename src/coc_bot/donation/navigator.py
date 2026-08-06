@@ -105,11 +105,25 @@ class Navigator:
                     continue
 
                 if screen == ScreenType.CLAN_CHAT:
+                    # Chat Groups uses the same drawer; switch back to the swords tab.
+                    if self.classifier.is_global_chat(frame):
+                        self._return_from_global_chat(frame)
+                        if self._sleep(0.8):
+                            return False
+                        continue
                     self.navigate_to_donation_requests(frame, has_donate_request)
                     return True
 
                 if screen == ScreenType.HOME or screen == ScreenType.UNKNOWN:
-                    logger.info("Not in clan chat (screen={}) — opening chat", screen.value)
+                    open_chat = self.classifier._open_chat_icon_visible(frame)  # noqa: SLF001
+                    attack = self.classifier._home_attack_chip_visible(frame)  # noqa: SLF001
+                    logger.info(
+                        "Not in clan chat (screen={}) — opening chat "
+                        "(open_chat_icon={}, attack_chip={})",
+                        screen.value,
+                        open_chat,
+                        attack,
+                    )
                     self._open_clan_chat(frame)
                     if self._sleep(1.0):
                         return False
@@ -205,11 +219,7 @@ class Navigator:
 
     def _open_clan_chat(self, frame: np.ndarray) -> None:
         h, w = frame.shape[:2]
-        point = self.config.tap_points.get("open_chat")
-        if point:
-            logger.info("Opening clan chat via tap point ({}, {})", point[0], point[1])
-            self.input.tap(point[0], point[1])
-            return
+        # Prefer a live template hit over a stale tap point (coords drift / wrong target).
         template = self.load_template("open_chat")
         if template is not None:
             match = self.matcher.find(frame, template)
@@ -221,17 +231,68 @@ class Navigator:
                     cy,
                     match.confidence,
                 )
-                self.input.tap(cx, cy)
+                self.input.tap(cx, cy, jitter=0)
                 return
             logger.warning(
-                "open_chat template saved but not found on screen — recalibrate tap point on home screen"
+                "open_chat template saved but not found on screen — trying tap point"
             )
-        else:
-            logger.warning("No open_chat template or tap point — using fallback position")
 
+        point = self.config.tap_points.get("open_chat")
+        if point:
+            logger.info("Opening clan chat via tap point ({}, {})", point[0], point[1])
+            self.input.tap(point[0], point[1], jitter=0)
+            return
+
+        logger.warning("No open_chat template or tap point — using fallback position")
         fx, fy = int(w * 0.08), int(h * 0.45)
         logger.info("Fallback tap to open chat at ({}, {})", fx, fy)
-        self.input.tap(fx, fy)
+        self.input.tap(fx, fy, jitter=0)
+
+    def _return_from_global_chat(self, frame: np.ndarray) -> None:
+        """Tap the swords/shield tab to leave Chat Groups for clan chat."""
+        point = self.config.tap_points.get("clan_chat_tab")
+        if point and len(point) >= 2:
+            logger.info(
+                "Chat Groups open — tapping clan chat tab at ({}, {})",
+                point[0],
+                point[1],
+            )
+            self.input.tap(int(point[0]), int(point[1]), jitter=0)
+            return
+
+        rel = self.config.templates.get("clan_chat_tab")
+        if rel:
+            path = self.config.templates_dir / rel
+            if path.exists():
+                tpl = cv2.imread(str(path), cv2.IMREAD_COLOR)
+                if tpl is not None:
+                    match = self.matcher.find(frame, tpl)
+                    if match:
+                        logger.info(
+                            "Chat Groups open — tapping clan chat tab template at ({}, {})",
+                            match.center[0],
+                            match.center[1],
+                        )
+                        self.input.tap(match.center[0], match.center[1], jitter=0)
+                        return
+
+        close_pt = self.config.tap_points.get("close_chat")
+        if close_pt and len(close_pt) >= 2:
+            h = frame.shape[0]
+            x, y = int(close_pt[0]), int(close_pt[1]) - max(36, int(h * 0.06))
+            if y > 0:
+                logger.info(
+                    "Chat Groups open — estimating clan tab above close_chat at ({}, {})",
+                    x,
+                    y,
+                )
+                self.input.tap(x, y, jitter=0)
+                return
+
+        logger.warning(
+            "Chat Groups open but clan_chat_tab not calibrated — "
+            "Setup → Optional UI → Clan chat tab (swords)"
+        )
 
     def find_close_chat_tab(self, frame: np.ndarray) -> tuple[int, int] | None:
         """

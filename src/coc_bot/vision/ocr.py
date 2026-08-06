@@ -11,6 +11,33 @@ import numpy as np
 from loguru import logger
 
 
+def _button_label_variants(roi_bgr: np.ndarray) -> list[np.ndarray]:
+    """Preprocess white-on-green CoC pills for tesseract."""
+    if len(roi_bgr.shape) == 3:
+        gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY)
+        hsv = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2HSV)
+        # Keep bright button text; drop green fill.
+        green = cv2.inRange(hsv, (35, 40, 40), (95, 255, 255))
+        bright = cv2.inRange(gray, 170, 255)
+        text_mask = cv2.bitwise_and(bright, cv2.bitwise_not(green))
+        if float(text_mask.mean()) < 5:
+            text_mask = bright
+    else:
+        gray = roi_bgr
+        text_mask = cv2.inRange(gray, 170, 255)
+
+    up_gray = cv2.resize(gray, None, fx=4.0, fy=4.0, interpolation=cv2.INTER_CUBIC)
+    up_mask = cv2.resize(text_mask, None, fx=4.0, fy=4.0, interpolation=cv2.INTER_NEAREST)
+    _, otsu = cv2.threshold(up_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Dark text on white works best for tesseract.
+    return [
+        cv2.bitwise_not(up_mask),
+        up_mask,
+        cv2.bitwise_not(otsu),
+        otsu,
+    ]
+
+
 def read_short_label(roi_bgr: np.ndarray) -> str | None:
     """
     OCR a short UI label (e.g. green Donate / Trade button text).
@@ -22,40 +49,34 @@ def read_short_label(roi_bgr: np.ndarray) -> str | None:
     if shutil.which("tesseract") is None:
         return None
 
-    if len(roi_bgr.shape) == 3:
-        gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = roi_bgr
-    up = cv2.resize(gray, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
-    # White text on green → invert so tesseract sees dark text on light.
-    _, bright = cv2.threshold(up, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    variants = (cv2.bitwise_not(bright), bright)
-
     texts: list[str] = []
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            for i, img in enumerate(variants):
+            for i, img in enumerate(_button_label_variants(roi_bgr)):
                 path = Path(tmp) / f"label_{i}.png"
                 cv2.imwrite(str(path), img)
-                proc = subprocess.run(  # noqa: S603
-                    [
-                        "tesseract",
-                        str(path),
-                        "stdout",
-                        "--psm",
-                        "7",
-                        "-l",
-                        "eng",
-                    ],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    timeout=3,
-                )
-                raw = (proc.stdout or "").strip().lower()
-                compact = re.sub(r"[^a-z]", "", raw)
-                if compact:
-                    texts.append(compact)
+                for psm in ("7", "8"):
+                    proc = subprocess.run(  # noqa: S603
+                        [
+                            "tesseract",
+                            str(path),
+                            "stdout",
+                            "--psm",
+                            psm,
+                            "-l",
+                            "eng",
+                            "-c",
+                            "tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+                        ],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=3,
+                    )
+                    raw = (proc.stdout or "").strip().lower()
+                    compact = re.sub(r"[^a-z]", "", raw)
+                    if compact:
+                        texts.append(compact)
     except (OSError, subprocess.TimeoutExpired) as exc:
         logger.debug("Button label OCR failed: {}", exc)
         return None
@@ -71,17 +92,21 @@ def read_short_label(roi_bgr: np.ndarray) -> str | None:
 
 def is_donate_button_label(roi_bgr: np.ndarray) -> bool | None:
     """
-    True if OCR says Donate, False if Trade (or other non-donate), None if OCR unavailable.
+    True if OCR says Donate, False if Trade, None if unavailable / inconclusive.
+
+    Only return False on a clear Trade read — inconclusive must not block real Donate.
     """
     text = read_short_label(roi_bgr)
     if text is None:
         return None
-    if "trade" in text:
+    has_trade = "trade" in text
+    has_donate = "donat" in text
+    if has_trade and not has_donate:
         return False
-    if "donat" in text:
+    if has_donate:
         return True
     logger.debug("Green button OCR inconclusive: {!r}", text)
-    return False
+    return None
 
 
 class QuantityOCR:

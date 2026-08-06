@@ -14,7 +14,7 @@ from coc_bot.config import BotConfig
 from coc_bot.donation.capacity_parser import RequestCapacity, RequestCapacityParser
 from coc_bot.donation.request_parser import RequestKind, RequestParser
 from coc_bot.vision.matcher import MatchResult, TemplateMatcher
-from coc_bot.vision.ocr import is_donate_button_label
+from coc_bot.vision.ocr import read_short_label
 
 
 @dataclass
@@ -149,10 +149,11 @@ class ChatMonitor:
 
     def _match_is_donate_button(self, frame: np.ndarray, match: MatchResult) -> bool:
         """
-        Confirm a green-button template hit says Donate (not Trade).
+        Confirm a green-button template hit is Donate, not Trade Offer.
 
-        Uses tesseract on the button crop. If OCR is unavailable, keep the
-        template match (legacy behavior).
+        Order: clear Trade OCR → reject; clear Donate OCR → accept; then card
+        context (capacity bars = donate, “Trade Offer” header = trade). Never
+        reject on inconclusive OCR alone — that was skipping real Donate taps.
         """
         h, w = frame.shape[:2]
         x0 = max(0, match.x)
@@ -162,22 +163,68 @@ class ChatMonitor:
         if x1 <= x0 or y1 <= y0:
             return False
         crop = frame[y0:y1, x0:x1]
-        verdict = is_donate_button_label(crop)
-        if verdict is None:
-            logger.debug(
-                "Donate button OCR unavailable — accepting template match at ({}, {})",
+        label = read_short_label(crop)
+        has_trade = bool(label and "trade" in label)
+        has_donate = bool(label and "donat" in label)
+        if has_trade and not has_donate:
+            logger.info(
+                "Skipping green button at ({}, {}) — OCR read Trade ({!r})",
                 match.center[0],
                 match.center[1],
+                label,
+            )
+            return False
+        if has_donate:
+            logger.debug(
+                "Green button at ({}, {}) OCR Donate ({!r})",
+                match.center[0],
+                match.center[1],
+                label,
             )
             return True
-        if not verdict:
+
+        # Context: troop/spell capacity fractions only exist on donate requests.
+        if self.config.parse_request_capacity:
+            capacity = self.capacity_parser.parse(frame, match)
+            if capacity is not None:
+                logger.debug(
+                    "Green button at ({}, {}) accepted — request capacity visible",
+                    match.center[0],
+                    match.center[1],
+                )
+                return True
+
+        if self._looks_like_trade_offer_card(frame, match):
             logger.info(
-                "Skipping green button at ({}, {}) — OCR is not Donate (likely Trade)",
+                "Skipping green button at ({}, {}) — Trade Offer card nearby",
                 match.center[0],
                 match.center[1],
             )
             return False
+
+        logger.info(
+            "Green button at ({}, {}) OCR inconclusive ({!r}) — accepting template match",
+            match.center[0],
+            match.center[1],
+            label,
+        )
         return True
+
+    def _looks_like_trade_offer_card(self, frame: np.ndarray, match: MatchResult) -> bool:
+        """True when the message card left of the button looks like a Trade Offer."""
+        h, w = frame.shape[:2]
+        # Header sits above/left of the green pill on Trade Offer rows.
+        x1 = max(0, match.x)
+        x0 = max(0, match.x - int(match.width * 3.5))
+        y0 = max(0, match.y - int(match.height * 1.8))
+        y1 = min(h, match.y + match.height)
+        if x1 <= x0 or y1 <= y0:
+            return False
+        region = frame[y0:y1, x0:x1]
+        text = read_short_label(region)
+        if text is None:
+            return False
+        return "tradeoffer" in text or ("trade" in text and "offer" in text)
 
     def mark_handled(self, request: DonateRequest) -> None:
         self._handled[request.signature] = time.time()

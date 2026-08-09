@@ -5,6 +5,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from loguru import logger
+
 
 @dataclass
 class RuntimeState:
@@ -62,11 +64,33 @@ class RuntimeState:
 def load_runtime_state(path: Path) -> RuntimeState:
     if not path.exists():
         return RuntimeState.fresh()
-    with open(path, encoding="utf-8") as f:
-        return RuntimeState.from_dict(json.load(f))
+    try:
+        raw = path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        logger.warning("Could not read runtime state {}: {} — starting fresh", path, exc)
+        return RuntimeState.fresh()
+    if not raw:
+        logger.warning("Runtime state {} is empty — starting fresh", path)
+        return RuntimeState.fresh()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.warning(
+            "Runtime state {} is corrupt ({}) — starting fresh",
+            path,
+            exc,
+        )
+        return RuntimeState.fresh()
+    if not isinstance(data, dict):
+        logger.warning("Runtime state {} is not a JSON object — starting fresh", path)
+        return RuntimeState.fresh()
+    return RuntimeState.from_dict(data)
 
 
 def save_runtime_state(path: Path, state: RuntimeState) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(asdict(state), f, indent=2)
+    payload = json.dumps(asdict(state), indent=2)
+    # Atomic-ish write so a crash mid-save is less likely to leave an empty file.
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(payload, encoding="utf-8")
+    tmp.replace(path)

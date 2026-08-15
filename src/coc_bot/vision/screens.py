@@ -258,7 +258,9 @@ class ScreenClassifier:
         Donation popup over clan chat.
 
         Prefer template / \"Donation Resource\" title. A white card alone is not
-        enough (clan chat light areas false-positive). Troop+spell bars confirm.
+        enough (clan chat light areas false-positive). Troop (and optional spell)
+        bars confirm. Lower-level clan castles omit spells/siege — the spell bar
+        ROI may be quiet; troop bar + white card is enough.
         """
         # Battle results silhouettes / card — never a donation panel.
         if self.looks_like_results_side_silhouettes(frame):
@@ -278,23 +280,38 @@ class ScreenClassifier:
 
         troop_std = self._roi_std(frame, "donation_troop_bar")
         spell_std = self._roi_std(frame, "donation_spell_bar")
-        if troop_std is None or spell_std is None:
+        if troop_std is None:
             return False
 
         has_card = self._has_white_donation_card(frame)
+        spell_busy = spell_std is not None and spell_std > 28
+        troop_busy = troop_std > 28
+        troop_strong = troop_std > 40
 
-        # White card + busy bars — real donation popup.
-        if has_card and troop_std > 28 and spell_std > 28:
+        # Full panel: white card + busy troop and spell bars.
+        if has_card and troop_busy and spell_busy:
+            return True
+
+        # Troop-only panel (no spell/siege tabs): white card + busy troop strip.
+        if has_card and troop_busy:
             return True
 
         # Strong dual-bar signal without relying on the white-card detector.
-        if troop_std > 40 and spell_std > 40:
+        if troop_strong and spell_std is not None and spell_std > 40:
+            return True
+
+        # Strong troop-only signal + dimmed modal overlay.
+        if troop_strong and self._has_dimmed_modal_overlay(frame):
+            if self.find_return_home_button(frame) is not None:
+                return False
             return True
 
         # Weaker path: bars + dimmed overlay, and not a Return Home results card.
         if self.find_return_home_button(frame) is not None:
             return False
-        if troop_std > 30 and spell_std > 30 and self._has_dimmed_modal_overlay(frame):
+        if troop_busy and spell_busy and self._has_dimmed_modal_overlay(frame):
+            return True
+        if troop_busy and self._has_dimmed_modal_overlay(frame):
             return True
         return False
 

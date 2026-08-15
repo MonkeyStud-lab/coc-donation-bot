@@ -534,8 +534,9 @@ class DonationBot:
         if not opened:
             logger.warning(
                 "Donation panel still not detected — leaving request unmarked so it can retry. "
-                "If this keeps happening, recalibrate donation_troop_bar / donation_spell_bar "
-                "or capture a donation_panel template."
+                "If this keeps happening, recalibrate donation_troop_bar (and donation_spell_bar "
+                "when present) or capture a donation_panel template. Troop-only clan castles "
+                "have no spell/siege strip — that is supported."
             )
             self._pending_request = None
             self._set_state("scroll_chat")

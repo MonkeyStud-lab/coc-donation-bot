@@ -223,6 +223,17 @@ class RequestCapacityParser:
                     if self._score_fraction(frac, kind=kind) > 0:
                         fractions[i] = frac
 
+        # Troop-only clan castles show a single 0/20-style bar (no spell/siege rows).
+        if fractions[0] is not None and fractions[1] is None and fractions[2] is None:
+            if self._score_fraction(fractions[0], kind="troop") > 0:
+                capacity = self._from_donated_totals(fractions[0], (0, 0), (0, 0))
+                logger.info(
+                    "Request capacity (troop-only CC): troops={}/{} spells=n/a siege=n/a",
+                    capacity.troop_remaining,
+                    capacity.troop_total,
+                )
+                return capacity
+
         if any(f is None for f in fractions):
             logger.debug(
                 "Capacity OCR found {}/3 fractions ({})",
@@ -407,6 +418,8 @@ class RequestCapacityParser:
         def rem(donated: int, total: int) -> tuple[int, int]:
             total = max(total, 0)
             donated = max(0, min(donated, total))
+            if total <= 0:
+                return 0, 0
             return total - donated, total
 
         tr, tt = rem(*troop)

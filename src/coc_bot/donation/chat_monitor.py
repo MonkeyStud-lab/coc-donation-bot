@@ -233,4 +233,5 @@ class ChatMonitor:
         cx, cy = request.button_match.center
         logger.info("Opening donation panel at ({}, {}), conf={:.2f}", cx, cy, request.button_match.confidence)
         self.input.tap(cx, cy)
-        self.mark_handled(request)
+        # Do not mark handled here. The loop confirms the panel opened first;
+        # marking on tap would skip retries when the panel never appears.

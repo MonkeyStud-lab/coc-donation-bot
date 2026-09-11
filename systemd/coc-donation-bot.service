@@ -5,8 +5,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+# Edit WorkingDirectory / ExecStart / COC_BOT_CONFIG if the repo is not at ~/Projects/coc-donation-bot
 WorkingDirectory=%h/Projects/coc-donation-bot
-ExecStart=%h/Projects/coc-donation-bot/.venv/bin/python -m coc_bot.main
+# Headless loop — do not launch the Tk GUI from systemd (no display / would block).
+ExecStart=%h/Projects/coc-donation-bot/.venv/bin/python -m coc_bot.main --no-gui
 Restart=on-failure
 RestartSec=15
 # Set ADB_DEVICE to the address from `adb devices` (often 127.0.0.1:5555 or a LAN IP).

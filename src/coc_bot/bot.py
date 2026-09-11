@@ -542,6 +542,8 @@ class DonationBot:
             self._set_state("scroll_chat")
             return
 
+        self.chat_monitor.mark_handled(self._pending_request)
+
         from coc_bot.stop import interrupted_sleep
 
         if interrupted_sleep(0.3, self.should_stop):

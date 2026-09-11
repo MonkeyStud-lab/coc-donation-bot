@@ -211,7 +211,7 @@ sudo loginctl enable-linger $USER
 journalctl --user -u coc-donation-bot.service -f
 ```
 
-That last command shows a live log. Press `Ctrl+C` to stop watching (the service keeps running).
+The unit runs **headless** (`--no-gui`). Edit `WorkingDirectory` / `ExecStart` / `COC_BOT_CONFIG` if the repo is not at `~/Projects/coc-donation-bot`. That last command shows a live log. Press `Ctrl+C` to stop watching (the service keeps running).
 
 ---
 
@@ -271,6 +271,9 @@ Environment variables:
 |----------|-------------|
 | `ADB_DEVICE` | Override device address (e.g. `127.0.0.1:5555`) |
 | `COC_BOT_CONFIG` | Alternate calibrated YAML path |
+| `COC_BOT_SCALE_TAPS` | Set to `1` only if screencap pixels differ from `wm size` and taps miss |
+
+See [`.env.example`](.env.example) for a copy-paste template (export these in the shell; the bot does not load a `.env` file).
 
 ### Project layout
 

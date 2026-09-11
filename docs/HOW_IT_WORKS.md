@@ -33,7 +33,7 @@ The bot never reads game memory or uses an official API. It:
              (donation/)              (attack/)                  (runtime/)
 ```
 
-The orchestrator is `DonationBot` in [`src/coc_bot/main.py`](../src/coc_bot/main.py). By default it runs behind a Tkinter GUI ([`src/coc_bot/gui/app.py`](../src/coc_bot/gui/app.py)).
+The orchestrator is `DonationBot` in [`src/coc_bot/bot.py`](../src/coc_bot/bot.py) (`python -m coc_bot.main` still starts it). By default it runs behind a Tkinter GUI ([`src/coc_bot/gui/app.py`](../src/coc_bot/gui/app.py)).
 
 ---
 

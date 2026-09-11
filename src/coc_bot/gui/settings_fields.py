@@ -352,7 +352,8 @@ SETTINGS: list[SettingField] = [
         "gui_practice_mode",
         "Practice mode (no donate taps)",
         "When enabled, Start runs in practice mode: navigation still works, but donation "
-        "taps are skipped. Useful to verify calibration safely. Stop/Start after changing.",
+        "taps are skipped. Farm attacks still use real taps if farm is enabled — turn farm "
+        "off to practice donations only. Stop/Start after changing.",
         "bool",
         lambda c: c.gui_practice_mode,
         "Interface",

@@ -15,6 +15,7 @@ data/templates/
 data/icons/
 data/bot.log
 data/user_settings.yaml
+data/gui_window.json
 logs/
 .setup_linux_stamp
 

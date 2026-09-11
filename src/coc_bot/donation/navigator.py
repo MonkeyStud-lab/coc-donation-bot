@@ -305,7 +305,7 @@ class Navigator:
         if "chat_panel" in self.config.rois:
             from coc_bot.vision.rois import crop_roi
 
-            x, y, rw, rh = denormalize_roi(ROI(**self.config.rois["chat_panel"]), w, h)
+            x, y, rw, rh = denormalize_roi(ROI(*self.config.rois["chat_panel"]), w, h)
             # Search a band just inside/outside the panel's right edge.
             x0 = max(0, x + int(rw * 0.88))
             x1 = min(w, x + rw + int(w * 0.04))
@@ -383,7 +383,7 @@ class Navigator:
         # Last resort: right edge of chat_panel ROI center.
         if "chat_panel" in self.config.rois:
             h, w = frame.shape[:2]
-            x, y, rw, rh = denormalize_roi(ROI(**self.config.rois["chat_panel"]), w, h)
+            x, y, rw, rh = denormalize_roi(ROI(*self.config.rois["chat_panel"]), w, h)
             cx = x + rw - max(8, int(rw * 0.03))
             cy = y + rh // 2
             logger.warning("close_chat missing — tapping chat panel right edge ({}, {})", cx, cy)

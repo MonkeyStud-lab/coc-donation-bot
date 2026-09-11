@@ -75,13 +75,13 @@ never results/battle heuristics.
 
 | Goal | File |
 |------|------|
-| When a request is eligible | `DonationBot._should_handle_request` in `main.py` |
+| When a request is eligible | `DonationBot._should_handle_request` in `bot.py` |
 | Specific vs open vs hybrid | `donation/request_parser.py` |
 | How slots are filled | `donation/executor.py` |
 | Finding Donate in chat | `donation/chat_monitor.py` |
 | Chat open/close / panels | `donation/navigator.py` |
 
-There is experimental budget-aware code (`fill_planner.py`, `inventory.py`, `icon_matcher.py`). The **live** path today is colored-slot filling. Wire planner carefully if you revive it.
+There is experimental budget-aware code (`fill_planner.py`, `inventory.py`, `icon_matcher.py`). The **live** path today is colored-slot filling for specific, hybrid, and open requests alike (`identify=False`; `stop_at_grey` is unused). Wire planner carefully if you revive it.
 
 ### 4. Add a Settings UI field
 

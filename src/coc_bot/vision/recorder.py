@@ -96,6 +96,9 @@ class FrameRecorder:
         self._pending: _Pending | None = None
         self._last_screen: str | None = None
         self._last_saved_thumb: np.ndarray | None = None
+        self._last_saved_at: float = 0.0
+        # Even on a still screen, keep a slow trickle for labeling volume.
+        self._min_periodic_interval_s = 45.0
         self._lock = threading.Lock()
 
         self._queue: queue.Queue[tuple[Path, np.ndarray, dict] | None] = queue.Queue(maxsize=64)
@@ -147,15 +150,21 @@ class FrameRecorder:
         if self.max_frames is not None and self._saved >= self.max_frames:
             return
         screen = p.final_screen()
+        inherited = False
+        if screen == "none" and self._last_screen:
+            # This capture was never classified (scroll/jump/screencap helpers).
+            # Tag with the last known screen so Label Studio still has a hint.
+            screen = self._last_screen
+            inherited = True
         reasons: list[str] = []
         if screen == "unknown":
             reasons.append("unknown")
-        if self._last_screen is not None and screen != self._last_screen and screen != "none":
+        if self._last_screen is not None and screen != self._last_screen and not inherited:
             reasons.append("screen_change")
         if p.seq % self.every_n == 0:
             reasons.append("periodic")
         prev_screen = self._last_screen
-        if screen != "none":
+        if not inherited and screen != "none":
             self._last_screen = screen
         if not reasons:
             return
@@ -163,9 +172,11 @@ class FrameRecorder:
         thumb = self._thumb(p.frame)
         if reasons == ["periodic"] and self._last_saved_thumb is not None:
             diff = float(np.mean(cv2.absdiff(thumb, self._last_saved_thumb)))
-            if diff < self.dedupe_threshold:
+            age = p.ts - self._last_saved_at
+            if diff < self.dedupe_threshold and age < self._min_periodic_interval_s:
                 return
         self._last_saved_thumb = thumb
+        self._last_saved_at = p.ts
 
         h, w = p.frame.shape[:2]
         self._saved += 1
@@ -179,6 +190,7 @@ class FrameRecorder:
             "modes": p.modes(),
             "verdicts": [{"screen": s, "mode": m} for s, m in p.verdicts],
             "reason": reasons,
+            "screen_inherited": inherited,
             "width": w,
             "height": h,
         }

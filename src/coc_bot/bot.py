@@ -33,11 +33,15 @@ class DonationBot:
         dry_run: bool = False,
         debug_save_frames: bool = False,
         debug: bool = False,
+        record: bool = False,
+        record_every: int = 10,
     ) -> None:
         self.config = load_config()
         self.config.dry_run = dry_run
         self.config.debug_save_frames = debug_save_frames
         self._debug = debug
+        self._record = record
+        self._record_every = max(1, int(record_every))
 
         if not self.config.calibrated:
             # Raise (not sys.exit) so the GUI worker thread can show an error dialog.
@@ -188,9 +192,39 @@ class DonationBot:
 
         return f"Screen: {screen_display_name(self.last_screen)}"
 
+    def _start_recorder(self) -> None:
+        """Phase-0 perception data collection (see vision/recorder.py)."""
+        if not self._record:
+            return
+        from coc_bot.vision import recorder
+        from coc_bot.vision.recorder import FrameRecorder, config_fingerprint
+
+        recorder.start(
+            FrameRecorder(
+                self.config.data_dir / "frames",
+                every_n=self._record_every,
+                extra_meta={
+                    "calib_frame": [self.config.frame_width, self.config.frame_height],
+                    "calib_fingerprint": config_fingerprint(self.config),
+                    "adb_device": self.config.adb_device,
+                    "dry_run": self.config.dry_run,
+                },
+            )
+        )
+
     def run(self) -> None:
         logger.info("CoC Donation Bot starting (dry_run={})", self.config.dry_run)
         self._stop_requested = False
+        self._start_recorder()
+        try:
+            self._run_inner()
+        finally:
+            if self._record:
+                from coc_bot.vision import recorder
+
+                recorder.stop()
+
+    def _run_inner(self) -> None:
         try:
             self.client.health_check()
         except AdbError as exc:

@@ -29,6 +29,20 @@ def main() -> None:
         action="store_true",
         help="Run the bot in the terminal only (no control window)",
     )
+    parser.add_argument(
+        "--record",
+        action="store_true",
+        help="Record screenshots + classifier verdicts to data/frames/<session>/ "
+        "for perception training (see vision/recorder.py)",
+    )
+    parser.add_argument(
+        "--record-every",
+        type=int,
+        default=10,
+        metavar="N",
+        help="With --record: also save every Nth frame (unknown/screen-change frames "
+        "are always saved). Default 10.",
+    )
     args = parser.parse_args()
 
     setup_logging(debug=args.debug, log_file=Path("data") / "bot.log")
@@ -43,6 +57,8 @@ def main() -> None:
             dry_run=args.dry_run,
             debug_save_frames=args.debug_save_frames,
             debug=args.debug,
+            record=args.record,
+            record_every=args.record_every,
         )
         try:
             bot.run()
@@ -57,6 +73,8 @@ def main() -> None:
         dry_run=args.dry_run,
         debug_save_frames=args.debug_save_frames,
         debug=args.debug,
+        record=args.record,
+        record_every=args.record_every,
     )
 
 

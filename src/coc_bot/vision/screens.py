@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 
 from coc_bot.config import BotConfig
+from coc_bot.vision import recorder
 from coc_bot.vision.matcher import TemplateMatcher
 
 
@@ -814,6 +815,11 @@ class ScreenClassifier:
         (boot / recovery / debug). Popup is checked late so Attack menu
         green buttons are not mistaken for a blocking modal.
         """
+        screen = self._classify(frame, mode)
+        recorder.note_classification(frame, screen, mode)  # no-op unless --record
+        return screen
+
+    def _classify(self, frame: np.ndarray, mode: BotMode | None) -> ScreenType:
         if self._template_visible(frame, "loading"):
             return ScreenType.LOADING
 

@@ -12,6 +12,8 @@ def run_gui(
     dry_run: bool = False,
     debug_save_frames: bool = False,
     debug: bool = False,
+    record: bool = False,
+    record_every: int = 10,
 ) -> None:
     """
     Show a loading bar, then open the control window.
@@ -42,6 +44,8 @@ def run_gui(
         dry_run=dry_run,
         debug_save_frames=debug_save_frames,
         debug=debug,
+        record=record,
+        record_every=record_every,
         show_startup_splash=True,
     )
     app.mainloop()

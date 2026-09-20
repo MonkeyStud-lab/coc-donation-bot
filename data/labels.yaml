@@ -1,0 +1,134 @@
+# Perception label schema (Phase 1 of the perception project).
+#
+# Rules that decided what is in here:
+#   * label SEMANTICS, not appearance — btn_donate is btn_donate whether green,
+#     greyed, or wearing an event skin
+#   * label only things you TAP or things that IDENTIFY A SCREEN
+#   * freeze this before labeling at scale; renaming after 1k frames is misery
+#
+# Consumed by scripts/preannotate.py (Label Studio config + heuristic
+# pre-annotations) and later by the YOLO data.yaml exporter.
+
+version: 1
+
+# Frame-level screen tag (single choice). Mirrors vision.screens.ScreenType plus
+# the two screens that are currently only side-checks.
+screens:
+  - home
+  - clan_chat
+  - global_chat
+  - donation_panel
+  - attack_menu
+  - matchmaking
+  - battle
+  - battle_results
+  - surrender
+  - live_replay
+  - loading
+  - popup
+  - shop
+  - settings
+  - other
+
+# Object classes, grouped for readability. Group names are not labels.
+classes:
+  anchors:            # presence identifies the screen
+    - chat_panel
+    - chat_groups_title
+    - donation_panel
+    - attack_menu_panel
+    - matchmaking_overlay
+    - battle_hud
+    - battle_results_panel
+    - live_replay_badge
+    - loading_screen
+    - surrender_dialog
+    - generic_dialog
+    - shop_panel
+    - settings_panel
+  navigation:         # things the screen graph taps
+    - btn_open_chat
+    - btn_close_chat
+    - tab_clan_chat
+    - tab_global_chat
+    - btn_attack
+    - btn_find_match
+    - btn_end_battle
+    - btn_return_home
+    - btn_surrender_okay      # detected so the planner can REFUSE to tap it
+    - btn_surrender_cancel
+    - btn_close_x
+    - btn_okay
+    - btn_cancel
+  donation:
+    - btn_donate
+    - btn_trade
+    - btn_request
+    - capacity_troops
+    - capacity_spells
+    - capacity_siege
+    - donation_troop_slot
+    - donation_spell_slot
+    - donation_siege_slot
+    - resource_toggle_elixir
+    - resource_toggle_gems
+    - request_message_bubble
+    - jump_to_request_icon
+  hud:
+    - gold_counter
+    - elixir_counter
+    - dark_elixir_counter
+    - gem_counter
+    - trophy_counter
+    - shield_icon
+    - builder_status
+  battle:             # minimum needed for navigation/recovery, not for playing
+    - army_tray
+    - army_slot
+    - battle_timer
+    - star_indicator
+
+# Map existing calibration keys (data/calibrated.yaml templates / tap_points /
+# rois) to classes so today's heuristics can pre-annotate frames.
+# tap_points give a centre only; preannotate.py draws a default-size box there.
+from_calibration:
+  templates:
+    open_chat: btn_open_chat
+    close_chat: btn_close_chat
+    clan_chat_tab: tab_clan_chat
+    donate_button: btn_donate
+    chat_request_jump: jump_to_request_icon
+    chat_groups: chat_groups_title
+    loading: loading_screen
+    popup_dismiss: btn_close_x
+    attack_button: btn_attack
+    donation_panel: donation_panel
+    clan_chat: chat_panel          # anchor template for the chat panel
+  tap_points:
+    open_chat: btn_open_chat
+    close_chat: btn_close_chat
+    clan_chat_tab: tab_clan_chat
+    attack_button: btn_attack
+    unranked_battle: btn_find_match
+    find_match: btn_find_match
+    return_home: btn_return_home
+    donation_elixir_button: resource_toggle_elixir
+  rois:
+    chat_panel: chat_panel
+    donation_troop_bar: donation_troop_slot     # whole bar; split into slots by hand
+    donation_spell_bar: donation_spell_slot
+
+# Map heuristic screen verdicts (index.jsonl "screen") to the frame tag above.
+screen_from_heuristic:
+  home: home
+  clan_chat: clan_chat
+  donation_panel: donation_panel
+  attack_menu: attack_menu
+  matchmaking: matchmaking
+  battle: battle
+  battle_results: battle_results
+  live_replay: live_replay
+  loading: loading
+  popup: popup
+  unknown: other
+  none: other

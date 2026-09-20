@@ -8,6 +8,7 @@ import numpy as np
 from loguru import logger
 
 from coc_bot.adb.client import AdbClient, AdbError
+from coc_bot.vision import recorder
 
 
 def _fix_png_line_endings(png_bytes: bytes) -> bytes:
@@ -116,6 +117,7 @@ class ScreenCapture:
                     if self._preferred_method != method_name:
                         logger.info("Screencap OK via {} ({}x{})", method_name, w, h)
                         self._preferred_method = method_name
+                    recorder.on_frame(frame)  # no-op unless --record
                     return frame
                 except (AdbError, cv2.error, ValueError) as exc:
                     last_error = exc

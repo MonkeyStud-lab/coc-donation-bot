@@ -15,6 +15,9 @@ data/templates/
 data/icons/
 data/bot.log
 data/user_settings.yaml
+# Perception training data (large; keep out of git)
+data/frames/
+data/labelstudio/
 logs/
 .setup_linux_stamp
 

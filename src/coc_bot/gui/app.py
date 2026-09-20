@@ -111,6 +111,8 @@ class BotControlApp(tk.Tk):
         dry_run: bool = False,
         debug_save_frames: bool = False,
         debug: bool = False,
+        record: bool = False,
+        record_every: int = 10,
         show_startup_splash: bool = False,
     ) -> None:
         super().__init__()
@@ -153,6 +155,8 @@ class BotControlApp(tk.Tk):
         self._dry_run = dry_run
         self._debug_save_frames = debug_save_frames
         self._debug = debug
+        self._record = record
+        self._record_every = max(1, int(record_every))
         self._bot = None
         self._bot_thread: threading.Thread | None = None
         # Set when Stop is pressed while DonationBot is still being constructed.
@@ -1360,6 +1364,8 @@ class BotControlApp(tk.Tk):
             cmd.append("--debug-save-frames")
         if self._debug:
             cmd.append("--debug")
+        if self._record:
+            cmd += ["--record", "--record-every", str(self._record_every)]
         try:
             cwd = str(project_root())
             env = os.environ.copy()
@@ -2354,6 +2360,8 @@ class BotControlApp(tk.Tk):
                     dry_run=self._dry_run or self._practice_mode,
                     debug_save_frames=self._debug_save_frames,
                     debug=self._debug,
+                    record=self._record,
+                    record_every=self._record_every,
                 )
                 if self._stop_before_run:
                     logger.info("Stop requested during startup — not running bot")
@@ -3395,7 +3403,14 @@ class BotControlApp(tk.Tk):
         self.destroy()
 
 
-def run_gui(*, dry_run: bool = False, debug_save_frames: bool = False, debug: bool = False) -> None:
+def run_gui(
+    *,
+    dry_run: bool = False,
+    debug_save_frames: bool = False,
+    debug: bool = False,
+    record: bool = False,
+    record_every: int = 10,
+) -> None:
     """Launch the control window (with startup splash)."""
     from coc_bot.gui.bootstrap import run_gui as _run_gui_with_splash
 
@@ -3403,4 +3418,6 @@ def run_gui(*, dry_run: bool = False, debug_save_frames: bool = False, debug: bo
         dry_run=dry_run,
         debug_save_frames=debug_save_frames,
         debug=debug,
+        record=record,
+        record_every=record_every,
     )

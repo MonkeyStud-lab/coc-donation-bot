@@ -298,6 +298,19 @@ class EdgeDeployer:
         if self._stopping():
             return 0
         jitter = max(0, min(40, int(self.config.farm_deploy_jitter_px)))
+        # Sequence taps were recorded at calibration resolution; scale to the live
+        # frame like AttackNavigator._scaled_point does, or a capture-size change
+        # dumps the army onto the HUD.
+        fh, fw = frame.shape[:2]
+        cw = int(self.config.frame_width or 0)
+        ch = int(self.config.frame_height or 0)
+        if cw > 0 and ch > 0 and (cw != fw or ch != fh):
+            logger.info(
+                "Scaling deploy sequence from {}x{} calib → {}x{} frame", cw, ch, fw, fh
+            )
+            taps = [
+                (int(round(x * fw / cw)), int(round(y * fh / ch))) for (x, y) in taps
+            ]
         total = 0
         for i, (x, y) in enumerate(taps, start=1):
             if self._stopping():

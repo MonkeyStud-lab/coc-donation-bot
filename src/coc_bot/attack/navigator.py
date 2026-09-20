@@ -117,6 +117,7 @@ class AttackNavigator:
         deadline = time.time() + timeout
         prev_mode = self.mode
         self.mode = BotMode.ANY
+        home_nudges = 0
         try:
             while time.time() < deadline:
                 if self._stopping():
@@ -137,10 +138,19 @@ class AttackNavigator:
                         return False
                     continue
                 if screen == ScreenType.HOME:
+                    # Home but no Attack! chip — something (shop, info card, chat)
+                    # probably still covers it. Nudge a few times before trusting HOME.
                     self._nudge_clear_home_overlays(frame)
+                    home_nudges += 1
                     if self.attack_button_visible(self.capture.screenshot()):
                         return True
-                    return True
+                    if home_nudges >= 3:
+                        logger.warning(
+                            "Home classified but Attack! chip not found after {} nudges — proceeding",
+                            home_nudges,
+                        )
+                        return True
+                    continue
                 if screen == ScreenType.DONATION_PANEL and self.donation_nav is not None:
                     self.donation_nav.close_donation_panel(frame)
                     if self._sleep(0.6):
@@ -190,7 +200,7 @@ class AttackNavigator:
         """Tap empty village space so shop/info cards do not cover the Attack button."""
         h, w = frame.shape[:2]
         self.input.tap(int(w * 0.50), int(h * 0.28), jitter=2)
-        time.sleep(0.35)
+        self._sleep(0.35)
 
     def _close_clan_chat_fallback(self, frame: np.ndarray) -> None:
         """Close chat when donation Navigator is unavailable."""
@@ -354,7 +364,13 @@ class AttackNavigator:
 
             if self._attack_menu_open(check, had_attack_chip=had_chip):
                 logger.info("Attack menu opened after tap at ({}, {})", x, y)
-                self.config.tap_points["attack_button"] = [x, y]
+                # Only remember this point when the menu is *positively* identified.
+                # "Chip vanished" alone can mean a shop/chat overlay swallowed the tap;
+                # caching that would poison every later Attack! tap this session.
+                if self.classifier._looks_like_attack_menu(check) or self.classify(  # noqa: SLF001
+                    check, mode=BotMode.ATTACK
+                ) in (ScreenType.ATTACK_MENU, ScreenType.MATCHMAKING):
+                    self.config.tap_points["attack_button"] = [x, y]
                 return True
 
             if self.attack_button_visible(check):

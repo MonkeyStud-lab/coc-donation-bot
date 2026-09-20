@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import random
-import sys
 import time
 from datetime import datetime
 
@@ -10,7 +9,7 @@ from loguru import logger
 
 from coc_bot.adb.app import AppController
 from coc_bot.adb.capture import ScreenCapture
-from coc_bot.adb.client import AdbClient, AdbError
+from coc_bot.adb.client import AdbClient, AdbError, AdbStopped
 from coc_bot.adb.input import InputController
 from coc_bot.attack.farmer import AttackFarmer
 from coc_bot.config import load_config
@@ -21,20 +20,13 @@ from coc_bot.donation.request_parser import RequestKind
 from coc_bot.runtime.breaks import BreakManager
 from coc_bot.runtime.game_state import GameState, GameStateMachine
 from coc_bot.runtime.tracker import RuntimeTracker
+from coc_bot.stop import interrupted_sleep
 from coc_bot.vision.matcher import TemplateMatcher
 from coc_bot.vision.screens import BotMode, ScreenClassifier, ScreenType, MODE_LABELS
 
 
 class DonationBot:
     """Main donation loop orchestrator."""
-
-    WATCHDOG_STATES = {
-        "ensure_chat",
-        "scan_chat",
-        "open_donation",
-        "donate",
-        "close_panel",
-    }
 
     def __init__(
         self,
@@ -48,8 +40,10 @@ class DonationBot:
         self._debug = debug
 
         if not self.config.calibrated:
-            logger.error("Calibration not found. Run: python scripts/calibrate.py")
-            sys.exit(1)
+            # Raise (not sys.exit) so the GUI worker thread can show an error dialog.
+            raise RuntimeError(
+                "Calibration not found. Run Setup in the app or: python scripts/calibrate.py"
+            )
 
         self.client = AdbClient(device=self.config.adb_device)
         self.capture = ScreenCapture(self.client)
@@ -107,6 +101,8 @@ class DonationBot:
 
         # Stop button interrupts long waits (chat nav, farm, donation panel, breaks).
         stop = self.should_stop
+        self.client.stop_check = stop
+        self.app.stop_check = stop
         self.navigator.stop_check = stop
         self.farmer.stop_check = stop
         self.farmer.attack_nav.stop_check = stop
@@ -230,14 +226,19 @@ class DonationBot:
                     if self._stop_requested:
                         break
                     logger.error("ADB error: {} — reconnecting...", exc)
-                    time.sleep(3)
-                    self.client.ensure_connected()
+                    if interrupted_sleep(3, self.should_stop):
+                        break
+                    try:
+                        self.client.ensure_connected()
+                    except AdbStopped:
+                        break
                 except Exception as exc:
                     if self._stop_requested:
                         break
                     logger.exception("Unexpected error: {}", exc)
                     self._recover()
-                    time.sleep(2)
+                    if interrupted_sleep(2, self.should_stop):
+                        break
 
             self.tracker.tick()
             logger.info("Bot stopped")
@@ -258,14 +259,14 @@ class DonationBot:
 
         if self.break_manager.check_and_break_if_needed():
             self._set_state("scan_chat")
+            # A break legitimately takes minutes — restart the watchdog clock.
+            self._state_entered = time.monotonic()
             return
 
         # Farm between donation states only — never mid open_donation / donate.
         if self._maybe_run_farm():
             self.tracker.tick()
             lo, hi = self.config.scan_interval_ms
-            from coc_bot.stop import interrupted_sleep
-
             interrupted_sleep(random.uniform(lo, hi) / 1000.0, self.should_stop)
             return
 
@@ -288,8 +289,6 @@ class DonationBot:
 
         self.tracker.tick()
         lo, hi = self.config.scan_interval_ms
-        from coc_bot.stop import interrupted_sleep
-
         interrupted_sleep(random.uniform(lo, hi) / 1000.0, self.should_stop)
 
     def _farm_due(self) -> bool:
@@ -323,6 +322,14 @@ class DonationBot:
         self._farm_requested = False
         if not self.config.farm_calibrated:
             logger.warning("Farm requested but calibration incomplete — skipping")
+            return True
+        from coc_bot.config import normalize_farm_deploy_sequence
+
+        if not normalize_farm_deploy_sequence(self.config.farm_deploy_sequence).get("taps"):
+            logger.warning(
+                "Farm requested but no deploy tap sequence is programmed — skipping "
+                "(Setup → Farm → Deploy tap sequence)"
+            )
             return True
         if not manual and not self.config.farm_enabled:
             return False
@@ -420,16 +427,20 @@ class DonationBot:
         if screen in (ScreenType.CLAN_CHAT, ScreenType.DONATION_PANEL):
             self._unknown_streak = 0
             return True
-        if screen == ScreenType.LOADING:
-            return False
-        if screen == ScreenType.UNKNOWN:
+        if screen in (ScreenType.UNKNOWN, ScreenType.LOADING):
+            # LOADING is expected briefly (game boot, returning from battle) but a
+            # long streak means the game hung; treat it like UNKNOWN with a longer fuse.
             self._unknown_streak += 1
-            if self._unknown_streak >= 3:
+            limit = 3 if screen == ScreenType.UNKNOWN else 12
+            if self._unknown_streak >= limit:
                 logger.warning(
-                    "Donate mode saw UNKNOWN x{} — full recovery",
+                    "Donate mode saw {} x{} — full recovery",
+                    screen.value,
                     self._unknown_streak,
                 )
                 self._recover()
+                return False
+            if screen == ScreenType.LOADING:
                 return False
         else:
             self._unknown_streak = 0
@@ -523,8 +534,6 @@ class DonationBot:
                 "Donation panel did not appear after tapping Donate (attempt {})",
                 attempt + 1,
             )
-            from coc_bot.stop import interrupted_sleep
-
             if interrupted_sleep(0.4, self.should_stop):
                 return
 
@@ -541,9 +550,6 @@ class DonationBot:
             self._pending_request = None
             self._set_state("scroll_chat")
             return
-
-        from coc_bot.stop import interrupted_sleep
-
         if interrupted_sleep(0.3, self.should_stop):
             return
         self._set_state("donate")
@@ -582,12 +588,10 @@ class DonationBot:
         self._set_state("scan_chat")
 
     def _recover(self) -> None:
-        """Desync recovery: BACK, full screen scan, then reopen clan chat."""
+        """Desync recovery: full screen scan first, then BACK only if safe, then reopen clan chat."""
         logger.info("Running recovery sequence (full classify)")
         self.game_state.transition(GameState.RECOVERING, reason="watchdog/desync")
         self.set_mode(BotMode.ANY)
-        self.nav_input.back()
-        time.sleep(0.5)
         frame = self.capture.screenshot()
         screen = self.navigator.classify(frame, mode=BotMode.ANY)
         self.last_screen = screen.value
@@ -598,16 +602,24 @@ class DonationBot:
             ScreenType.BATTLE,
             ScreenType.BATTLE_RESULTS,
         ):
+            # Never send BACK here: in a live battle it opens the Surrender dialog.
             try:
                 self.farmer.attack_nav.return_home_from_attack()
             except Exception:  # noqa: BLE001
                 logger.exception("return_home during recovery failed")
-                self.nav_input.back()
-                time.sleep(0.5)
+        elif screen not in (ScreenType.HOME, ScreenType.CLAN_CHAT, ScreenType.LOADING):
+            # Unknown overlay/popup — BACK is the generic dismiss.
+            self.nav_input.back()
+            if interrupted_sleep(0.5, self.should_stop):
+                return
+        if self._stop_requested:
+            return
         self.set_mode(BotMode.DONATE)
         self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request)
         self.game_state.transition(GameState.CLAN_CHAT, reason="recovery done")
         self._set_state("scan_chat")
+        # Recovery always restarts the watchdog clock, even if we were already in scan_chat.
+        self._state_entered = time.monotonic()
         self._unknown_streak = 0
 
     def _check_watchdog(self) -> None:
@@ -625,11 +637,15 @@ class DonationBot:
             self._recover()
 
     def _set_state(self, state: str) -> None:
-        if state != self._state:
-            logger.debug("Loop state: {} -> {}", self._state, state)
-            # Coarse "farm" is expanded by AttackFarmer into finer GameState steps.
-            if state != "farm":
-                self.game_state.note_loop_state(state)
+        if state == self._state:
+            # Re-entering the same state must NOT reset the watchdog timer,
+            # otherwise a state that loops on itself (scan_chat on a stuck
+            # loading screen) can never trip the watchdog.
+            return
+        logger.debug("Loop state: {} -> {}", self._state, state)
+        # Coarse "farm" is expanded by AttackFarmer into finer GameState steps.
+        if state != "farm":
+            self.game_state.note_loop_state(state)
         self._state = state
         self._state_entered = time.monotonic()
 

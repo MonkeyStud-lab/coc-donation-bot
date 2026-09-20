@@ -248,33 +248,25 @@ class Navigator:
         logger.info("Fallback tap to open chat at ({}, {})", fx, fy)
         self.input.tap(fx, fy, jitter=0)
 
-    def _return_from_global_chat(self, frame: np.ndarray) -> None:
-        """Tap the swords/shield tab to leave Chat Groups for clan chat."""
+    def clan_chat_tab_point(self, frame: np.ndarray) -> tuple[int, int] | None:
+        """
+        Screen point for the swords/shield tab that switches Chat Groups → clan chat.
+
+        Single source of truth shared with DonationExecutor. Order: calibrated tap
+        point → template (relaxed threshold, same as other chat chrome) → estimate
+        directly above the orange close_chat tab.
+        """
         point = self.config.tap_points.get("clan_chat_tab")
         if point and len(point) >= 2:
-            logger.info(
-                "Chat Groups open — tapping clan chat tab at ({}, {})",
-                point[0],
-                point[1],
-            )
-            self.input.tap(int(point[0]), int(point[1]), jitter=0)
-            return
+            return int(point[0]), int(point[1])
 
-        rel = self.config.templates.get("clan_chat_tab")
-        if rel:
-            path = self.config.templates_dir / rel
-            if path.exists():
-                tpl = cv2.imread(str(path), cv2.IMREAD_COLOR)
-                if tpl is not None:
-                    match = self.matcher.find(frame, tpl)
-                    if match:
-                        logger.info(
-                            "Chat Groups open — tapping clan chat tab template at ({}, {})",
-                            match.center[0],
-                            match.center[1],
-                        )
-                        self.input.tap(match.center[0], match.center[1], jitter=0)
-                        return
+        tpl = self.load_template("clan_chat_tab")
+        if tpl is not None:
+            match = self.matcher.find(
+                frame, tpl, threshold=max(0.70, self.config.template_threshold - 0.10)
+            )
+            if match:
+                return match.center
 
         close_pt = self.config.tap_points.get("close_chat")
         if close_pt and len(close_pt) >= 2:
@@ -282,17 +274,22 @@ class Navigator:
             x, y = int(close_pt[0]), int(close_pt[1]) - max(36, int(h * 0.06))
             if y > 0:
                 logger.info(
-                    "Chat Groups open — estimating clan tab above close_chat at ({}, {})",
-                    x,
-                    y,
+                    "clan_chat_tab missing — estimating above close_chat at ({}, {})", x, y
                 )
-                self.input.tap(x, y, jitter=0)
-                return
+                return x, y
+        return None
 
-        logger.warning(
-            "Chat Groups open but clan_chat_tab not calibrated — "
-            "Setup → Optional UI → Clan chat tab (swords)"
-        )
+    def _return_from_global_chat(self, frame: np.ndarray) -> None:
+        """Tap the swords/shield tab to leave Chat Groups for clan chat."""
+        point = self.clan_chat_tab_point(frame)
+        if point is None:
+            logger.warning(
+                "Chat Groups open but clan_chat_tab not calibrated — "
+                "Setup → Optional UI → Clan chat tab (swords)"
+            )
+            return
+        logger.info("Chat Groups open — tapping clan chat tab at ({}, {})", point[0], point[1])
+        self.input.tap(point[0], point[1], jitter=0)
 
     def find_close_chat_tab(self, frame: np.ndarray) -> tuple[int, int] | None:
         """
@@ -305,7 +302,7 @@ class Navigator:
         if "chat_panel" in self.config.rois:
             from coc_bot.vision.rois import crop_roi
 
-            x, y, rw, rh = denormalize_roi(ROI(**self.config.rois["chat_panel"]), w, h)
+            x, y, rw, rh = denormalize_roi(ROI(*self.config.rois["chat_panel"]), w, h)
             # Search a band just inside/outside the panel's right edge.
             x0 = max(0, x + int(rw * 0.88))
             x1 = min(w, x + rw + int(w * 0.04))
@@ -383,7 +380,7 @@ class Navigator:
         # Last resort: right edge of chat_panel ROI center.
         if "chat_panel" in self.config.rois:
             h, w = frame.shape[:2]
-            x, y, rw, rh = denormalize_roi(ROI(**self.config.rois["chat_panel"]), w, h)
+            x, y, rw, rh = denormalize_roi(ROI(*self.config.rois["chat_panel"]), w, h)
             cx = x + rw - max(8, int(rw * 0.03))
             cy = y + rh // 2
             logger.warning("close_chat missing — tapping chat panel right edge ({}, {})", cx, cy)
@@ -550,7 +547,7 @@ class Navigator:
         )
         self.input.tap(cx, cy)
         self._last_jump_at = time.time()
-        time.sleep(0.5)
+        self._sleep(0.5)
         return True
 
     def seek_donation_requests_step(

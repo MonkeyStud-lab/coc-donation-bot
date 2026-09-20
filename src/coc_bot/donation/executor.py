@@ -39,6 +39,15 @@ class DonationExecutor:
         self.inventory_parser = InventoryParser(config, matcher=self.matcher)
         self.classifier = ScreenClassifier(config, self.matcher)
         self.stop_check: Callable[[], bool] | None = None
+        self._nav = None  # lazily built Navigator (shared chat-chrome helpers)
+
+    def _navigator(self):
+        if self._nav is None:
+            from coc_bot.donation.navigator import Navigator
+
+            self._nav = Navigator(self.config, self.capture, self.input, self.matcher)
+        self._nav.stop_check = self.stop_check
+        return self._nav
 
     def _stopping(self) -> bool:
         return bool(self.stop_check and self.stop_check())
@@ -274,7 +283,9 @@ class DonationExecutor:
         if not self.classifier.is_global_chat(frame):
             return
 
-        point = self._clan_chat_tab_point(frame)
+        # Shared with Navigator._return_from_global_chat so both paths use the same
+        # lookup order and template threshold.
+        point = self._navigator().clan_chat_tab_point(frame)
         if point is None:
             logger.warning(
                 "Chat Groups open after donate, but clan_chat_tab is not calibrated — "
@@ -289,43 +300,5 @@ class DonationExecutor:
         self.input.tap(point[0], point[1], jitter=0)
         interrupted_sleep(0.45, self.stop_check)
 
-    def _clan_chat_tab_point(self, frame) -> tuple[int, int] | None:
-        """Screen point for the swords/shield tab that switches back to clan chat."""
-        point = self.config.tap_points.get("clan_chat_tab")
-        if point and len(point) >= 2:
-            return int(point[0]), int(point[1])
-
-        rel = self.config.templates.get("clan_chat_tab")
-        if rel:
-            path = self.config.templates_dir / rel
-            if path.exists():
-                import cv2
-
-                template = cv2.imread(str(path), cv2.IMREAD_COLOR)
-                if template is not None:
-                    match = self.matcher.find(
-                        frame,
-                        template,
-                        threshold=max(0.70, self.config.template_threshold - 0.10),
-                    )
-                    if match:
-                        return match.center
-
-        # Swords tab sits directly above the orange close-chat tab.
-        close_pt = self.config.tap_points.get("close_chat")
-        if close_pt and len(close_pt) >= 2:
-            h = frame.shape[0]
-            dx, dy = int(close_pt[0]), int(close_pt[1]) - max(36, int(h * 0.06))
-            if dy > 0:
-                logger.info(
-                    "clan_chat_tab missing — estimating above close_chat at ({}, {})",
-                    dx,
-                    dy,
-                )
-                return dx, dy
-        return None
-
     def _close_panel(self) -> None:
-        from coc_bot.donation.navigator import Navigator
-
-        Navigator(self.config, self.capture, self.input, self.matcher).close_donation_panel()
+        self._navigator().close_donation_panel()

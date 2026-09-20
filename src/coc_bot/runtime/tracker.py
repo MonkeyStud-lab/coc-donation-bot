@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -56,7 +57,7 @@ def break_status_line(tracker: RuntimeTracker) -> str:
             left = (until - now).total_seconds()
             if left > 0:
                 return f"Break: in progress — resumes in {format_duration_short(left)}"
-    remaining = tracker.remaining_seconds()
+    remaining = tracker.peek_remaining_seconds()
     if remaining <= 0:
         return "Break: due on next check"
     return f"Break: next in {format_duration_short(remaining)}"
@@ -71,6 +72,9 @@ class RuntimeTracker:
         self.state = load_runtime_state(self.state_path)
         self._loop_start: float | None = None
         self._paused = False
+        # The bot loop ticks this tracker while the GUI thread polls it for
+        # countdown text; every read-modify-write on ``state`` goes through here.
+        self._lock = threading.RLock()
 
     @property
     def active_seconds(self) -> float:
@@ -78,42 +82,49 @@ class RuntimeTracker:
 
     @property
     def limit_reached(self) -> bool:
-        return self.state.active_seconds >= self.effective_session_limit_seconds()
+        with self._lock:
+            return self.state.active_seconds >= self.effective_session_limit_seconds()
 
     def start_loop_timing(self) -> None:
-        if self._loop_start is None:
-            self._loop_start = time.monotonic()
+        with self._lock:
+            if self._loop_start is None:
+                self._loop_start = time.monotonic()
 
     def pause(self) -> None:
-        self._flush()
-        self._paused = True
-        self._loop_start = None
+        with self._lock:
+            self._flush()
+            self._paused = True
+            self._loop_start = None
 
     def resume(self) -> None:
-        self._paused = False
-        self._loop_start = time.monotonic()
+        with self._lock:
+            self._paused = False
+            self._loop_start = time.monotonic()
 
     def _flush(self) -> None:
-        if self._loop_start is None or self._paused:
-            return
-        elapsed = time.monotonic() - self._loop_start
-        self.state.active_seconds += elapsed
-        self._loop_start = time.monotonic()
-        save_runtime_state(self.state_path, self.state)
+        with self._lock:
+            if self._loop_start is None or self._paused:
+                return
+            now = time.monotonic()
+            elapsed = now - self._loop_start
+            self.state.active_seconds += elapsed
+            self._loop_start = now
+            save_runtime_state(self.state_path, self.state)
 
     def tick(self) -> None:
         self._flush()
 
     def reset_after_break(self, break_seconds: int) -> None:
-        self._flush()
-        self.state.active_seconds = 0.0
-        self.state.last_break_seconds = break_seconds
-        self.state.cycle_count += 1
-        self.state.break_until = None
-        rolled = self._roll_next_session_limit()
-        self.state.next_session_limit_seconds = rolled
-        save_runtime_state(self.state_path, self.state)
-        self._loop_start = time.monotonic()
+        with self._lock:
+            self._flush()
+            self.state.active_seconds = 0.0
+            self.state.last_break_seconds = break_seconds
+            self.state.cycle_count += 1
+            self.state.break_until = None
+            rolled = self._roll_next_session_limit()
+            self.state.next_session_limit_seconds = rolled
+            save_runtime_state(self.state_path, self.state)
+            self._loop_start = time.monotonic()
         base = max(60, int(self.config.session_limit_seconds))
         variance = max(0, int(self.config.session_limit_variance_seconds))
         logger.info(
@@ -127,10 +138,11 @@ class RuntimeTracker:
         )
 
     def set_break_until(self, iso_timestamp: str, break_seconds: int | None = None) -> None:
-        self.state.break_until = iso_timestamp
-        if break_seconds is not None:
-            self.state.last_break_seconds = break_seconds
-        save_runtime_state(self.state_path, self.state)
+        with self._lock:
+            self.state.break_until = iso_timestamp
+            if break_seconds is not None:
+                self.state.last_break_seconds = break_seconds
+            save_runtime_state(self.state_path, self.state)
 
     def _roll_next_session_limit(self) -> int:
         return roll_session_limit_seconds(
@@ -145,23 +157,39 @@ class RuntimeTracker:
         Persists a rolled value so status and limit checks stay aligned until
         the next break re-rolls it.
         """
-        stored = self.state.next_session_limit_seconds
-        if stored is not None and int(stored) >= 60:
-            return int(stored)
-        rolled = self._roll_next_session_limit()
-        self.state.next_session_limit_seconds = rolled
-        save_runtime_state(self.state_path, self.state)
-        logger.debug(
-            "Rolled session limit target {}s (base {} ± {})",
-            rolled,
-            max(60, int(self.config.session_limit_seconds)),
-            max(0, int(self.config.session_limit_variance_seconds)),
-        )
-        return rolled
+        with self._lock:
+            stored = self.state.next_session_limit_seconds
+            if stored is not None and int(stored) >= 60:
+                return int(stored)
+            rolled = self._roll_next_session_limit()
+            self.state.next_session_limit_seconds = rolled
+            save_runtime_state(self.state_path, self.state)
+            logger.debug(
+                "Rolled session limit target {}s (base {} ± {})",
+                rolled,
+                max(60, int(self.config.session_limit_seconds)),
+                max(0, int(self.config.session_limit_variance_seconds)),
+            )
+            return rolled
 
     def remaining_seconds(self) -> float:
-        self._flush()
-        return max(0.0, self.effective_session_limit_seconds() - self.state.active_seconds)
+        """Flush elapsed loop time to disk, then return seconds until the session limit."""
+        with self._lock:
+            self._flush()
+            return max(0.0, self.effective_session_limit_seconds() - self.state.active_seconds)
+
+    def peek_remaining_seconds(self) -> float:
+        """
+        Read-only variant for status displays (GUI thread).
+
+        Accounts for un-flushed loop time without mutating ``state`` or writing
+        the state file, so it is safe to call while the bot thread is ticking.
+        """
+        with self._lock:
+            active = self.state.active_seconds
+            if self._loop_start is not None and not self._paused:
+                active += time.monotonic() - self._loop_start
+            return max(0.0, self.effective_session_limit_seconds() - active)
 
     def last_farm_at(self) -> datetime | None:
         raw = self.state.last_farm_at
@@ -174,11 +202,12 @@ class RuntimeTracker:
 
     def mark_farm_success(self) -> None:
         """Record that a farm battle was fought (success or post-deploy leave fail)."""
-        self.state.last_farm_at = datetime.now(timezone.utc).isoformat()
-        self.state.farm_paused_at = None
-        rolled = self._roll_next_farm_interval()
-        self.state.next_farm_interval_seconds = rolled
-        save_runtime_state(self.state_path, self.state)
+        with self._lock:
+            self.state.last_farm_at = datetime.now(timezone.utc).isoformat()
+            self.state.farm_paused_at = None
+            rolled = self._roll_next_farm_interval()
+            self.state.next_farm_interval_seconds = rolled
+            save_runtime_state(self.state_path, self.state)
         base = max(60, int(self.config.farm_interval_seconds))
         variance = max(0, int(self.config.farm_interval_variance_seconds))
         logger.info(
@@ -191,13 +220,14 @@ class RuntimeTracker:
 
     def pause_farm_clock(self) -> None:
         """Freeze the farm interval while the bot is stopped (no wall-clock drift)."""
-        if self.state.farm_paused_at:
-            return
-        if not self.state.last_farm_at:
-            return
-        self.state.farm_paused_at = datetime.now(timezone.utc).isoformat()
-        save_runtime_state(self.state_path, self.state)
-        logger.debug("Farm interval clock paused at {}", self.state.farm_paused_at)
+        with self._lock:
+            if self.state.farm_paused_at:
+                return
+            if not self.state.last_farm_at:
+                return
+            self.state.farm_paused_at = datetime.now(timezone.utc).isoformat()
+            save_runtime_state(self.state_path, self.state)
+            logger.debug("Farm interval clock paused at {}", self.state.farm_paused_at)
 
     def resume_farm_clock(self) -> None:
         """
@@ -206,30 +236,31 @@ class RuntimeTracker:
         Shifts ``last_farm_at`` forward by the pause duration so Start continues
         from the same countdown the Home timer showed while stopped.
         """
-        raw_pause = self.state.farm_paused_at
-        if not raw_pause:
-            return
-        try:
-            paused_at = datetime.fromisoformat(raw_pause)
-        except ValueError:
+        with self._lock:
+            raw_pause = self.state.farm_paused_at
+            if not raw_pause:
+                return
+            try:
+                paused_at = datetime.fromisoformat(raw_pause)
+            except ValueError:
+                self.state.farm_paused_at = None
+                save_runtime_state(self.state_path, self.state)
+                return
+            now = datetime.now(timezone.utc)
+            if paused_at.tzinfo is None:
+                paused_at = paused_at.replace(tzinfo=timezone.utc)
+            pause_seconds = max(0.0, (now - paused_at).total_seconds())
+            last = self.last_farm_at()
+            if last is not None and pause_seconds > 0:
+                if last.tzinfo is None:
+                    last = last.replace(tzinfo=timezone.utc)
+                self.state.last_farm_at = (last + timedelta(seconds=pause_seconds)).isoformat()
             self.state.farm_paused_at = None
             save_runtime_state(self.state_path, self.state)
-            return
-        now = datetime.now(timezone.utc)
-        if paused_at.tzinfo is None:
-            paused_at = paused_at.replace(tzinfo=timezone.utc)
-        pause_seconds = max(0.0, (now - paused_at).total_seconds())
-        last = self.last_farm_at()
-        if last is not None and pause_seconds > 0:
-            if last.tzinfo is None:
-                last = last.replace(tzinfo=timezone.utc)
-            self.state.last_farm_at = (last + timedelta(seconds=pause_seconds)).isoformat()
-        self.state.farm_paused_at = None
-        save_runtime_state(self.state_path, self.state)
-        logger.debug(
-            "Farm interval clock resumed (shifted last_farm_at by {:.0f}s)",
-            pause_seconds,
-        )
+            logger.debug(
+                "Farm interval clock resumed (shifted last_farm_at by {:.0f}s)",
+                pause_seconds,
+            )
 
     def _roll_next_farm_interval(self) -> int:
         return roll_farm_interval_seconds(
@@ -244,19 +275,20 @@ class RuntimeTracker:
         Persists a rolled value so status text and due-checks stay aligned until
         the next fought farm re-rolls it.
         """
-        stored = self.state.next_farm_interval_seconds
-        if stored is not None and int(stored) >= 60:
-            return int(stored)
-        rolled = self._roll_next_farm_interval()
-        self.state.next_farm_interval_seconds = rolled
-        save_runtime_state(self.state_path, self.state)
-        logger.debug(
-            "Rolled farm interval target {}s (base {} ± {})",
-            rolled,
-            max(60, int(self.config.farm_interval_seconds)),
-            max(0, int(self.config.farm_interval_variance_seconds)),
-        )
-        return rolled
+        with self._lock:
+            stored = self.state.next_farm_interval_seconds
+            if stored is not None and int(stored) >= 60:
+                return int(stored)
+            rolled = self._roll_next_farm_interval()
+            self.state.next_farm_interval_seconds = rolled
+            save_runtime_state(self.state_path, self.state)
+            logger.debug(
+                "Rolled farm interval target {}s (base {} ± {})",
+                rolled,
+                max(60, int(self.config.farm_interval_seconds)),
+                max(0, int(self.config.farm_interval_variance_seconds)),
+            )
+            return rolled
 
     def seconds_since_last_farm(self) -> float | None:
         """Seconds since last fought farm battle, or None if never farmed.

@@ -263,6 +263,10 @@ class RequestCapacityParser:
         return capacity
 
     def _maybe_save_debug(self, image: np.ndarray, name: str) -> None:
+        # Only when frame debugging is on — otherwise every capacity OCR wrote
+        # several PNGs to data/debug on every request.
+        if not getattr(self.config, "debug_save_frames", False):
+            return
         try:
             debug_dir = Path(self.config.data_dir) / "debug"
             debug_dir.mkdir(parents=True, exist_ok=True)

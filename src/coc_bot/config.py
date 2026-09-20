@@ -154,12 +154,53 @@ def load_user_settings(path: Path | None = None) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _atomic_yaml_dump(path: Path, payload: Any) -> None:
+    """
+    Write YAML via temp file + rename.
+
+    ``open(path, "w")`` truncates first, so a crash or dump error mid-write used
+    to leave an empty ``user_settings.yaml`` / ``calibrated.yaml`` behind.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = yaml.safe_dump(payload, default_flow_style=False, sort_keys=False)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
 def save_user_settings(payload: dict[str, Any], path: Path | None = None) -> Path:
     path = path or user_settings_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.safe_dump(payload, f, default_flow_style=False, sort_keys=False)
+    _atomic_yaml_dump(path, payload)
     return path
+
+
+def _ms_range(raw: Any, default: tuple[int, int]) -> tuple[int, int]:
+    """
+    Coerce a YAML ``[lo, hi]`` millisecond range to two ints.
+
+    Callers unpack ``lo, hi = ...`` so a 1- or 3-element list, a scalar, or a
+    string would otherwise raise deep inside the bot loop.
+    """
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        v = max(0, int(raw))
+        return v, v
+    if isinstance(raw, (list, tuple)) and len(raw) >= 1:
+        try:
+            lo = max(0, int(raw[0]))
+            hi = max(0, int(raw[1])) if len(raw) >= 2 else lo
+        except (TypeError, ValueError):
+            return default
+        if hi < lo:
+            lo, hi = hi, lo
+        return lo, hi
+    return default
 
 
 def load_config(
@@ -178,7 +219,13 @@ def load_config(
     calibrated: dict[str, Any] = {}
     if calibrated_path.exists():
         with open(calibrated_path, encoding="utf-8") as f:
-            calibrated = yaml.safe_load(f) or {}
+            loaded = yaml.safe_load(f) or {}
+        if not isinstance(loaded, dict):
+            raise ValueError(
+                f"{calibrated_path} is not a YAML mapping — restore a calibration backup "
+                "or delete the file and run Setup again"
+            )
+        calibrated = loaded
 
     merged: dict[str, Any] = dict(defaults)
     _deep_merge(merged, load_user_settings(user_settings_path(root)))
@@ -214,8 +261,8 @@ def load_config(
         donate_button_threshold=vision.get("donate_button_threshold", 0.78),
         scale_range=vision.get("scale_range", [0.95, 1.0, 1.05]),
         tap_jitter_px=timing.get("tap_jitter_px", 6),
-        action_delay_ms=tuple(timing.get("action_delay_ms", [120, 350])),
-        scan_interval_ms=tuple(timing.get("scan_interval_ms", [800, 1500])),
+        action_delay_ms=_ms_range(timing.get("action_delay_ms"), (120, 350)),
+        scan_interval_ms=_ms_range(timing.get("scan_interval_ms"), (800, 1500)),
         anti_idle_seconds=int(timing.get("anti_idle_seconds", 60)),
         session_limit_seconds=runtime.get("session_limit_seconds", 4 * 3600),
         session_limit_variance_seconds=max(
@@ -311,7 +358,6 @@ def normalize_farm_deploy_sequence(raw: Any) -> dict[str, Any]:
 def save_calibrated(config: BotConfig, path: Path | None = None) -> None:
     root = _project_root()
     path = path or root / "data" / "calibrated.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "frame_width": config.frame_width,
         "frame_height": config.frame_height,
@@ -322,5 +368,4 @@ def save_calibrated(config: BotConfig, path: Path | None = None) -> None:
         "grid": config.grid,
         "farm_deploy_sequence": normalize_farm_deploy_sequence(config.farm_deploy_sequence),
     }
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.safe_dump(payload, f, default_flow_style=False, sort_keys=False)
+    _atomic_yaml_dump(path, payload)

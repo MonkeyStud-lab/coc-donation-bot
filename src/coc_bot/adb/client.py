@@ -1,15 +1,38 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
-import time
+from collections.abc import Callable
 from typing import Sequence
 
 from loguru import logger
 
+from coc_bot.stop import interrupted_sleep
+
 
 class AdbError(RuntimeError):
     pass
+
+
+class AdbStopped(AdbError):
+    """Raised when a cooperative stop interrupts an ADB reconnect loop."""
+
+
+_PACKAGE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$")
+
+
+def validate_package_name(pkg: str) -> str:
+    """
+    Return ``pkg`` if it is a plausible Android package name, else raise.
+
+    Package names are interpolated into device shell commands, so anything
+    with shell metacharacters must be rejected up front.
+    """
+    pkg = (pkg or "").strip()
+    if not _PACKAGE_RE.match(pkg):
+        raise AdbError(f"Invalid Android package name: {pkg!r}")
+    return pkg
 
 
 def default_adb_device() -> str:
@@ -29,6 +52,8 @@ class AdbClient:
         self.device = device or default_adb_device()
         self.max_attempts = max_attempts
         self.backoff_seconds = backoff_seconds
+        # Optional cooperative stop hook so reconnect backoff can be interrupted.
+        self.stop_check: Callable[[], bool] | None = None
 
     def _base_cmd(self) -> list[str]:
         return ["adb", "-s", self.device]
@@ -46,6 +71,10 @@ class AdbClient:
             )
         except subprocess.TimeoutExpired as exc:
             raise AdbError(f"ADB command timed out: {' '.join(cmd)}") from exc
+        except OSError as exc:
+            # adb binary missing / not executable — surface as AdbError so callers
+            # that already handle ADB failures don't get a raw FileNotFoundError.
+            raise AdbError(f"Could not run adb ({exc}). Is adb installed and on PATH?") from exc
 
         if check and result.returncode != 0:
             stderr = (result.stderr or "").strip()
@@ -62,6 +91,8 @@ class AdbClient:
             result = subprocess.run(cmd, capture_output=True, timeout=timeout, check=False)
         except subprocess.TimeoutExpired as exc:
             raise AdbError(f"ADB exec-out timed out: {' '.join(cmd)}") from exc
+        except OSError as exc:
+            raise AdbError(f"Could not run adb ({exc}). Is adb installed and on PATH?") from exc
         if result.returncode != 0:
             stderr = (result.stderr or b"").decode("utf-8", errors="replace").strip()
             raise AdbError(f"ADB exec-out failed: {stderr}")
@@ -70,13 +101,17 @@ class AdbClient:
     def connect(self) -> bool:
         if ":" in self.device:
             host_port = self.device
-            result = subprocess.run(
-                ["adb", "connect", host_port],
-                capture_output=True,
-                text=True,
-                timeout=15,
-                check=False,
-            )
+            try:
+                result = subprocess.run(
+                    ["adb", "connect", host_port],
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                logger.warning("adb connect {} failed: {}", host_port, exc)
+                return False
             logger.info("adb connect {}: {}", host_port, (result.stdout or result.stderr or "").strip())
         return self.get_state() == "device"
 
@@ -121,7 +156,8 @@ class AdbClient:
                 return
             logger.warning("ADB device state '{}', reconnect attempt {}/{}", state, attempt, self.max_attempts)
             self.connect()
-            time.sleep(self.backoff_seconds * attempt)
+            if interrupted_sleep(self.backoff_seconds * attempt, self.stop_check):
+                raise AdbStopped("Stop requested during ADB reconnect")
         raise AdbError(f"Unable to connect to ADB device {self.device}")
 
     def wm_size(self) -> tuple[int, int] | None:

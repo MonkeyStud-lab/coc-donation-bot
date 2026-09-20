@@ -78,6 +78,11 @@ class TemplateMatcher:
         gray_frame = self._to_gray(frame)
         gray_template = self._to_gray(template)
         th, tw = gray_template.shape[:2]
+        fh, fw = gray_frame.shape[:2]
+        if th >= fh or tw >= fw:
+            # Template does not fit inside the search image (e.g. a tight ROI
+            # crop); cv2.matchTemplate would raise.
+            return []
         result = cv2.matchTemplate(gray_frame, gray_template, cv2.TM_CCOEFF_NORMED)
         matches: list[MatchResult] = []
         working = result.copy()

@@ -13,6 +13,7 @@ from coc_bot.attack.navigator import AttackNavigator
 from coc_bot.config import BotConfig
 from coc_bot.donation.navigator import Navigator
 from coc_bot.runtime.game_state import GameState, GameStateMachine
+from coc_bot.stop import interrupted_sleep
 from coc_bot.vision.matcher import TemplateMatcher
 from coc_bot.vision.screens import BotMode, ScreenType
 
@@ -53,6 +54,23 @@ class AttackFarmer:
 
     def _stopping(self) -> bool:
         return bool(self.stop_check and self.stop_check())
+
+    def _sleep(self, seconds: float) -> bool:
+        return interrupted_sleep(seconds, self.stop_check)
+
+    def _stopped_mid_battle(self) -> FarmResult:
+        """
+        Stop was pressed after troops were deployed.
+
+        We honour the stop immediately (no more taps), but the attack is still
+        running in-game: say so loudly so the user knows to tap Return Home
+        themselves once the battle timer ends.
+        """
+        logger.warning(
+            "Stopped mid-battle — troops are deployed and the attack is still running in Clash. "
+            "Tap Return Home in-game when it finishes (or press Start again to let the bot recover)."
+        )
+        return FarmResult(False, "stopped", counts_toward_interval=True)
 
     def _gs(self, state: GameState, reason: str) -> None:
         if self.game_state is not None:
@@ -168,13 +186,13 @@ class AttackFarmer:
         # From here on, this attempt counts toward the farm interval clock.
 
         if self._stopping():
-            return FarmResult(False, "stopped", counts_toward_interval=True)
+            return self._stopped_mid_battle()
 
         # Wait remaining of the fixed battle window, tap Return Home coords, then
         # confirm village with existing Attack!/chat leave rules.
         end_screen = self.attack_nav.wait_for_battle_end(since=deploy_started)
         if self._stopping() or end_screen == ScreenType.UNKNOWN:
-            return FarmResult(False, "stopped", counts_toward_interval=True)
+            return self._stopped_mid_battle()
 
         self._gs(GameState.BATTLE_RESULTS, "battle timer done")
         logger.info("Confirming leave after battle timer (screen={})", end_screen.value)
@@ -199,7 +217,8 @@ class AttackFarmer:
             if self.attack_nav.classifier.looks_like_blocking_popup(frame):
                 logger.info("Dismissing post-farm popup before reopening chat")
                 self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
-                time.sleep(0.9)
+                if self._sleep(0.9):
+                    return FarmResult(False, "stopped", counts_toward_interval=True)
 
         self._set_mode(BotMode.DONATE)
         if self.donation_nav is not None:

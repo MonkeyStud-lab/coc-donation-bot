@@ -155,6 +155,8 @@ class BotControlApp(tk.Tk):
         self._debug = debug
         self._bot = None
         self._bot_thread: threading.Thread | None = None
+        # Set when Stop is pressed while DonationBot is still being constructed.
+        self._stop_before_run = False
         self._farm_oneshot_thread: threading.Thread | None = None
         self._farm_oneshot_stop = threading.Event()
         self._log_sink_id: int | None = None
@@ -1116,8 +1118,24 @@ class BotControlApp(tk.Tk):
             return
         try:
             config = load_config()
-        except Exception:  # noqa: BLE001
+            self._config_load_error_shown = False
+        except Exception as exc:  # noqa: BLE001
             config = None
+            # A corrupt YAML used to silently look like "not calibrated" — users then
+            # recalibrated instead of restoring a backup. Tell them once.
+            if not getattr(self, "_config_load_error_shown", False):
+                self._config_load_error_shown = True
+                logger.error("Could not load config: {}", exc)
+                self._append_log(f"==> Config could not be loaded: {exc}")
+                self.after(
+                    0,
+                    lambda e=str(exc): messagebox.showerror(
+                        "Config error",
+                        "Your settings or calibration file could not be read:\n\n"
+                        f"{e}\n\n"
+                        "Restore a calibration backup (Setup → Backups) or fix the file.",
+                    ),
+                )
         adb_ok = self._last_adb_ok is True
         calib_ok = bool(config.calibrated) if config is not None else False
 
@@ -2190,10 +2208,11 @@ class BotControlApp(tk.Tk):
                 prep = session.prepare_farm_program_deploy()
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Farm program deploy prepare failed")
+                err = str(exc)
 
-                def fail() -> None:
+                def fail(e: str = err) -> None:
                     self._set_debug_busy(False)
-                    msg = f"Error preparing farm deploy editor: {exc}"
+                    msg = f"Error preparing farm deploy editor: {e}"
                     self._debug_result.set(msg)
                     self._append_log(msg)
 
@@ -2325,21 +2344,29 @@ class BotControlApp(tk.Tk):
         self._sync_run_chip()
         self._update_tool_buttons_state()
 
+        self._stop_before_run = False
+
         def worker() -> None:
             try:
                 from coc_bot.bot import DonationBot
 
-                self._bot = DonationBot(
+                bot = DonationBot(
                     dry_run=self._dry_run or self._practice_mode,
                     debug_save_frames=self._debug_save_frames,
                     debug=self._debug,
                 )
+                if self._stop_before_run:
+                    logger.info("Stop requested during startup — not running bot")
+                    return
+                self._bot = bot
                 self.after(0, lambda: self._status.set("Bot running"))
                 self.after(0, self._sync_run_chip)
-                self._bot.run()
+                bot.run()
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Bot failed: {}", exc)
-                self.after(0, lambda: messagebox.showerror("Bot error", str(exc)))
+                # Bind now: `exc` is unbound once this except block exits.
+                err = str(exc)
+                self.after(0, lambda e=err: messagebox.showerror("Bot error", e))
             finally:
                 self._bot = None
                 self.after(0, self._on_bot_stopped)
@@ -2354,11 +2381,19 @@ class BotControlApp(tk.Tk):
             self._status.set("Stopping farm…")
             self._append_log("==> Stop requested (farm one-shot — Clash stays open)")
             stopped_something = True
-        bot = self._bot
-        if self._bot_running() and bot is not None:
-            self._status.set("Stopping…")
-            self._append_log("==> Stop requested (Clash stays open)")
-            bot.request_stop()
+        if self._bot_running():
+            bot = self._bot
+            if bot is not None:
+                self._status.set("Stopping…")
+                self._append_log("==> Stop requested (Clash stays open)")
+                bot.request_stop()
+            else:
+                # Worker thread is alive but DonationBot is still being constructed.
+                # Flag the stop so the worker aborts before entering the run loop;
+                # never call _on_bot_stopped() here or Start could spawn a second bot.
+                self._stop_before_run = True
+                self._status.set("Stopping…")
+                self._append_log("==> Stop requested (bot still starting)")
             stopped_something = True
         if not stopped_something:
             self._on_bot_stopped()
@@ -2478,10 +2513,12 @@ class BotControlApp(tk.Tk):
                 self.after(0, done)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Farm one-shot failed")
+                err = str(exc)
 
-                def fail() -> None:
-                    messagebox.showerror("Farm error", str(exc))
+                def fail(e: str = err) -> None:
+                    # Reset UI state first so Start is never left disabled if the dialog fails.
                     self._on_farm_oneshot_done()
+                    messagebox.showerror("Farm error", e)
 
                 self.after(0, fail)
 
@@ -2572,7 +2609,8 @@ class BotControlApp(tk.Tk):
             except ValueError:
                 pass
 
-        return False, tracker.remaining_seconds()
+        # Read-only: never flush/save from the GUI thread while the bot thread ticks.
+        return False, tracker.peek_remaining_seconds()
 
     def _break_timer_text(self) -> str:
         on_break, remaining = self._break_status()
@@ -2687,8 +2725,9 @@ class BotControlApp(tk.Tk):
                 self.after(0, show)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Screenshot preview failed: {}", exc)
-                self.after(0, lambda: messagebox.showerror("Screenshot failed", str(exc)))
-                self.after(0, lambda: self._append_log(f"Screenshot failed: {exc}"))
+                err = str(exc)
+                self.after(0, lambda e=err: messagebox.showerror("Screenshot failed", e))
+                self.after(0, lambda e=err: self._append_log(f"Screenshot failed: {e}"))
 
         threading.Thread(target=worker, daemon=True).start()
 

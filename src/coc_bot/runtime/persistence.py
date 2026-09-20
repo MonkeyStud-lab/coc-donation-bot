@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from loguru import logger
+
+# Serialises writers across threads (bot loop + GUI status polling).
+_SAVE_LOCK = threading.Lock()
 
 
 @dataclass
@@ -84,13 +90,37 @@ def load_runtime_state(path: Path) -> RuntimeState:
     if not isinstance(data, dict):
         logger.warning("Runtime state {} is not a JSON object — starting fresh", path)
         return RuntimeState.fresh()
-    return RuntimeState.from_dict(data)
+    try:
+        return RuntimeState.from_dict(data)
+    except (TypeError, ValueError) as exc:
+        # e.g. ``"active_seconds": null`` — a corrupt field should not block startup.
+        logger.warning("Runtime state {} has bad fields ({}) — starting fresh", path, exc)
+        return RuntimeState.fresh()
 
 
 def save_runtime_state(path: Path, state: RuntimeState) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    """
+    Persist state atomically (temp file + rename) and never raise.
+
+    A failed save must not take the bot loop down; the in-memory state is
+    still authoritative and the next save will retry.
+    """
     payload = json.dumps(asdict(state), indent=2)
-    # Atomic-ish write so a crash mid-save is less likely to leave an empty file.
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(payload, encoding="utf-8")
-    tmp.replace(path)
+    # Unique tmp per writer so two processes cannot clobber each other's temp file.
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    with _SAVE_LOCK:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp.write_text(payload, encoding="utf-8")
+            try:
+                os.replace(tmp, path)
+            except PermissionError:
+                # Windows: target briefly locked by a concurrent reader — one retry.
+                time.sleep(0.05)
+                os.replace(tmp, path)
+        except OSError as exc:
+            logger.warning("Could not save runtime state {}: {}", path, exc)
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from dataclasses import dataclass
@@ -147,15 +148,33 @@ def restore_backup(
     yaml_dst = calibrated_yaml_path(root)
     tmpl_dst = templates_dir(root)
     yaml_dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(backup.path / "calibrated.yaml", yaml_dst)
 
+    # Stage the new templates next to the live dir first, then swap. Deleting the
+    # live dir before the copy succeeded used to leave *no* templates at all if the
+    # copy failed part-way (and the safety snapshot above is best-effort only).
     tmpl_src = backup.path / "templates"
-    if tmpl_dst.exists():
-        shutil.rmtree(tmpl_dst)
+    staging = tmpl_dst.with_name(tmpl_dst.name + ".restoring")
+    old = tmpl_dst.with_name(tmpl_dst.name + ".old")
+    for leftover in (staging, old):
+        if leftover.exists():
+            shutil.rmtree(leftover, ignore_errors=True)
     if tmpl_src.is_dir():
-        shutil.copytree(tmpl_src, tmpl_dst)
+        shutil.copytree(tmpl_src, staging)
     else:
-        tmpl_dst.mkdir(parents=True, exist_ok=True)
+        staging.mkdir(parents=True, exist_ok=True)
+
+    shutil.copy2(backup.path / "calibrated.yaml", yaml_dst)
+    if tmpl_dst.exists():
+        os.replace(tmpl_dst, old)
+    try:
+        os.replace(staging, tmpl_dst)
+    except OSError:
+        # Put the previous templates back so YAML + images stay consistent-ish.
+        if old.exists() and not tmpl_dst.exists():
+            os.replace(old, tmpl_dst)
+        raise
+    if old.exists():
+        shutil.rmtree(old, ignore_errors=True)
 
 
 def normalize_backup_name(raw: str) -> str:

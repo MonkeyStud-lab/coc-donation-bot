@@ -9,10 +9,10 @@
 # Consumed by scripts/preannotate.py (Label Studio config + heuristic
 # pre-annotations) and later by the YOLO data.yaml exporter.
 
-version: 1
+version: 2
 
 # Frame-level screen tag (single choice). Mirrors vision.screens.ScreenType plus
-# the two screens that are currently only side-checks.
+# additional screen categories used for perception review.
 screens:
   - home
   - clan_chat
@@ -27,6 +27,7 @@ screens:
   - loading
   - popup
   - shop
+  - clash_pass
   - settings
   - other
 

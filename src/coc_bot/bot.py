@@ -641,6 +641,10 @@ class DonationBot:
                 self.farmer.attack_nav.return_home_from_attack()
             except Exception:  # noqa: BLE001
                 logger.exception("return_home during recovery failed")
+        elif screen in (ScreenType.SHOP, ScreenType.CLASH_PASS):
+            # ensure_clan_chat closes these using a verified X and fresh frames.
+            # Do not send a generic BACK or assume the village is already ready.
+            pass
         elif screen not in (ScreenType.HOME, ScreenType.CLAN_CHAT, ScreenType.LOADING):
             # Unknown overlay/popup — BACK is the generic dismiss.
             self.nav_input.back()
@@ -649,8 +653,11 @@ class DonationBot:
         if self._stop_requested:
             return
         self.set_mode(BotMode.DONATE)
-        self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request)
-        self.game_state.transition(GameState.CLAN_CHAT, reason="recovery done")
+        chat_ready = self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request)
+        if chat_ready:
+            self.game_state.transition(GameState.CLAN_CHAT, reason="recovery done")
+        else:
+            logger.warning("Recovery has not confirmed clan chat")
         self._set_state("scan_chat")
         # Recovery always restarts the watchdog clock, even if we were already in scan_chat.
         self._state_entered = time.monotonic()

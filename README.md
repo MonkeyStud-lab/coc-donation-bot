@@ -302,6 +302,9 @@ docs/
 - Session time limits with randomized breaks, then resume
 - Optional unranked elixir farm with a programmed deploy sequence
 - Dry-run and offline replay for testing
+- Recognition and recovery for Shop and Clash Pass pages
+- Optional screen-recognition prototype that only logs predictions; see
+  [the perception guide](docs/PERCEPTION.md) for training and testing
 
 ---
 

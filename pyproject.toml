@@ -24,3 +24,6 @@ coc-bot-calibrate = "coc_bot.calibration.wizard:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"coc_bot.vision" = ["assets/*.png"]

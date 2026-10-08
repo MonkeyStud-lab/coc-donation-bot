@@ -18,6 +18,7 @@ data/user_settings.yaml
 # Perception training data (large; keep out of git)
 data/frames/
 data/labelstudio/
+data/models/
 logs/
 .setup_linux_stamp
 

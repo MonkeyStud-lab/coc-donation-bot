@@ -8,6 +8,7 @@ import numpy as np
 
 from coc_bot.config import BotConfig
 from coc_bot.vision import recorder
+from coc_bot.vision.auxiliary import AuxiliaryPage, AuxiliaryPageDetector
 from coc_bot.vision.matcher import TemplateMatcher
 
 
@@ -22,6 +23,8 @@ class ScreenType(str, Enum):
     BATTLE = "battle"
     BATTLE_RESULTS = "battle_results"
     LIVE_REPLAY = "live_replay"
+    SHOP = "shop"
+    CLASH_PASS = "clash_pass"
     UNKNOWN = "unknown"
 
 
@@ -53,6 +56,8 @@ SCREEN_LABELS: dict[str, str] = {
     ScreenType.BATTLE.value: "Battle / scout",
     ScreenType.BATTLE_RESULTS.value: "Battle results",
     ScreenType.LIVE_REPLAY.value: "Live replay (defense)",
+    ScreenType.SHOP.value: "Shop",
+    ScreenType.CLASH_PASS.value: "Clash Pass",
     ScreenType.UNKNOWN.value: "Unknown",
 }
 
@@ -103,6 +108,11 @@ class ScreenClassifier:
         self.config = config
         self.matcher = matcher or TemplateMatcher(threshold=config.template_threshold)
         self._cache: dict[str, np.ndarray] = {}
+        self._auxiliary = AuxiliaryPageDetector()
+
+    def auxiliary_page(self, frame: np.ndarray) -> AuxiliaryPage | None:
+        """Recognize an obstructing page and, when safe, locate its close X."""
+        return self._auxiliary.detect(frame)
 
     def _load(self, key: str) -> np.ndarray | None:
         if key in self._cache:
@@ -811,15 +821,22 @@ class ScreenClassifier:
         Classify the current frame.
 
         When ``mode`` is set, only screens that belong to that flow are considered
-        (plus loading). Pass ``BotMode.ANY`` or ``None`` for a full scan
+        (plus loading and recognized Shop / Clash Pass interruptions).
+        Pass ``BotMode.ANY`` or ``None`` for a full scan
         (boot / recovery / debug). Popup is checked late so Attack menu
         green buttons are not mistaken for a blocking modal.
         """
         screen = self._classify(frame, mode)
         recorder.note_classification(frame, screen, mode)  # no-op unless --record
+        from coc_bot.vision.screen_model import note_observation
+
+        note_observation(frame, screen.value)  # opt-in, informational only
         return screen
 
     def _classify(self, frame: np.ndarray, mode: BotMode | None) -> ScreenType:
+        page = self.auxiliary_page(frame)
+        if page is not None:
+            return ScreenType(page.screen)
         if self._template_visible(frame, "loading"):
             return ScreenType.LOADING
 

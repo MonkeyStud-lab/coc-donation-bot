@@ -43,9 +43,21 @@ def main() -> None:
         help="With --record: also save every Nth frame (unknown/screen-change frames "
         "are always saved). Default 10.",
     )
+    parser.add_argument(
+        "--screen-model",
+        type=Path,
+        metavar="MODEL.npz",
+        help="Compare an experimental screen model with the existing rules; "
+        "predictions are logged only and cannot control the bot",
+    )
     args = parser.parse_args()
 
     setup_logging(debug=args.debug, log_file=Path("data") / "bot.log")
+
+    if args.screen_model:
+        from coc_bot.vision.screen_model import enable_observer
+
+        enable_observer(args.screen_model)
 
     if args.no_gui:
         from loguru import logger

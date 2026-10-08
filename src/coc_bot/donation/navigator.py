@@ -10,6 +10,7 @@ from loguru import logger
 from coc_bot.adb.input import InputController
 from coc_bot.adb.capture import ScreenCapture
 from coc_bot.config import BotConfig
+from coc_bot.auxiliary_recovery import AuxiliaryRecovery
 from coc_bot.vision.matcher import MatchResult, TemplateMatcher
 from coc_bot.vision.rois import ROI, roi_center, denormalize_roi
 from coc_bot.vision.screens import BotMode, ScreenClassifier, ScreenType
@@ -65,6 +66,7 @@ class Navigator:
         deadline = time.time() + timeout
 
         close_streak = 0
+        auxiliary_recovery = AuxiliaryRecovery(self.classifier, self.input, self._stopping)
         # Full classify: may be recovering from farm / boot / desync.
         prev_mode = self.mode
         self.mode = BotMode.ANY
@@ -77,6 +79,13 @@ class Navigator:
                 frame = self.capture.screenshot()
                 screen = self.classify(frame, mode=BotMode.ANY)
                 logger.debug("ensure_clan_chat: detected screen={}", screen.value)
+
+                if screen in (ScreenType.SHOP, ScreenType.CLASH_PASS):
+                    if not auxiliary_recovery.close(frame) or self._sleep(0.6):
+                        return False
+                    # A new screenshot must prove we left the page before
+                    # considering any chat / attack actions.
+                    continue
 
                 if screen == ScreenType.DONATION_PANEL:
                     before = screen

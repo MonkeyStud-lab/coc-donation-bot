@@ -10,6 +10,7 @@ from loguru import logger
 from coc_bot.adb.capture import ScreenCapture
 from coc_bot.adb.input import InputController
 from coc_bot.config import BotConfig
+from coc_bot.auxiliary_recovery import AuxiliaryRecovery
 from coc_bot.donation.navigator import Navigator
 from coc_bot.stop import interrupted_sleep
 from coc_bot.vision.matcher import TemplateMatcher
@@ -118,12 +119,17 @@ class AttackNavigator:
         prev_mode = self.mode
         self.mode = BotMode.ANY
         home_nudges = 0
+        auxiliary_recovery = AuxiliaryRecovery(self.classifier, self.input, self._stopping)
         try:
             while time.time() < deadline:
                 if self._stopping():
                     logger.info("leave_chat_for_home: stop requested — aborting")
                     return False
                 frame = self.capture.screenshot()
+                if self.classifier.auxiliary_page(frame) is not None:
+                    if not auxiliary_recovery.close(frame) or self._sleep(0.6):
+                        return False
+                    continue
                 # Ground truth for farm: Attack! visible ⇒ ready (ignore false clan_chat).
                 if self.attack_button_visible(frame):
                     logger.info("Home ready — Attack! chip visible")
@@ -515,12 +521,18 @@ class AttackNavigator:
         and used to re-tap Return Home forever. If home is not visible yet, re-tap
         calibrated return_home coords and keep looking for Attack!/chat only.
         """
+        auxiliary_recovery = AuxiliaryRecovery(self.classifier, self.input, self._stopping)
         for _ in range(16):
             if self._stopping():
                 logger.info("return_home_from_attack: stop requested — aborting")
                 return False
             frame = self.capture.screenshot()
             screen = self.classify(frame, mode=BotMode.ATTACK)
+
+            if screen in (ScreenType.SHOP, ScreenType.CLASH_PASS):
+                if not auxiliary_recovery.close(frame) or self._sleep(0.6):
+                    return False
+                continue
 
             # Defense spectator — wait; do not tap Return Home / BACK.
             if screen == ScreenType.LIVE_REPLAY or self.classifier.looks_like_live_replay(frame):
@@ -637,6 +649,8 @@ class AttackNavigator:
         """
         if self.donation_nav is None:
             frame = self.capture.screenshot()
+            if self.classifier.auxiliary_page(frame) is not None:
+                return "failed"
             if self._attack_chip_on_home(frame) or self._village_home_anchors_visible(frame):
                 logger.info("Leave confirm (no donation nav) — Attack!/village anchors")
                 return "confirmed"
@@ -644,10 +658,18 @@ class AttackNavigator:
 
         deadline = time.time() + timeout
         opened_once = False
+        auxiliary_recovery = AuxiliaryRecovery(self.classifier, self.input, self._stopping)
         while time.time() < deadline:
             if self._stopping():
                 return "stopped"
             frame = self.capture.screenshot()
+
+            if self.classifier.auxiliary_page(frame) is not None:
+                if not auxiliary_recovery.close(frame):
+                    return "stopped" if self._stopping() else "failed"
+                if self._sleep(0.6):
+                    return "stopped"
+                continue
 
             if self.classifier._clan_chat_anchor_visible(frame):  # noqa: SLF001
                 logger.info("Leave confirmed — clan chat is open")

@@ -2,6 +2,10 @@
 
 This document explains the architecture for anyone who wants to understand or extend the project. For install and day-to-day use, see the [README](../README.md). For contribution tips, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+For Shop / Clash Pass recovery and the optional learned screen observer, see
+[Screen recognition and recovery](PERCEPTION.md). The observer cannot control
+actions; the existing navigation rules remain authoritative.
+
 **Educational use only.** Automating Clash of Clans may violate Supercell’s Terms of Service.
 
 ---

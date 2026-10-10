@@ -21,7 +21,7 @@ Welcome contributions improve reliability, calibration UX, docs, and learning va
 ```bash
 cd ~/Projects/coc-donation-bot   # or your clone
 source .venv/bin/activate        # after ./scripts/setup_linux.sh
-pip install -e .
+python -m pip install -e .
 ```
 
 Run without GUI for quick terminal tests:
@@ -29,6 +29,9 @@ Run without GUI for quick terminal tests:
 ```bash
 python -m coc_bot.main --no-gui --dry-run
 ```
+
+This still sends live navigation input. Practice / dry-run skips donation taps;
+use the offline checks below when no game interaction is wanted.
 
 Useful one-shots:
 
@@ -49,7 +52,7 @@ Prefer small, focused changes. Match existing naming and logging style (`loguru`
 1. Add a value to `ScreenType` in [`src/coc_bot/vision/screens.py`](../src/coc_bot/vision/screens.py) (if needed).
 2. Implement a heuristic and/or template check.
 3. Wire it into the right `_classify_*` method(s) for `BotMode` (`HOME` / `DONATE` / `ATTACK` / `ANY`).
-4. Update navigators that branch on that screen (`donation/navigator.py`, `attack/navigator.py`, `main.py` recovery).
+4. Update navigators that branch on that screen (`donation/navigator.py`, `attack/navigator.py`, `bot.py` recovery).
 5. Optionally add a calibration step / template key in [`calibration/wizard.py`](../src/coc_bot/calibration/wizard.py).
 
 **Rule of thumb:** if two screens look alike, disambiguate with **BotMode** or **flow phase** (what the bot was doing), not only with stricter colors.
@@ -61,21 +64,23 @@ Prefer small, focused changes. Match existing naming and logging style (`loguru`
 | Order of actions / success criteria | `attack/farmer.py` |
 | Matchmaking, results, Return Home | `attack/navigator.py` |
 | Pan + replay programmed deploy sequence | `attack/deployer.py` |
-| Programmable tap editor | `calibration/sequence_picker.py` + Tools actions in `gui/debug_actions.py` |
+| Programmable tap editor | `calibration/sequence_picker.py` + Diagnostics actions in `gui/debug_actions.py` |
 | Tunables | `config/default.yaml` → `farm:` + `BotConfig` in `config.py` + GUI field in `gui/settings_fields.py` |
 | New tap targets | Wizard step `"farm"` |
 
 Farm deploy requires `farm_deploy_sequence.taps` (no built-in recipe).
-Keep the simple post-deploy timer in `wait_for_battle_end` (wait N seconds from first
-deploy, then **force-tap** calibrated `return_home` coords with no vision skip). After
-that tap, leave confirmation should **only** look for home village (Attack! / chat) —
-never results/battle heuristics.
+Keep both completion paths in `wait_for_battle_end`: two consecutive observations
+must verify the Return Home and Troops expended labels before an early leave;
+otherwise the deadline force-taps calibrated `return_home` coordinates. Generic
+screen classifications must not end a battle early. After a leave tap, confirmation
+looks for home village / clan chat rather than reusing results/battle heuristics.
+See [BATTLE_COMPLETION.md](BATTLE_COMPLETION.md) for the exact checks and limitations.
 
 ### 3. Change donation behavior
 
 | Goal | File |
 |------|------|
-| When a request is eligible | `DonationBot._should_handle_request` in `main.py` |
+| When a request is eligible | `DonationBot._should_handle_request` in `bot.py` |
 | Specific vs open vs hybrid | `donation/request_parser.py` |
 | How slots are filled | `donation/executor.py` |
 | Finding Donate in chat | `donation/chat_monitor.py` |
@@ -83,33 +88,51 @@ never results/battle heuristics.
 
 There is experimental budget-aware code (`fill_planner.py`, `inventory.py`, `icon_matcher.py`). The **live** path today is colored-slot filling. Wire planner carefully if you revive it.
 
+Preserve selected-elixir verification in `donation/resource_mode.py`. Missing or
+ambiguous evidence must refuse donations; do not bypass it to improve speed.
+Green chat buttons also need verified Donate text, not just a color match.
+
 ### 4. Add a Settings UI field
 
 1. Add a default in `config/default.yaml` (and `BotConfig` + `load_config` mapping).
 2. Append a `SettingField` in [`src/coc_bot/gui/settings_fields.py`](../src/coc_bot/gui/settings_fields.py) with the correct `yaml_path`.
 3. Save from the GUI writes `data/user_settings.yaml`. Running bot loops usually need Stop → Start to pick up timing/farm changes; GUI-only filters (e.g. activity DEBUG) may apply immediately.
 
-### 5. Add a Tools (debug) action
+### 5. Add a Diagnostics (debug) action
 
-Register in `DEBUG_ACTIONS` and implement on `DebugSession` in [`src/coc_bot/gui/debug_actions.py`](../src/coc_bot/gui/debug_actions.py).
+Register in `DEBUG_ACTIONS` and wire the action through `run_debug_action` in [`src/coc_bot/gui/debug_actions.py`](../src/coc_bot/gui/debug_actions.py), using `DebugSession` where appropriate.
 
 ### 6. Cooperative Stop
 
 Any new long wait must honor `stop_check` / `interrupted_sleep` so the GUI **Stop** button stays responsive (including farm one-shot).
 
+Pass cancellation through ADB commands and check Stop before sending input. Use
+the shared capture coordinator instead of starting a competing capture loop.
+Preserve device leases, capture budgets and transactional calibration restores.
+Learned screen predictions and collection hints are diagnostic evidence, not
+authorization to send input.
+
 ---
 
-## Testing checklist (Waydroid)
+## Testing
 
-Manual checks beat unit tests for this project:
+Start with the offline regression checks in [RELIABILITY.md](RELIABILITY.md).
+They run without a game connection, and GitHub runs the same core suite. Add
+focused regression coverage for behavioral fixes. For recognition/model work,
+also use the checks in [PERCEPTION.md](PERCEPTION.md).
+
+Then verify the affected flow on Waydroid; offline tests cannot establish that
+a new game layout works:
 
 1. **Donation:** open request + specific request; panel opens and closes cleanly.
-2. **Farm:** Attack → Battle → deploy → wait timer → Return Home → clan chat opens.
+2. **Farm:** Attack → Battle → deploy → confirmed results or timer fallback → Return Home → clan chat opens.
 3. **False leave:** mid-fight green scenery should not eject you (End Battle still visible).
 4. **Stop:** during matchmaking wait and during donation scroll.
 5. **Break (optional):** shorten `session_limit_seconds` in settings for a dry test, then restore.
 
-Offline helpers: `scripts/verify_farm_offline.py` (no live match required for some checks).
+Record the checks actually performed and any live verification still needed.
+Review screenshots for player names, chat and other private content before
+sharing. Local datasets and trained models are not part of a normal checkout.
 
 ---
 
@@ -127,6 +150,6 @@ Offline helpers: `scripts/verify_farm_offline.py` (no live match required for so
 - Improve a single flaky heuristic with before/after screenshots in `data/debug/`
 - Add a GUI setting you personally need
 - Document a failure mode you hit on Ubuntu in this `docs/` folder
-- Add a Tools action that reproduces a bug in one click
+- Add a Diagnostics action that reproduces a bug in one click
 
 PRs that include a short “how I tested on Waydroid” note are much easier to review.

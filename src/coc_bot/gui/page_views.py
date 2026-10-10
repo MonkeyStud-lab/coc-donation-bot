@@ -12,9 +12,9 @@ from coc_bot.config import load_config
 from coc_bot.gui.debug_actions import DEBUG_GROUPS
 import coc_bot.gui.theme as theme
 from coc_bot.gui.settings_fields import SETTINGS, current_setting_values, is_raw_timing_field
-from coc_bot.gui.theme import bind_yview_mousewheel, finish_scrollable, make_scrollable, theme_label, ui_font
+from coc_bot.gui.theme import bind_yview_mousewheel, finish_scrollable, make_scrollable, ui_font
 from coc_bot.gui.ux_helpers import FIXIT_RECIPES, settings_snapshot
-from coc_bot.gui.widgets import ToggleSwitch
+from coc_bot.gui.widgets import HelpTip, ToggleSwitch
 
 
 
@@ -54,7 +54,7 @@ class PageViewsMixin:
         ).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(
             banner_btns,
-            text="Open Tools",
+            text="Diagnostics",
             style=self._btn_style("Secondary"),
             command=lambda: self._show_page("tools"),
         ).pack(side=tk.LEFT, padx=(8, 0))
@@ -85,37 +85,19 @@ class PageViewsMixin:
         self._track_wrap_label(checklist_label, reserve=40, page_id="home")
         ob_btns = tk.Frame(ob_pad, bg=theme.SURFACE_2)
         ob_btns.pack(fill=tk.X)
-        ttk.Button(
-            ob_btns,
-            text="Connect ADB",
-            style=self._btn_style("Secondary"),
-            command=self.connect_adb,
-        ).pack(side=tk.LEFT)
-        ttk.Button(
-            ob_btns,
-            text="Pick device",
-            style=self._btn_style("Secondary"),
-            command=self._pick_adb_device,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(
-            ob_btns,
-            text="Go to Setup",
-            style=self._btn_style("Secondary"),
-            command=lambda: self._show_page("setup"),
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(
-            ob_btns,
-            text="Calibrate what's missing",
-            style=self._btn_style("Accent"),
-            command=self.calibrate_whats_missing,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        self._onboarding_dismiss_btn = ttk.Button(
-            ob_btns,
-            text="Dismiss",
-            style=self._btn_style("Secondary"),
-            command=self._exit_first_launch_preview,
-        )
-        self._onboarding_dismiss_btn.pack(side=tk.RIGHT)
+        for column in range(3):
+            ob_btns.columnconfigure(column, weight=1, uniform="onboarding")
+        for index, (label, callback, kind) in enumerate((
+            ("Connect ADB", self.connect_adb, "Secondary"),
+            ("Pick device", self._pick_adb_device, "Secondary"),
+            ("Go to Setup", lambda: self._show_page("setup"), "Secondary"),
+            ("Calibrate missing", self.calibrate_whats_missing, "Accent"),
+            ("Dismiss", self._exit_first_launch_preview, "Secondary"),
+        )):
+            button = ttk.Button(ob_btns, text=label, style=self._btn_style(kind), command=callback)
+            button.grid(row=index // 3, column=index % 3, sticky="ew", padx=4, pady=4)
+            if label == "Dismiss":
+                self._onboarding_dismiss_btn = button
         onboarding_outer.pack_forget()
 
         actions_outer, actions = self._card(page, pady=(0, 12), return_outer=True)
@@ -127,14 +109,6 @@ class PageViewsMixin:
 
         play_header = tk.Frame(pad, bg=theme.SURFACE_2)
         play_header.pack(fill=tk.X)
-        tk.Label(
-            play_header,
-            text="Play",
-            bg=theme.SURFACE_2,
-            fg=theme.TEXT,
-            font=ui_font(13, "bold"),
-            anchor="w",
-        ).pack(side=tk.LEFT)
         self._run_chip = tk.Label(
             play_header,
             textvariable=self._run_chip_var,
@@ -177,22 +151,10 @@ class PageViewsMixin:
         secondary.pack(fill=tk.X, pady=(12, 0))
         ttk.Button(
             secondary,
-            text="View screenshot",
-            style=self._btn_style("Secondary"),
-            command=self.view_bot_screenshot,
-        ).pack(side=tk.LEFT)
-        ttk.Button(
-            secondary,
             text="Farm attack now",
             style=self._btn_style("Secondary"),
             command=self.request_farm_attack,
         ).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(
-            secondary,
-            text="Close Waydroid + Clash",
-            style=self._btn_style("Danger"),
-            command=self.close_waydroid_and_coc,
-        ).pack(side=tk.RIGHT)
 
         farm_ready_frame = tk.Frame(pad, bg=theme.SURFACE_2)
         farm_ready_frame.pack(fill=tk.X, pady=(12, 0))
@@ -225,7 +187,7 @@ class PageViewsMixin:
         farm_cell.grid(row=0, column=0, sticky="w")
         tk.Label(
             farm_cell,
-            text="FARM",
+            text="Next farm attack",
             bg=theme.SURFACE_2,
             fg=theme.TEXT_SECONDARY,
             font=ui_font(9, "bold"),
@@ -236,7 +198,7 @@ class PageViewsMixin:
             textvariable=self._farm_timer_var,
             bg=theme.SURFACE_2,
             fg=theme.TEXT,
-            font=ui_font(12, "bold"),
+            font=ui_font(20, "bold"),
             anchor="w",
         )
         self._farm_timer_label.pack(anchor=tk.W)
@@ -257,7 +219,7 @@ class PageViewsMixin:
             textvariable=self._break_timer_var,
             bg=theme.SURFACE_2,
             fg=theme.TEXT,
-            font=ui_font(12, "bold"),
+            font=ui_font(20, "bold"),
             anchor="w",
         )
         self._break_timer_label.pack(anchor=tk.W)
@@ -267,14 +229,6 @@ class PageViewsMixin:
         log_pad.pack(fill=tk.BOTH, expand=True, padx=16, pady=14)
         log_header = tk.Frame(log_pad, bg=theme.SURFACE_2)
         log_header.pack(fill=tk.X)
-        tk.Label(
-            log_header,
-            text="Activity",
-            bg=theme.SURFACE_2,
-            fg=theme.TEXT,
-            font=ui_font(13, "bold"),
-            anchor="w",
-        ).pack(side=tk.LEFT)
         header_actions = tk.Frame(log_header, bg=theme.SURFACE_2)
         header_actions.pack(side=tk.RIGHT)
         ttk.Button(
@@ -335,80 +289,60 @@ class PageViewsMixin:
         self._setting_vars.clear()
         self._setting_hint_labels.clear()
         self._clear_wrap_labels("settings")
-
-        footer = tk.Frame(page, bg=theme.BG)
-        footer.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=(8, 12))
-        ttk.Button(
-            footer,
-            text="Reload",
-            style=self._btn_style("Secondary"),
-            command=self._reload_settings_fields,
-        ).pack(side=tk.LEFT)
-        ttk.Button(
-            footer,
-            text="Save Settings",
-            style=self._btn_style("Accent"),
-            command=self._save_settings,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(
-            footer,
-            text="Detect ADB devices",
-            style=self._btn_style("Secondary"),
-            command=self._pick_adb_device,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-
-        canvas, inner = make_scrollable(page)
-        self._settings_canvas = canvas
-
-        intro = tk.Frame(inner, bg=theme.BG)
-        intro.pack(fill=tk.X, padx=8, pady=(4, 4))
-        intro_label = tk.Label(
-            intro,
-            text="Changes are saved to data/user_settings.yaml. Stop and Start the bot "
-            "after saving so a running loop picks them up. Theme under Interface "
-            f"is currently {theme_label(self._theme_id)}.",
-            bg=theme.BG,
-            fg=theme.TEXT_SECONDARY,
-            font=ui_font(10),
-            wraplength=400,
-            justify=tk.LEFT,
-            anchor="w",
-        )
-        intro_label.pack(fill=tk.X, pady=(0, 8))
-        self._track_wrap_label(intro_label, reserve=40, page_id="settings")
-
+        actions = tk.Frame(page, bg=theme.BG)
+        actions.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=12)
+        ttk.Button(actions, text="Reload", style=self._btn_style("Secondary"),
+                   command=self._reload_settings_fields).pack(side=tk.LEFT)
+        ttk.Button(actions, text="Save changes", style=self._btn_style("Accent"),
+                   command=self._save_settings).pack(side=tk.RIGHT)
+        notebook = ttk.Notebook(page)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=8)
+        self._settings_notebook = notebook
+        self._settings_canvases = []
+        bodies = {}
+        for name in ("Routine", "Breaks", "Appearance", "Advanced"):
+            tab = ttk.Frame(notebook)
+            notebook.add(tab, text=name)
+            canvas, body = make_scrollable(tab)
+            self._settings_canvases.append(canvas)
+            bodies[name] = (canvas, body)
+        self._settings_canvas = self._settings_canvases[0]
         values = current_setting_values()
         dev = bool(values.get("gui_dev_options", False))
-        current_section = None
-        section_body: tk.Frame | None = None
+        routine = {"donate_open_requests", "gui_timing_preset", "farm_enabled", "farm_interval_seconds"}
+        breaks = {"session_limit_seconds", "break_min_seconds", "break_max_seconds"}
+        appearance = {"gui_theme", "gui_show_debug_activity", "gui_practice_mode", "gui_dev_options"}
         for field in SETTINGS:
             if is_raw_timing_field(field.key) and not dev:
                 continue
-            if field.section != current_section:
-                current_section = field.section
-                section_body = self._section_header(
-                    inner,
-                    f"settings:{current_section}",
-                    current_section,
-                )
-
-            assert section_body is not None
-            if self._modern:
-                self._add_setting_row_modern(section_body, field, values[field.key])
-            else:
-                self._add_setting_row_classic(section_body, field, values[field.key])
-
-        finish_scrollable(inner, canvas)
-        self.after_idle(self._sync_wrap_lengths)
-
-        # Dirty guard: snapshot the just-built widget values as the baseline,
-        # then watch every var for edits that diverge from it.
-        self._settings_baseline = settings_snapshot(
-            {key: var.get() for key, var in self._setting_vars.items()}
-        )
+            name = ("Routine" if field.key in routine else "Breaks" if field.key in breaks
+                    else "Appearance" if field.key in appearance else "Advanced")
+            self._add_setting_row_modern(bodies[name][1], field, values[field.key])
+        sequence_card = self._card(bodies["Routine"][1], padx=8, pady=4)
+        sequence_row = tk.Frame(sequence_card, bg=theme.SURFACE_2)
+        sequence_row.pack(fill=tk.X, padx=16, pady=14)
+        self._add_tools_row_modern(sequence_row, title="Deployment sequence",
+                                   description="Choose the ordered army-bar and map taps used for farm attacks.",
+                                   button_text="Edit", command=self._open_sequence_setup)
+        for canvas, body in bodies.values():
+            finish_scrollable(body, canvas)
+        notebook.bind("<<NotebookTabChanged>>", lambda _e: self._refresh_scroll_regions(), add="+")
+        self._settings_baseline = settings_snapshot({key: var.get() for key, var in self._setting_vars.items()})
         self._settings_dirty = False
         for var in self._setting_vars.values():
             var.trace_add("write", lambda *_a: self._mark_settings_dirty())
+
+    def _open_sequence_setup(self) -> None:
+        self._show_page("setup")
+        if self._page != "setup":  # Unsaved-settings dialog was cancelled.
+            return
+        self._refresh_calib_status()
+        target = "farm::deploy_sequence"
+        if self._calib_tree.exists(target):
+            self._calib_tree.item("farm", open=True)
+            self._calib_tree.selection_set(target)
+            self._calib_tree.see(target)
+            self._on_calib_select()
 
 
     def _build_setup_page(self) -> None:
@@ -421,21 +355,7 @@ class PageViewsMixin:
         self._setup_canvas = canvas
 
         intro = tk.Frame(inner, bg=theme.BG)
-        intro.pack(fill=tk.X, padx=8, pady=(4, 4))
-        intro_label = tk.Label(
-            intro,
-            text="Teach the bot where buttons and bars are on your screen. "
-            "Open Waydroid and Clash first, pick a step or part below, then "
-            "Recalibrate Selected. Everything runs in-app; Classic terminal is optional.",
-            bg=theme.BG,
-            fg=theme.TEXT_SECONDARY,
-            font=ui_font(10),
-            wraplength=400,
-            justify=tk.LEFT,
-            anchor="w",
-        )
-        intro_label.pack(fill=tk.X, pady=(0, 4))
-        self._track_wrap_label(intro_label, reserve=40, page_id="setup")
+        intro.pack(fill=tk.X, padx=8, pady=4)
         progress_label = tk.Label(
             intro,
             textvariable=self._calib_progress,
@@ -446,7 +366,7 @@ class PageViewsMixin:
         )
         progress_label.pack(fill=tk.X, pady=(0, 8))
 
-        checklist_body = self._section_header(inner, "setup:checklist", "Checklist")
+        checklist_body = inner
         tree_card = self._card(checklist_body, padx=8, pady=4 if self._modern else 5)
         tree_wrap = tk.Frame(tree_card, bg=theme.SURFACE_2)
         tree_wrap.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -487,83 +407,21 @@ class PageViewsMixin:
         self._track_wrap_label(calib_detail, reserve=56, page_id="setup")
         self._calib_tree.bind("<<TreeviewSelect>>", self._on_calib_select)
 
-        actions_body = self._section_header(inner, "setup:actions", "Calibrate")
-        actions_card = self._card(actions_body, padx=8, pady=4 if self._modern else 5)
+        actions_card = self._card(page, side=tk.BOTTOM, padx=8, pady=8)
         actions_pad = tk.Frame(actions_card, bg=theme.SURFACE_2)
         actions_pad.pack(fill=tk.X, padx=14, pady=12)
-        ttk.Button(
-            actions_pad,
-            text="Calibrate what's missing",
-            style=self._btn_style("Accent"),
-            command=self.calibrate_whats_missing,
-        ).pack(side=tk.LEFT)
-        ttk.Button(
-            actions_pad,
-            text="Recalibrate Selected",
-            style=self._btn_style("Secondary"),
-            command=self._recalibrate_selected,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(
-            actions_pad,
-            text="Recalibrate All",
-            style=self._btn_style("Secondary"),
-            command=self._recalibrate_all,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(
-            actions_pad,
-            text="Refresh",
-            style=self._btn_style("Secondary"),
-            command=self._refresh_calib_status,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(
-            actions_pad,
-            text="Classic terminal calibrator",
-            style=self._btn_style("Secondary"),
-            command=self._classic_calibrate_selected,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-
-        backups_body = self._section_header(inner, "setup:backups", "Backups")
-        backups_card = self._card(backups_body, padx=8, pady=4 if self._modern else 5)
-        backups_pad = tk.Frame(backups_card, bg=theme.SURFACE_2)
-        backups_pad.pack(fill=tk.X, padx=14, pady=12)
-        backups_hint = tk.Label(
-            backups_pad,
-            text="Snapshots of calibrated.yaml + templates under data/calibration_backups/.",
-            bg=theme.SURFACE_2,
-            fg=theme.TEXT_SECONDARY,
-            font=ui_font(10),
-            wraplength=400,
-            justify=tk.LEFT,
-            anchor="w",
-        )
-        backups_hint.pack(fill=tk.X, pady=(0, 10))
-        self._track_wrap_label(backups_hint, reserve=56, page_id="setup")
-        btn_row = tk.Frame(backups_pad, bg=theme.SURFACE_2)
-        btn_row.pack(fill=tk.X)
-        ttk.Button(
-            btn_row,
-            text="Backup",
-            style=self._btn_style("Secondary"),
-            command=self._backup_calibration,
-        ).pack(side=tk.LEFT)
-        ttk.Button(
-            btn_row,
-            text="Restore",
-            style=self._btn_style("Secondary"),
-            command=self._restore_calibration,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(
-            btn_row,
-            text="Rename",
-            style=self._btn_style("Secondary"),
-            command=self._rename_calibration_backup,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(
-            btn_row,
-            text="Delete",
-            style=self._btn_style("Secondary"),
-            command=self._delete_calibration_backup,
-        ).pack(side=tk.LEFT, padx=(8, 0))
+        for column in range(3):
+            actions_pad.columnconfigure(column, weight=1, uniform="setup_actions")
+        for index, (label, callback, kind) in enumerate((
+            ("Calibrate missing", self.calibrate_whats_missing, "Accent"),
+            ("Recalibrate selected", self._recalibrate_selected, "Secondary"),
+            ("Recalibrate all", self._recalibrate_all, "Secondary"),
+            ("Refresh", self._refresh_calib_status, "Secondary"),
+            ("Terminal calibrator", self._classic_calibrate_selected, "Secondary"),
+            ("Saved calibrations", lambda: self._show_page("library"), "Secondary"),
+        )):
+            ttk.Button(actions_pad, text=label, command=callback, style=self._btn_style(kind)).grid(
+                row=index // 3, column=index % 3, sticky="ew", padx=4, pady=4)
 
         finish_scrollable(inner, canvas)
         self.after_idle(self._sync_wrap_lengths)
@@ -577,122 +435,70 @@ class PageViewsMixin:
         self._tool_buttons.clear()
         canvas, inner = make_scrollable(page)
         self._tools_canvas = canvas
-
-        intro = tk.Frame(inner, bg=theme.BG)
-        intro.pack(fill=tk.X, padx=8, pady=(4, 4))
-        intro_label = tk.Label(
-            intro,
-            text="Run one test at a time. Stop the bot first so tests do not conflict. "
-            "Results also appear in the Home activity log.",
-            bg=theme.BG,
-            fg=theme.TEXT_SECONDARY,
-            font=ui_font(10),
-            wraplength=400,
-            justify=tk.LEFT,
-            anchor="w",
-        )
-        intro_label.pack(fill=tk.X, pady=(0, 8))
-        self._track_wrap_label(intro_label, reserve=40, page_id="tools")
-
-        fixit_body = self._section_header(inner, "tools:fixit", "If something's wrong")
-        for recipe in FIXIT_RECIPES:
-            card = self._card(fixit_body, padx=8, pady=4 if self._modern else 5)
-            block = tk.Frame(card, bg=theme.SURFACE_2)
-            block.pack(fill=tk.X, padx=14, pady=12)
-            if self._modern:
-                self._add_tools_row_modern(
-                    block,
-                    title=recipe.title,
-                    description=recipe.body,
-                    button_text=recipe.action_label,
-                    command=lambda r=recipe: self._run_fixit(r),
-                )
-            else:
-                ttk.Button(
-                    block,
-                    text=recipe.title,
-                    style=self._btn_style("Secondary"),
-                    command=lambda r=recipe: self._run_fixit(r),
-                ).pack(anchor=tk.W)
-                desc = tk.Label(
-                    block,
-                    text=f"{recipe.body}\n→ {recipe.action_label}",
-                    bg=theme.SURFACE_2,
-                    fg=theme.TEXT_SECONDARY,
-                    font=ui_font(10),
-                    wraplength=400,
-                    justify=tk.LEFT,
-                    anchor="w",
-                )
-                desc.pack(fill=tk.X, pady=(8, 0))
-                self._track_wrap_label(desc, reserve=56, page_id="tools")
-
-        self._build_data_tools(inner)
-
-        for group_title, actions in DEBUG_GROUPS:
-            body = self._section_header(inner, f"tools:{group_title}", group_title)
-
-            for action_id, label, description in actions:
-                card = self._card(body, padx=8, pady=4 if self._modern else 5)
-                block = tk.Frame(card, bg=theme.SURFACE_2)
-                block.pack(fill=tk.X, padx=14, pady=12)
-                allow_while_running = action_id in {"install_desktop_shortcut", "open_collection_review"}
-                if self._modern:
-                    run_btn = self._add_tools_row_modern(
-                        block,
-                        title=label,
-                        description=description,
-                        button_text="Run",
-                        command=lambda aid=action_id: self._run_debug(aid),
-                    )
-                else:
-                    run_btn = ttk.Button(
-                        block,
-                        text=label,
-                        style=self._btn_style("Secondary"),
-                        command=lambda aid=action_id: self._run_debug(aid),
-                    )
-                    run_btn.pack(anchor=tk.W)
-                    desc = tk.Label(
-                        block,
-                        text=description,
-                        bg=theme.SURFACE_2,
-                        fg=theme.TEXT_SECONDARY,
-                        font=ui_font(10),
-                        wraplength=400,
-                        justify=tk.LEFT,
-                        anchor="w",
-                    )
-                    desc.pack(fill=tk.X, pady=(8, 0))
-                    self._track_wrap_label(desc, reserve=56, page_id="tools")
-                run_btn._allow_while_running = allow_while_running  # type: ignore[attr-defined]
-                self._tool_buttons.append(run_btn)
-
+        screenshot_card = self._card(inner, padx=8, pady=(4, 12))
+        block = tk.Frame(screenshot_card, bg=theme.SURFACE_2)
+        block.pack(fill=tk.X, padx=16, pady=16)
+        self._add_tools_row_modern(block, title="Current screenshot", description="View the latest bot image on demand.",
+                                   button_text="View", command=self.view_bot_screenshot)
+        close = ttk.Button(block, text="Close Waydroid + Clash", style=self._btn_style("Danger"),
+                           command=self.close_waydroid_and_coc)
+        close.grid(row=1, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        notebook = ttk.Notebook(inner)
+        notebook.pack(fill=tk.X, padx=8)
+        actions = ttk.Frame(notebook, padding=16)
+        notebook.add(actions, text="Actions")
+        options = {label: (action_id, description) for _group, entries in DEBUG_GROUPS
+                   for action_id, label, description in entries}
+        choice = self._str_var(next(iter(options)))
+        selector = ttk.Combobox(actions, textvariable=choice, values=list(options), state="readonly", width=38)
+        selector.pack(fill=tk.X, pady=(0, 12))
+        tip = HelpTip(selector, options[choice.get()][1])
+        run = ttk.Button(actions, text="Run selected action", style=self._btn_style("Accent"),
+                         command=lambda: self._run_debug(options[choice.get()][0]))
+        run.pack(anchor=tk.E)
+        run._allow_while_running = False
+        self._tool_buttons.append(run)
+        def changed(_event=None):
+            action_id, description = options[choice.get()]
+            tip.text = description
+            tip.hide()
+            run._allow_while_running = action_id in {"install_desktop_shortcut", "open_collection_review"}
+            self._update_tool_buttons_state()
+        selector.bind("<<ComboboxSelected>>", changed)
+        recovery = ttk.Frame(notebook, padding=16)
+        notebook.add(recovery, text="Recovery")
+        recipes = {recipe.title: recipe for recipe in FIXIT_RECIPES}
+        recipe_var = self._str_var(next(iter(recipes)))
+        recipe_box = ttk.Combobox(recovery, textvariable=recipe_var, values=list(recipes), state="readonly", width=38)
+        recipe_box.pack(fill=tk.X, pady=(0, 12))
+        recipe_tip = HelpTip(recipe_box, recipes[recipe_var.get()].body)
+        fix = ttk.Button(recovery, text=recipes[recipe_var.get()].action_label,
+                         style=self._btn_style("Secondary"), command=lambda: self._run_fixit(recipes[recipe_var.get()]))
+        fix.pack(anchor=tk.E)
+        fix._allow_while_running = False
+        self._tool_buttons.append(fix)
+        def recipe_changed(_event=None):
+            recipe = recipes[recipe_var.get()]
+            recipe_tip.text = recipe.body
+            recipe_tip.hide()
+            fix.configure(text=recipe.action_label)
+        recipe_box.bind("<<ComboboxSelected>>", recipe_changed)
         if bool(load_config().gui_dev_options):
-            self._build_tools_dev_section(inner)
-
+            developer = tk.Frame(notebook, bg=theme.BG)
+            notebook.add(developer, text="Developer")
+            self._build_tools_dev_section(developer)
         self._debug_result = self._str_var("")
-        result_label = tk.Label(
-            inner,
-            textvariable=self._debug_result,
-            bg=theme.BG,
-            fg=theme.ACCENT,
-            font=ui_font(11),
-            wraplength=400,
-            justify=tk.LEFT,
-            anchor="w",
-        )
-        result_label.pack(fill=tk.X, padx=8, pady=(12, 24))
-        self._track_wrap_label(result_label, reserve=40, page_id="tools")
-
+        result = tk.Label(inner, textvariable=self._debug_result, bg=theme.BG, fg=theme.ACCENT,
+                          font=ui_font(11), anchor="w", justify=tk.LEFT, wraplength=400)
+        result.pack(fill=tk.X, padx=12, pady=16)
+        self._track_wrap_label(result, reserve=40, page_id="tools")
         finish_scrollable(inner, canvas)
-        self.after_idle(self._sync_wrap_lengths)
         self._update_tool_buttons_state()
 
 
     def _build_tools_dev_section(self, inner: tk.Frame) -> None:
-        """Dev-only Tools rows (Settings → Interface → Dev options)."""
-        body = self._section_header(inner, "tools:Dev", "Dev")
+        """Dev-only Tools rows (Settings → Appearance → Dev options)."""
+        body = inner
         preview_on = bool(self._gui_state.first_launch_preview)
         status = "ON" if preview_on else "off"
         stash = self._gui_state.first_launch_calib_stash
@@ -700,7 +506,7 @@ class PageViewsMixin:
         rows = (
             (
                 "Simulate first launch",
-                "Show Home “Get started”, then optionally stash & clear calibration "
+                "Show Dashboard “Get started”, then optionally stash & clear calibration "
                 "so you can re-test Setup / Calibrate what’s missing from scratch. "
                 "Exit restores the stash.",
                 "Enter",
@@ -720,34 +526,10 @@ class PageViewsMixin:
             card = self._card(body, padx=8, pady=4 if self._modern else 5)
             block = tk.Frame(card, bg=theme.SURFACE_2)
             block.pack(fill=tk.X, padx=14, pady=12)
-            if self._modern:
-                run_btn = self._add_tools_row_modern(
-                    block,
-                    title=title,
-                    description=description,
-                    button_text=button_text,
-                    command=command,
-                )
-            else:
-                run_btn = ttk.Button(
-                    block,
-                    text=title,
-                    style=self._btn_style("Secondary"),
-                    command=command,
-                )
-                run_btn.pack(anchor=tk.W)
-                desc = tk.Label(
-                    block,
-                    text=description,
-                    bg=theme.SURFACE_2,
-                    fg=theme.TEXT_SECONDARY,
-                    font=ui_font(10),
-                    wraplength=400,
-                    justify=tk.LEFT,
-                    anchor="w",
-                )
-                desc.pack(fill=tk.X, pady=(8, 0))
-                self._track_wrap_label(desc, reserve=56, page_id="tools")
+            run_btn = self._add_tools_row_modern(
+                block, title=title, description=description,
+                button_text=button_text, command=command,
+            )
             run_btn._allow_while_running = allow_while_running  # type: ignore[attr-defined]
             self._tool_buttons.append(run_btn)
 

@@ -395,6 +395,16 @@ def apply_theme(root: tk.Tk | None = None, theme_id: str | None = None) -> ttk.S
 
     style.configure(".", background=t.bg, foreground=t.text, font=ui_font(11))
     style.configure("TFrame", background=t.bg)
+    style.configure("TNotebook", background=t.bg, borderwidth=0, tabmargins=(0, 0, 0, 12),
+                    bordercolor=t.bg, lightcolor=t.bg, darkcolor=t.bg)
+    style.configure("TNotebook.Tab", background=t.bg, foreground=t.text_secondary,
+                    padding=(16, 10), borderwidth=0,
+                    bordercolor=t.bg, lightcolor=t.bg, darkcolor=t.bg)
+    style.map("TNotebook.Tab", background=[("selected", t.surface_2), ("active", t.surface_hover)],
+              foreground=[("selected", t.accent), ("active", t.text)])
+    style.layout("TNotebook.Tab", [("Notebook.tab", {"sticky": "nswe", "children": [
+        ("Notebook.padding", {"side": "top", "sticky": "nswe", "children": [
+            ("Notebook.label", {"side": "top", "sticky": ""})]})]})])
     style.configure("Sidebar.TFrame", background=t.sidebar)
     style.configure("Surface.TFrame", background=t.surface_2)
     style.configure("Card.TFrame", background=t.surface_2, relief="flat")
@@ -702,6 +712,8 @@ def apply_theme(root: tk.Tk | None = None, theme_id: str | None = None) -> ttk.S
         background=t.surface,
         troughcolor=t.surface_2,
         bordercolor=t.surface_2,
+        lightcolor=t.surface_2,
+        darkcolor=t.surface_2,
         arrowcolor=t.text_secondary,
         arrowsize=12,
     )

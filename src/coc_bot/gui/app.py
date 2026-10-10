@@ -15,7 +15,6 @@ from tkinter import messagebox, ttk
 
 from loguru import logger
 
-from coc_bot import __version__
 from coc_bot.calibration.wizard import (
     STEP_IDS,
     STEPS,
@@ -90,13 +89,14 @@ from coc_bot.gui.ux_helpers import (
     settings_snapshot,
 )
 from coc_bot.gui.util import calibrate_script, open_in_terminal
-from coc_bot.gui.widgets import ToggleSwitch
+from coc_bot.gui.widgets import HelpTip, ToggleSwitch
 
 PAGES = (
-    ("home", "Home", "Start the bot, farm, and watch activity"),
-    ("settings", "Settings", "Timing, donations, farm, and breaks"),
-    ("setup", "Setup", "Teach the bot where buttons are on your screen"),
-    ("tools", "Tools", "One-shot tests when something looks wrong"),
+    ("home", "Dashboard", ""),
+    ("settings", "Settings", ""),
+    ("setup", "Setup", ""),
+    ("library", "Library", ""),
+    ("tools", "Diagnostics", ""),
 )
 
 # Matches loguru sink output: "HH:mm:ss | LEVEL   | message".
@@ -228,7 +228,7 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         self._farm_ready_outer: tk.Frame | None = None
         self._farm_ready_label: tk.Label | None = None
         self._home_timers_frame: tk.Frame | None = None
-        self._break_caption_var = tk.StringVar(master=self, value="NEXT BREAK")
+        self._break_caption_var = tk.StringVar(master=self, value="Next break")
 
         shell = ttk.Frame(self)
         shell.pack(fill=tk.BOTH, expand=True)
@@ -242,9 +242,6 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         ttk.Label(header, textvariable=self._page_title, style="PageTitle.TLabel").pack(
             anchor=tk.W
         )
-        ttk.Label(header, textvariable=self._page_subtitle, style="Subtitle.TLabel").pack(
-            anchor=tk.W, pady=(4, 0)
-        )
 
         self._content = ttk.Frame(right, padding=(16, 4, 16, 8))
         self._content.pack(fill=tk.BOTH, expand=True)
@@ -254,31 +251,24 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
             page = ttk.Frame(self._content)
             self._pages[page_id] = page
 
-        self._report_startup(0.62, "Building Home…")
+        self._report_startup(0.62, "Building Dashboard…")
         self._build_home_page()
         self._report_startup(0.72, "Building Settings…")
         self._build_settings_page()
         self._report_startup(0.82, "Building Setup…")
         self._build_setup_page()
-        self._report_startup(0.92, "Building Tools…")
+        self._report_startup(0.92, "Building Diagnostics…")
         self._build_tools_page()
+        self._build_library_page()
         self._report_startup(0.97, "Finishing…")
 
-        status = ttk.Frame(right, style="StatusBar.TFrame", padding=(16, 8))
-        status.pack(fill=tk.X, side=tk.BOTTOM)
-        self._adb_status_label = tk.Label(
-            status,
-            textvariable=self._adb_status_var,
-            bg=theme.STATUS_BAR,
-            fg=theme.TEXT_SECONDARY,
-            font=ui_font(10),
-        )
-        self._adb_status_label.pack(side=tk.RIGHT)
-        ttk.Label(status, textvariable=self._status, style="Status.TLabel").pack(
-            side=tk.LEFT, fill=tk.X, expand=True
-        )
-        self._statusbar_chrome.append(status)
-        self._statusbar_chrome.append(self._adb_status_label)
+        status = tk.Frame(self._sidebar, bg=theme.SIDEBAR)
+        status.pack(fill=tk.X, side=tk.BOTTOM, padx=16, pady=16)
+        self._adb_status_label = tk.Label(status, textvariable=self._adb_status_var,
+                                        bg=theme.SIDEBAR, fg=theme.TEXT_SECONDARY,
+                                        font=ui_font(10), wraplength=160, justify=tk.LEFT)
+        self._adb_status_label.pack(fill=tk.X)
+        self._sidebar_chrome.extend((status, self._adb_status_label))
 
         start_page = self._gui_state.last_page if self._gui_state.last_page in self._pages else "home"
         self._show_page(start_page)
@@ -336,7 +326,7 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         self._run_chip_var = self._str_var("Stopped")
         self._farm_timer_var = self._str_var("—")
         self._break_timer_var = self._str_var("—")
-        self._break_caption_var = self._str_var("NEXT BREAK")
+        self._break_caption_var = self._str_var("Next break")
         pairs = (
             ("_run_chip", self._run_chip_var),
             ("_farm_timer_label", self._farm_timer_var),
@@ -367,7 +357,7 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
             self._break_timer_var.set(
                 "due" if (not on_break and remaining <= 0) else format_countdown(remaining)
             )
-            self._break_caption_var.set(break_timer_caption(on_break=on_break))
+            self._break_caption_var.set(break_timer_caption(on_break=on_break).capitalize())
             self._maybe_warn_break_soon(on_break=on_break, remaining=remaining)
         except Exception:  # noqa: BLE001
             try:
@@ -386,6 +376,7 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         side = tk.Frame(parent, bg=theme.SIDEBAR, width=200)
         side.pack(side=tk.LEFT, fill=tk.Y)
         side.pack_propagate(False)
+        self._sidebar = side
         self._sidebar_chrome.append(side)
 
         brand = tk.Frame(side, bg=theme.SIDEBAR)
@@ -393,7 +384,6 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         self._sidebar_chrome.append(brand)
         for text, size, weight, pady in (
             ("CoC Bot", 13, "bold", (0, 0)),
-            (f"v{__version__}", 9, "normal", (4, 0)),
         ):
             lab = tk.Label(
                 brand,
@@ -628,6 +618,7 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         self._build_settings_page()
         self._build_setup_page()
         self._build_tools_page()
+        self._build_library_page()
         self._show_page(current)
         self.after(100, self._refresh_calib_status)
 
@@ -754,7 +745,7 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
             bd=0,
             highlightbackground=theme.BORDER,
             highlightcolor=theme.BORDER,
-            highlightthickness=1,
+            highlightthickness=0,
         )
         fill = pack_opts.pop("fill", tk.X)
         outer.pack(fill=fill, **pack_opts)
@@ -802,7 +793,7 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
 
     def _refresh_scroll_regions(self) -> None:
         """Update scrollregion for Settings/Tools/Setup canvases after collapse toggles."""
-        for canvas in (self._settings_canvas, self._tools_canvas, self._setup_canvas):
+        for canvas in (*getattr(self, "_settings_canvases", [self._settings_canvas]), self._tools_canvas, self._setup_canvas, getattr(self, "_library_canvas", None)):
             if canvas is None:
                 continue
             try:
@@ -834,7 +825,7 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
                         "Config error",
                         "Your settings or calibration file could not be read:\n\n"
                         f"{e}\n\n"
-                        "Restore a calibration backup (Setup → Backups) or fix the file.",
+                        "Restore a calibration backup (Library → Saved calibrations) or fix the file.",
                     ),
                 )
         adb_ok = self._last_adb_ok is True
@@ -1245,18 +1236,6 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
             wraplength=200,
         )
         title_lbl.pack(anchor=tk.W, fill=tk.X)
-        desc_lbl = tk.Label(
-            left,
-            text=description,
-            bg=theme.SURFACE_2,
-            fg=theme.TEXT_SECONDARY,
-            font=ui_font(10),
-            wraplength=200,
-            justify=tk.LEFT,
-            anchor="w",
-        )
-        desc_lbl.pack(anchor=tk.W, fill=tk.X, pady=(4, 0))
-
         right = tk.Frame(block, bg=theme.SURFACE_2)
         right.grid(row=0, column=1, sticky="ne")
         btn = ttk.Button(
@@ -1266,7 +1245,9 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
             command=command,
         )
         btn.pack(anchor=tk.E)
-        self._bind_modern_row_wrap([title_lbl, desc_lbl], block, right, gap=20)
+        self._bind_modern_row_wrap([title_lbl], block, right, gap=20)
+        HelpTip(title_lbl, description)
+        HelpTip(btn, description)
         return btn
 
     def _add_setting_row_modern(self, parent: tk.Misc, field, value) -> None:
@@ -1291,18 +1272,6 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
             wraplength=200,
         )
         title.pack(anchor=tk.W)
-        desc = tk.Label(
-            left,
-            text=field.description,
-            bg=theme.SURFACE_2,
-            fg=theme.TEXT_SECONDARY,
-            font=ui_font(10),
-            wraplength=200,
-            justify=tk.LEFT,
-            anchor="w",
-        )
-        desc.pack(anchor=tk.W, pady=(4, 0))
-
         right = tk.Frame(block, bg=theme.SURFACE_2)
         right.grid(row=0, column=1, sticky="ne")
 
@@ -1337,9 +1306,20 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
             )
             entry.pack(side=tk.LEFT)
             self._setting_vars[field.key] = var
-            self._attach_setting_hint(control_row, field, var, side="right")
 
-        self._bind_modern_row_wrap([title, desc], block, right, gap=20)
+
+        self._bind_modern_row_wrap([title], block, right, gap=20)
+
+        HelpTip(title, field.description)
+        def attach_help(control):
+            children = control.winfo_children()
+            if children:
+                for child in children:
+                    attach_help(child)
+            else:
+                HelpTip(control, field.description)
+        for control in right.winfo_children():
+            attach_help(control)
 
     def _reload_settings_fields(self) -> None:
         values = current_setting_values()
@@ -1475,8 +1455,8 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         self._update_tool_buttons_state()
 
     def _update_tool_buttons_state(self) -> None:
-        bot_running = self._bot_running()
-        for btn in self._tool_buttons:
+        bot_running = self._bot_running() or self._farm_oneshot_running()
+        for btn in (*self._tool_buttons, *getattr(self, "_library_buttons", [])):
             try:
                 if not btn.winfo_exists():
                     continue

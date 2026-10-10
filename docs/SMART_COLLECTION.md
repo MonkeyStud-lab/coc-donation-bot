@@ -6,7 +6,11 @@ automatically. Normal donation and farming rules still control every action.
 
 ## Start collecting
 
-Activate the project's virtual environment, then start the app with:
+In the GUI, open **Settings → Screenshot collection**, enable collection, choose
+daily and storage limits, and Save. Stop and Start the bot to apply changes.
+These settings persist across app launches.
+
+Alternatively, activate the project's virtual environment and launch with:
 
 ```bash
 python -m coc_bot.main --collect-smart
@@ -15,8 +19,10 @@ python -m coc_bot.main --collect-smart
 Press Start in the GUI. For terminal-only operation add `--no-gui`. To compare
 an existing experimental model, also add `--screen-model path/to/screens.npz`.
 Model predictions are logged and attached to screenshots; they never control taps.
-The flag must be supplied whenever launching a new app process. It takes
-precedence over the older `--record` mode, which remains available unchanged.
+CLI collection options override the saved GUI collection settings for that
+launch; their default limits are used unless supplied explicitly. `--collect-smart`
+takes precedence over the older `--record` mode. Legacy recording is separate
+and is not covered by smart collection's quotas.
 
 ## What it keeps
 
@@ -74,22 +80,24 @@ of menus is performed.
 
 ## Review and use the data
 
-In Tools, click **Review collected screenshots**, or open
+In **Library → Screenshots**, click **Review screenshots**, or open
 `data/collection/review.html` in a browser on the bot computer. It groups the
 latest 600 saved images by new appearances, disagreements, failures and ordinary
 examples. Expand each image's details to see its action, phase and predictions.
-`status.json` gives collection totals and any pause reason. `catalog.jsonl`
+`status.json` gives current-session statistics, storage usage and any pause reason. `catalog.jsonl`
 contains the complete image index; `incidents.jsonl` links already-saved context
 frames to incidents. Each session also has its own metadata and image index.
 
-To import new examples into the existing Label Studio workflow:
+To prepare new examples for Label Studio:
 
 ```bash
 python scripts/export_collection_tasks.py
 ```
 
-Import `data/labelstudio/collection_tasks.json`. Its image URLs use the existing
-local-files setup rooted at the project's `data` folder. Suggested screen names
+Import `data/labelstudio/collection_tasks.json` into a Label Studio project configured
+for local files rooted at the project's `data` folder. This requires a separately
+configured Label Studio installation; running the export does not install or
+start it. See [PERCEPTION.md](PERCEPTION.md) for labeling and training prerequisites. Suggested screen names
 are metadata only: manually check each task and apply its correct label before
 training. Do not treat bot rules or model guesses as ground truth. Screenshots
 can contain player names and chat messages; inspect them before sharing.

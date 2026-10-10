@@ -38,7 +38,7 @@ def _pair(lo_hi: tuple[int, int]) -> str:
 SETTINGS: list[SettingField] = [
     SettingField("collection_enabled", "Collect useful screenshots", "Passively save unusual screens and failures for review. Does not change game actions. Takes effect after Stop/Start.", "bool", lambda c: c.collection_enabled, "Screenshot collection", ("collection", "enabled")),
     SettingField("collection_daily_limit", "Daily screenshot limit", "Maximum screenshots saved per UTC day, including failure context. Collection pauses when the limit is reached.", "int", lambda c: c.collection_daily_limit, "Screenshot collection", ("collection", "daily_limit")),
-    SettingField("collection_storage_gb", "Screenshot storage limit (GB)", "Stop saving when collected images reach this size. Existing images are never automatically deleted. Review them from Tools.", "float", lambda c: c.collection_storage_gb, "Screenshot collection", ("collection", "storage_gb")),
+    SettingField("collection_storage_gb", "Screenshot storage limit (GB)", "Stop saving when collected images reach this size. Existing images are never automatically deleted. Review them from Library.", "float", lambda c: c.collection_storage_gb, "Screenshot collection", ("collection", "storage_gb")),
     SettingField(
         "gui_timing_preset",
         "Timing preset",
@@ -346,7 +346,7 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "gui_show_debug_activity",
         "Show DEBUG messages in activity log",
-        "When enabled, Home → Activity also shows DEBUG lines (ADB commands, screen "
+        "When enabled, Dashboard activity also shows DEBUG lines (ADB commands, screen "
         "classifications, etc.). Leave off for a quieter log of INFO and above.",
         "bool",
         lambda c: c.gui_show_debug_activity,
@@ -376,9 +376,8 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "gui_theme",
         "Theme",
-        "Full UI theme (colors + control layout). Classic = stacked cards; "
-        "Modern = row layout; Graphite / Midnight / Amethyst / Frost / Ember "
-        "are additional palettes. Applies to the whole window after Save.",
+        "Color palette for the entire app. All themes use the same compact layout. "
+        "Applies to the whole window after Save.",
         "choice",
         lambda c: theme_label(c.gui_theme),
         "Interface",

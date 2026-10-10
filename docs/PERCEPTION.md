@@ -6,7 +6,7 @@ giving a learned model any control.
 
 ## Shop and Clash Pass recovery
 
-These two pages now have explicit `shop` and `clash_pass` screen types. They can
+These two pages have explicit `shop` and `clash_pass` screen types. They can
 interrupt either the donation or attack flow, so they are checked before the
 older home, donation, and battle heuristics in every navigation mode.
 
@@ -41,6 +41,34 @@ reference crops. There is only one reviewed Clash Pass example so far.
 
 ## First learned screen prototype
 
+### Prepare reviewed examples
+
+Label Studio is an optional, separate annotation tool; the bot does not install
+or run it. A fresh clone does not include the private reviewed dataset or a
+trained model. Start by [collecting useful screenshots](SMART_COLLECTION.md),
+then export tasks with `python scripts/export_collection_tasks.py`.
+
+For an existing Label Studio installation:
+
+1. Enable local-file serving with its document root set to this project's
+   absolute `data` folder. The task URLs use `/data/local-files/?d=...` paths
+   relative to that folder. Keep access restricted because screenshots may
+   contain player names and chat.
+2. Generate the project's labeling configuration with
+   `python scripts/preannotate.py --no-heuristics --limit 0`.
+   Copy `data/labelstudio/label_config.xml` into the project's labeling setup.
+   This uses the categories in `data/labels.yaml`.
+3. Import `data/labelstudio/collection_tasks.json`. Check that images load, then
+   review each image and select exactly one whole-screen label. Suggested labels
+   are not verified answers.
+4. Export the completed annotations as Label Studio JSON, keeping the original
+   screenshot files in their existing folders. Keep session identifiers so
+   evaluation can separate recording sessions.
+
+Installing and configuring Label Studio itself is outside the bot's Linux
+installer. Training needs at least two screen categories and benefits from
+several independently recorded sessions.
+
 `scripts/train_screen_model.py` trains a small regularized linear classifier using OpenCV and NumPy,
 which are already project dependencies. It learns spatial color and edge
 features from reviewed, whole-screen labels. It does not use the partial object
@@ -50,15 +78,15 @@ From the project folder with the virtual environment activated:
 
 ```bash
 python scripts/train_screen_model.py \
-  --tasks data/labelstudio/review/curated/tasks_curated_screens_v2.json
+  --tasks path/to/reviewed-screen-tasks.json
 ```
 
-The version 2 screen export identifies the reviewed Clash Pass page explicitly;
-the earlier export called it `other`. The earlier exports and screenshots are
-preserved. When importing this version into Label Studio, regenerate its
-labeling configuration from version 2 of `data/labels.yaml` first so the new
-`clash_pass` category is available. Training requires the original images named
-in the export to be present under `data/frames/`.
+Replace the example path with your exported annotations. The original images
+named by the local-file URLs must remain under `data`; legacy recordings use
+`data/frames`, while smart collection uses `data/collection`. Use `--data-dir`
+if those files live elsewhere. The optional historical export at
+`data/labelstudio/review/curated/tasks_curated_screens_v2.json` is not shipped with
+the repository. It introduced the explicit `clash_pass` label in place of `other`.
 
 Training writes `data/models/screens.npz` and matching `screens.json` metadata.
 The metadata contains the class counts, feature scaling, source export hash,
@@ -71,7 +99,7 @@ reliable recognition on new sessions. The small AI-reviewed seed has limited
 variation, and its battle examples are scouting screens rather than active
 combat. Do not replace the navigation rules with this prototype.
 
-On the first 56-frame seed, the prototype correctly classified 39 of 54
+In the initial historical 56-frame seed evaluation, the prototype correctly classified 39 of 54
 eligible session-held-out examples (about 72%). The other two examples belonged
 to categories absent from their training sessions: Attack menu and Clash Pass.
 These results confirm that observation is the appropriate next step; they do
@@ -106,7 +134,7 @@ When the reviewed images are available, also run:
 
 ```bash
 python scripts/verify_auxiliary_screens.py \
-  --tasks data/labelstudio/review/curated/tasks_curated_screens_v2.json
+  --tasks path/to/reviewed-screen-tasks.json
 ```
 
 The first script checks actual recognition, obscured-button refusal, retry

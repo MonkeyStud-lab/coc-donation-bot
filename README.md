@@ -1,336 +1,159 @@
 # CoC Donation Bot
 
-> ## THIS CAN GET YOUR ACCOUNT PERMANENTLY BANNED
->
-> Supercell’s [Terms of Service](https://supercell.com/en/terms-of-service/) and [Fair Play policy](https://supercell.com/en/safe-and-fair-play/) **forbid bots and third-party automation**. They run ban waves and **permanently ban** accounts that use this kind of software.
->
-> - There is **no** “safe,” “undetectable,” or “just donations” mode.
-> - Practice mode does **not** make live use allowed.
-> - If you use this on a main account, expect to lose it.
->
-> **Do not use this to cheat.** This repo is for learning screen automation / computer vision on your own setup — not for unfair advantage in Clash of Clans.
+> **THIS CAN GET YOUR ACCOUNT PERMANENTLY BANNED.**
+> Supercell’s [Safe and Fair Play policy](https://supercell.com/en/safe-and-fair-play/)
+> prohibits bots and gameplay automation and states that offending accounts face
+> permanent bans. Practice mode does not make live use permitted. This is an
+> educational project, not an endorsed or safe way to play.
 
-A technical project for **Clash of Clans on Waydroid (Ubuntu)** that demonstrates ADB screen capture + vision-driven taps:
+A Python app that uses Android screenshots to recognize screens and control
+Clash of Clans through ADB. Built for Ubuntu and Waydroid.
 
-1. Watches clan chat and can **donate** troops, spells, and siege machines
-2. Optionally runs **unranked Battle** attacks with a programmed deploy sequence
+- Clan donations with elixir verification, including open and specific requests.
+- Optional unranked attacks using a deployment sequence you program.
+- Guided calibration, saved profiles, activity logs, and screenshot collection.
 
-It looks at the game screen through ADB and taps UI elements — the same idea as controlling a phone from your computer. **You run it at your own risk; the authors accept no responsibility for bans or lost progress.**
+## Install
 
-### If you came here to bot for loot / trophies
+You need Ubuntu or a similar Debian-based Linux system, an internet connection,
+and permission to install packages. **Waydroid and Clash of Clans must already
+be installed and working.** The bot installer does not install either one.
 
-Stop. Close the tab. Supercell treats bots as cheating and bans for it. This project will not help you evade detection, sell accounts, or run a farm.
-
-Setup is intentionally awkward (Linux + Waydroid + calibration) so it stays a **builder / learner** tool, not a one-click cheat client.
-
----
-
-## Documentation for builders
-
-| Doc | Who it’s for |
-|-----|----------------|
-| [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) | How the bot thinks: architecture, donation + farm flows, vision modes, leave safeguards |
-| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Extension recipes; also what we will **not** help with (evasion, paid botting, farms) |
-| [LICENSE](LICENSE) | MIT code license + project policy (no support for cheating / commercial farms) |
-
-The rest of this README is the **install and use** guide for Ubuntu + Waydroid.
-
----
-
-## What you need before starting
-
-- A computer running **Ubuntu** (or similar Debian Linux)
-- **Waydroid** already installed and working
-- **Clash of Clans** installed inside Waydroid, and you can log in and play normally
-- An internet connection the **first time** you install (to download packages and icons)
-
-You do **not** need to be a programmer. You will copy and paste a few commands into a terminal.
-
----
-
-## Step-by-step installation
-
-### Step 1 — Get the bot files
-
-Open a terminal (search for “Terminal” in your apps).
-
-**Option A — with Git (recommended):**
+Open Terminal and paste these commands:
 
 ```bash
+sudo apt update
+sudo apt install git
 mkdir -p ~/Projects
 cd ~/Projects
 git clone https://github.com/MonkeyStud-lab/coc-donation-bot.git
 cd coc-donation-bot
+bash scripts/get_started.sh
 ```
 
-**Option B — ZIP download:**
+The installer downloads the bot’s dependencies and unit icons, creates its
+private Python environment, and opens the app. It may ask for your Linux
+password; Terminal does not show characters while you type it. The first setup
+can take several minutes.
 
-1. Download the project ZIP from GitHub and unzip it
-2. In the terminal, go into that folder, for example:
+Already downloaded the files? Open Terminal in the project folder and run
+`bash scripts/get_started.sh`. You do not need to change script permissions.
+
+## Connect and calibrate
+
+1. **Open the game.** Start Waydroid and open Clash of Clans manually.
+2. **Find your device address.** Run `waydroid status` in Terminal and look for
+   its IP address while the session is running. In the app’s **Settings**, set
+   **ADB device** to that address followed by `:5555`, then **Save Settings**.
+3. **Connect.** On **Dashboard**, press **Connect ADB**. If needed, use Terminal:
+
+   ```bash
+   adb connect YOUR_IP:5555
+   adb devices
+   ```
+
+   Replace `YOUR_IP` with the address from Waydroid. The device should appear
+   with the word `device`, rather than `offline`.
+4. **Open Setup.** Choose **Calibrate what's missing**. Follow each instruction
+   in the app: open the requested game screen, capture it, and mark the button
+   or screen area. Calibration happens in the app; no separate image editor is
+   needed. To redo one part, select it and press **Recalibrate Selected**.
+5. **Confirm elixir mode.** In **Setup → Donation panel**, calibrate both the
+   elixir button and **Selected elixir indicator**. Open a donation request,
+   select the left elixir button, and capture the entire selected button,
+   including its border and background. The bot skips donations if it cannot
+   confirm elixir is selected.
+6. **Save a backup.** Use **Library → Saved calibrations → Save calibration backup** before experimenting.
+   **Restore** brings back a saved calibration and its reference images.
+
+Keep the bot stopped while calibrating. The in-app checklist shows missing
+parts. Farming is optional and can be configured later.
+
+## Use the app
+
+To open it again:
 
 ```bash
-cd ~/Downloads/coc-donation-bot
+cd ~/Projects/coc-donation-bot
+bash scripts/get_started.sh
 ```
 
-(Use the real path where you unzipped it.)
+- **Dashboard:** Start, Stop, Farm attack now, connection controls, and activity.
+- **Settings:** Donations, timing presets, farming, breaks, themes, and collection
+  limits. Developer options expose individual timing values.
+- **Setup:** Calibrate individual parts using the in-app instructions.
+- **Library:** Review screenshots and save, restore, rename, or delete calibrations.
+- **Diagnostics:** View a current screenshot, run a selected test or recovery action,
+  create a desktop shortcut, or close the game and Waydroid.
 
----
+**Stop** stops bot actions and leaves Clash of Clans open. It also works for a
+standalone **Farm attack now** run. **Close Waydroid + Clash** closes the game
+and Waydroid session. Farm and break countdowns pause while the bot is stopped.
 
-### Step 2 — Install and open the app
+After changing settings, save them. If the bot is running, use the offered
+**Apply & restart** action, or Stop and Start it yourself.
 
-Still inside the bot folder, run:
+For a clickable launcher, use **Diagnostics → Actions → Create desktop shortcut**. Open Waydroid
+and Clash of Clans before starting the bot. If Ubuntu asks, choose **Allow Launching**
+on the shortcut.
+
+### Optional farming
+
+1. In the game, select the army you want to use for unranked attacks.
+2. In **Setup → Farm / unranked attack**, calibrate Attack!, the unranked button,
+   and Return Home. Calibrate the search button if your interface has one.
+3. Select **Deploy tap sequence** to program your army selection and deployment
+   taps in order. Follow the editor’s instructions, including positioning the
+   camera. The sequence determines which troops, heroes, and spells are used.
+4. In **Settings**, enable farming and choose an interval, then save.
+5. Use **Farm attack now** for a single run, or **Start** for scheduled operation.
+
+Battle results are checked using consecutive screenshots. The timer remains
+as a fallback. See [battle completion](docs/BATTLE_COMPLETION.md) for details.
+
+## Update
+
+Stop the bot and close its control window, then run:
 
 ```bash
-chmod +x scripts/get_started.sh
-./scripts/get_started.sh
+cd ~/Projects/coc-donation-bot
+git pull --ff-only
+bash scripts/get_started.sh
 ```
 
-That script runs the Linux installer the first time (if needed), then opens the control window. The installer:
-
-- Installs tools your computer needs (ADB, Python, window toolkit, `notify-send`, etc.)
-- Creates a private Python environment for the bot (a “venv”)
-- Downloads troop/spell icons the bot uses
-- Offers an optional desktop shortcut at the end
-
-It may ask for your **password** (sudo). That is normal.
-
-To re-run setup only (or force a full redo):
-
-```bash
-./scripts/setup_linux.sh
-./scripts/setup_linux.sh --force
-```
-
----
-
-### Step 3 — Connect Waydroid to the bot
-
-The bot talks to the Android session through **ADB**. Think of ADB as a cable between your PC and Waydroid.
-
-1. Start Waydroid and open Clash of Clans so the game is visible.
-2. In the app on **Home**, use **Connect ADB** (also on the offline banner / Get started card).
-3. Or in a terminal:
-
-```bash
-adb devices
-```
-
-You want a line that looks like `127.0.0.1:5555` or `HOST:5555` with the word **device** (not “offline”).
-
-If the list is empty:
-
-```bash
-adb connect 127.0.0.1:5555
-adb devices
-```
-
-If that address does not work, check `waydroid status` (or your emulator docs), then `adb connect YOUR_IP:5555`.
-
-4. Tell the bot which address to use (pick one):
-
-- **In the app:** **Settings** → **ADB device** → Save  
-- **Or for this terminal session:** `export ADB_DEVICE=YOUR_IP:5555`
-
----
-
-### Step 4 — Teach the bot your screen (calibration)
-
-Every screen size is a bit different. Calibration shows a screenshot so you can mark Attack, Donate, chat regions, and so on.
-
-1. Open Waydroid and Clash of Clans (home village or clan chat as needed).
-2. In the app, open **Setup**.
-3. Select a step or part → **Recalibrate Selected**, or use **Recalibrate All** for a full walkthrough. Everything uses an **in-app picker** (taps, screen areas, templates, slot colors, grid). **Classic terminal calibrator** is optional.
-4. Finish all required steps (Home Get started checklist turns green when ADB + required calibration are OK). Tip: **Backup calibration** before experimenting.
-
-Files land under `data/calibrated.yaml` and `data/templates/`.
-
-Optional terminal wizard:
-
-```bash
-source .venv/bin/activate
-python scripts/calibrate.py
-```
-
-If you move to another PC with the **same** screen resolution, you can copy those `data/` files. If the resolution is different, calibrate again.
-
----
-
-### Step 5 — Start the bot
-
-1. Open Waydroid and Clash of Clans yourself.
-2. Launch the app (again with `./scripts/get_started.sh`, or `source .venv/bin/activate && python -m coc_bot.main`).
-3. Control window pages:
-
-| Sidebar | What it does |
-|---------|----------------|
-| **Home** | **Start** / **Stop**, Connect/Pick ADB, Get started, practice mode, farm readiness, status chip, activity log |
-| **Settings** | Timing presets, practice mode, donations, farm, breaks; Dev options; Apply & restart when running |
-| **Setup** | Full in-app calibration; Calibrate what’s missing; backup/restore; classic fallback |
-| **Tools** | Fix-it recipes, ADB health, desktop shortcut, other one-shot tests |
-
-4. Click **Start** on Home. The bot begins watching for donations (and farm, if enabled).
-
-**Stop** leaves Clash open. **Close Waydroid + Clash** shuts the game and Waydroid session.
-
-Desktop notifications (`notify-send`) fire when ADB drops while running, the bot stops, or Start is blocked for missing calibration.
-
-#### Optional desktop shortcut
-
-```bash
-chmod +x scripts/install_run_shortcut.sh
-./scripts/install_run_shortcut.sh
-```
-
-(`setup_linux.sh` can also offer this at the end.) Then use the **CoC Donation Bot** icon on your desktop (choose **Allow Launching** if Ubuntu asks).
-
----
-
-## Optional — Farm attacks (elixir)
-
-Farming runs **unranked Battle** (not ranked multiplayer): leave chat → Attack → Battle → run your programmed deploy taps → wait → Return Home → reopen chat.
-
-1. In **Setup**, run the **Farm** calibration step (Attack button, unranked Battle, Return Home, army slots as needed).
-2. In game, leave your **farm army** as the active preset.
-3. In **Setup → Farm**, program a **deploy tap sequence** (army bar + map taps).
-4. In **Settings**, turn on farm and set the interval if you want.
-5. Save Settings, then **Stop** and **Start** the bot so it reloads.
-6. Or press **Farm attack now** on Home for a single attack.
-
----
-
-## Optional — Start automatically in the background
-
-Only do this after the GUI works. Waydroid and Clash should already be able to run.
-
-```bash
-mkdir -p ~/.config/systemd/user
-cp systemd/coc-donation-bot.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now coc-donation-bot.service
-sudo loginctl enable-linger $USER
-journalctl --user -u coc-donation-bot.service -f
-```
-
-That last command shows a live log. Press `Ctrl+C` to stop watching (the service keeps running).
-
----
-
-## If something goes wrong
-
-| Problem | What to try |
-|---------|-------------|
-| `adb devices` is empty or “offline” | Start Waydroid; Home → **Connect ADB**, or `adb connect YOUR_IP:5555` |
-| Bot says not calibrated | Open **Setup** and finish required steps (Get started checklist) |
-| Taps miss buttons | Recalibrate that part in Setup; check Settings → ADB device |
-| No donation slots found | Recalibrate **slot colors** and **grid** in Setup (in-app) |
-| Screencap / screenshot fails | Restart Waydroid, wait ~15 seconds, try again |
-| Need logs for help | Home → **Copy logs** or **Export debug** (`data/debug/export_…`) |
-| New computer | `./scripts/get_started.sh` (or `setup_linux.sh`), then calibrate if the screen size differs |
-| Bot stuck | Use **Tools** → classify screen / open clan chat; or restart the bot |
-
----
-
-## Advanced (power users)
-
-Headless (no window):
-
-```bash
-python -m coc_bot.main --no-gui
-```
-
-Dry-run (detect only, no donation taps):
-
-```bash
-python -m coc_bot.main --dry-run --debug-save-frames
-```
-
-Offline vision test on a saved screenshot:
-
-```bash
-python scripts/replay_frame.py path/to/screenshot.png --annotate
-```
-
-Refresh unit icons:
-
-```bash
-python scripts/sync_game_data.py --force
-```
-
-### Config files
-
-| File | Purpose |
-|------|---------|
-| `config/default.yaml` | Built-in defaults |
-| `data/user_settings.yaml` | Your Settings from the GUI |
-| `data/calibrated.yaml` | Points and regions from Setup |
-| `data/runtime_state.json` | Session / farm timers |
-
-Environment variables:
-
-| Variable | Typical use |
-|----------|-------------|
-| `ADB_DEVICE` | Override device address (e.g. `127.0.0.1:5555`) |
-| `COC_BOT_CONFIG` | Alternate calibrated YAML path |
-
-### Project layout
-
-```
-src/coc_bot/
-  gui/          # Control panel (Home / Settings / Setup / Tools)
-  adb/          # Talks to Waydroid
-  vision/       # Screen recognition
-  donation/     # Clan chat donations
-  attack/       # Unranked farm attacks
-  runtime/      # Session limits and breaks
-  calibration/  # Setup wizard
-scripts/
-  get_started.sh   # Setup if needed, then launch the GUI
-  setup_linux.sh   # First-time install on Ubuntu
-  calibrate.py     # Classic Setup wizard from the terminal
-docs/
-  HOW_IT_WORKS.md  # Architecture (read this to extend the bot)
-  CONTRIBUTING.md  # Extension recipes
-```
-
----
-
-## Features (summary)
-
-- ADB-only control (`screencap` + taps) — works under Wayland and remote desktop
-- Troops, spells, and siege donations; partial fills when inventory is low
-- Interactive setup wizard for unknown resolutions
-- Session time limits with randomized breaks, then resume
-- Optional unranked elixir farm with a programmed deploy sequence
-- Farm results recognition with two-screen confirmation and a timer fallback;
-  see [battle completion](docs/BATTLE_COMPLETION.md)
-- Dry-run and offline replay for testing
-- Recognition and recovery for Shop and Clash Pass pages
-- Optional screen-recognition prototype that only logs predictions; see
-  [the perception guide](docs/PERCEPTION.md) for training and testing
-- Optional automatic collection of diverse screenshots and failure context;
-  see [the smart collection guide](docs/SMART_COLLECTION.md) for limits and review
-
----
-
-## License
-
-Code is under the [MIT License](LICENSE). The same file includes a **project policy**: maintainers will not help with detection evasion, paid botting, or account farming. Live use can get you banned — your risk.
-
-### Reliability and game-update setup
-
-See [Reliability and verification](docs/RELIABILITY.md) for the safeguards and tests.
-Before using donations with this version, add **Setup → Donation panel → Selected
-elixir indicator**: select the left elixir button and capture its whole selected
-appearance, including the border. Donations skip safely until this is configured.
-Existing calibration is preserved.
-
-**Settings → Screenshot collection** controls passive recording and its limits.
-**Tools → Screenshots & interface profiles** shows collection status, opens the
-review gallery, saves named interface profiles, and checks calibration files.
-Stop the bot before switching profiles. After a game UI update, save the old
-profile, recalibrate the changed parts, then save a new profile.
-
-For a Python 3.14 installation using the direct dependency versions tested on
-Linux, run `bash scripts/setup_linux.sh --tested-deps`. Other Python versions
-should use normal setup. Developers can run the offline checks in
-[RELIABILITY.md](docs/RELIABILITY.md); GitHub runs the same checks on changes.
+The launcher checks whether installation work is needed. Saved GUI settings and
+calibration are separate from the tracked defaults and normally survive updates.
+
+If Git says local changes would be overwritten, **do not delete or reset them**.
+Keep the error message and back up those files before resolving the conflict.
+After a game interface update, back up your calibration and redo changed parts.
+
+## Troubleshooting
+
+- **No connected device:** Make sure Waydroid’s session is running. Check its IP
+  address, reconnect, and confirm `adb devices` lists it as `device`.
+- **Start is blocked:** Open Setup and finish the required calibration parts.
+- **Donations are skipped:** Check the elixir button and selected-indicator
+  calibration first, then the donation grids and slot colors.
+- **Taps miss:** Recalibrate the affected part. A different resolution or game
+  layout may need a different calibration even on the same computer.
+- **Screenshot fails:** Stop the bot, check the ADB connection, and use the
+  screenshot/health tests in Diagnostics. Restart Waydroid if needed.
+- **Need help:** Use **Copy logs** or **Export debug** on Dashboard. Review exported
+  files before sharing; they may contain game screenshots and device details.
+
+## Documentation
+
+- [Running, backups, and advanced setup](docs/RUNNING.md)
+- [How the bot works](docs/HOW_IT_WORKS.md)
+- [Reliability safeguards and tests](docs/RELIABILITY.md)
+- [Useful screenshot collection](docs/SMART_COLLECTION.md)
+- [Screen-recognition research](docs/PERCEPTION.md)
+- [Contributing](docs/CONTRIBUTING.md)
+
+## License and project policy
+
+The code uses the [MIT License](LICENSE). Maintainers do not provide help with
+detection evasion, paid botting, or account farming/selling. See the
+[contribution policy](docs/CONTRIBUTING.md). This project is not affiliated with
+Supercell.

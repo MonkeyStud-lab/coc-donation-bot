@@ -20,7 +20,9 @@ no jitter, then uses the existing home/clan-chat confirmation. The log says:
 `Battle results confirmed on two screenshots`.
 
 If recognition fails, **Battle results fallback (seconds)** in Settings remains
-the maximum wait from the original first-deploy timestamp. Its existing saved
+the maximum wait from the recorded deployment-start timestamp. This is set
+before panning and replaying taps, not from visual proof that a troop appeared.
+Its existing saved
 value is preserved. At the deadline the bot still taps the calibrated Return
 Home coordinates, regardless of the generic screen classifier. The log says:
 `Battle timer done — forcing Return Home coordinates`.
@@ -30,8 +32,9 @@ seconds plus capture time. Each observation has one shared three-second ADB
 budget, uses screenshot-and-pull, and never starts reconnects or retries. No
 observation starts in the final four seconds before the fallback deadline.
 Stop is checked before captures and taps, between ADB commands, and throughout
-waiting. An in-progress ADB command can take up to the remaining capture budget
-to return. Ordinary fallback capture and home confirmation retain their existing
+waiting. Active ADB subprocesses also poll for cancellation and are terminated
+when Stop is requested; the shared capture budget bounds failed observations.
+Ordinary fallback capture and home confirmation retain their existing
 timeouts. The two polling intervals mean early completion is not instantaneous.
 
 ## Validation and limitations
@@ -47,7 +50,7 @@ Checks include simultaneous labels, brightness, green scenery, missing labels,
 two-frame confirmation, transient results, the fallback deadline with slow or
 failed captures, Stop, and bounded capture behavior. No game commands are sent.
 
-The current corpus contains two real victory results screens and 54 non-results
+The initial reviewed corpus contained two real victory results screens and 54 non-results
 screens; they passed at original resolution, 1280×720 and 1920×1080. The label
 test does not depend on the Victory banner, but defeat and other results layouts
 still need real examples. Different languages, UI scaling or a game UI update
@@ -58,3 +61,6 @@ appears only after the actual results screen, and that home/clan chat are reache
 Keep examples of both wins and losses for future offline checks. This initial
 implementation has been tested offline; it is not a claim that every results
 layout has been validated in a live battle.
+
+If the fallback tap misses, recalibrate **Setup → Farm → Return Home** on a real
+results screen. Extending the timer will not correct a misplaced tap.

@@ -9,16 +9,17 @@
   whenever either reference is missing or selection cannot be confirmed.
   Old calibration is preserved; add this part before using donations again.
 - **Useful screenshots:** enable Screenshot collection in Settings, set daily
-  and storage limits, then Stop/Start. Tools shows the saved-image status and
+  and storage limits, then Stop/Start. Library shows the saved-image status and
   opens the local review gallery. Nothing is automatically uploaded or deleted.
   CLI collection options still override GUI defaults for that launch.
-- **Interface profiles:** stop the bot, then Tools → Save interface profile.
+- **Interface profiles:** stop the bot, then Library → Saved calibrations → Save interface profile.
   Name it for the game update or screen layout. Switch restores its calibration
-  and template images together. Rename/delete stored profiles from Setup.
+  and template images together. Rename/delete stored profiles from Library.
   Profiles do not automatically recognize game versions or guarantee compatibility.
-- **Calibration checks:** Tools checks required parts, files, coordinate bounds,
-  and the latest screenshot size when available. Practice mode is still needed
-  to verify that images match the current interface.
+- **Calibration checks:** Library checks required parts, files, coordinate bounds,
+  and the latest screenshot size when available. Also verify that the images
+  match the current interface. Practice mode skips donation taps but still sends
+  navigation input; it is not an offline simulator.
 - **Screenshot previews:** during operation, the preview shows the latest bot
   frame and its age. It does not launch a competing screenshot operation.
 - **Stop and Quit:** Stop cancels active ADB commands and input settling. Quit

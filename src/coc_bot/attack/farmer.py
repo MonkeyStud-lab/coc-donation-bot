@@ -151,8 +151,11 @@ class AttackFarmer:
             frame = self.capture.screenshot()
             # Opponent may already be loaded even if wait_for_battle mis-timed.
             if (
-                self.attack_nav.classify(frame, mode=BotMode.ATTACK) == ScreenType.BATTLE
-                or self.attack_nav.classifier._looks_like_battle(frame)  # noqa: SLF001
+                self.attack_nav.classifier.find_reload_game_button(frame) is None
+                and (
+                    self.attack_nav.classify(frame, mode=BotMode.ATTACK) == ScreenType.BATTLE
+                    or self.attack_nav.classifier._looks_like_battle(frame)  # noqa: SLF001
+                )
             ):
                 logger.warning(
                     "wait_for_battle returned false but battle is on screen — deploying anyway"

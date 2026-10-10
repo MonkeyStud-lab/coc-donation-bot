@@ -691,6 +691,10 @@ class DonationBot:
             # ensure_clan_chat closes these using a verified X and fresh frames.
             # Do not send a generic BACK or assume the village is already ready.
             pass
+        elif self.navigator.classifier.find_reload_game_button(frame) is not None:
+            # Reload is the only action that clears Android's inactivity dialog.
+            if self.navigator._dismiss_popup(frame) is False:
+                return
         elif screen not in (ScreenType.HOME, ScreenType.CLAN_CHAT, ScreenType.LOADING):
             # Unknown overlay/popup — BACK is the generic dismiss.
             self.nav_input.back()

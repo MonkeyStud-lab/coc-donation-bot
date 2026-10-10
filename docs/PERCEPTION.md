@@ -39,6 +39,22 @@ checked on the reviewed seed at the original size, 1280×720, and 1920×1080. A
 future game redesign, different language, or rearranged header may require new
 reference crops. There is only one reviewed Clash Pass example so far.
 
+## Inactivity dialog recovery
+
+The English “Anyone there?” inactivity dialog is recognized before background
+home, chat, shop, or battle anchors. `vision/idle_dialog.py` requires the title
+and inactivity message together, plus a separate bright “Reload game” label
+below them. Only those generic text crops are bundled; no account screenshots
+are shipped. The detected button coordinates scale with the screenshot.
+
+While automation is running, navigation taps Reload game with no jitter,
+captures fresh frames, and resumes only after normal screen verification.
+It waits at least ten seconds between attempts and allows at most three reloads
+per two minutes per navigator. Stop cancels recovery; a stopped bot does not
+monitor or reload the game. Reload also enables the existing short live-defense
+watch window. No extra calibration or OCR dependency is required. Other
+languages and substantially different Android dialog layouts need new anchors.
+
 ## First learned screen prototype
 
 ### Prepare reviewed examples

@@ -35,6 +35,7 @@ class Navigator:
         self._template_cache: dict[str, np.ndarray] = {}
         self._last_jump_at = 0.0
         self.stop_check: Callable[[], bool] | None = None
+        self._idle_reload_times: list[float] = []
 
     def _stopping(self) -> bool:
         return bool(self.stop_check and self.stop_check())
@@ -108,7 +109,8 @@ class Navigator:
                 close_streak = 0
 
                 if screen == ScreenType.POPUP:
-                    self._dismiss_popup(frame)
+                    if self._dismiss_popup(frame) is False:
+                        return False
                     if self._sleep(1.0):
                         return False
                     continue
@@ -431,13 +433,31 @@ class Navigator:
             logger.warning("tap_outside_donation not calibrated — using BACK")
             self.input.back()
 
-    def _dismiss_popup(self, frame: np.ndarray) -> None:
+    def _dismiss_popup(self, frame: np.ndarray) -> bool | None:
         """
         Clear launch/news/Star Bonus modals.
 
         Prefer calibrated Okay/Claim. Otherwise tap a screen corner outside the
         centered card (Star Bonus dismisses from any corner).
         """
+        if self._stopping():
+            return False
+        reload_point = self.classifier.find_reload_game_button(frame)
+        if reload_point is not None:
+            now = time.monotonic()
+            self._idle_reload_times = [t for t in self._idle_reload_times if now - t < 120]
+            if len(self._idle_reload_times) >= 3:
+                logger.warning("Inactivity dialog persists after 3 reloads — waiting before retrying")
+                return False
+            if self._idle_reload_times and now - self._idle_reload_times[-1] < 10:
+                return None  # Let the game finish reloading; never fall back to a corner.
+            if self._stopping():
+                return False
+            logger.info("Anyone there? inactivity dialog — tapping Reload game at ({}, {})", *reload_point)
+            self.input.tap(*reload_point, jitter=0)
+            self._idle_reload_times.append(now)
+            ScreenClassifier.arm_live_replay_watch()
+            return True
         template = self.load_template("popup_dismiss")
         if template is not None:
             match = self.matcher.find(frame, template)

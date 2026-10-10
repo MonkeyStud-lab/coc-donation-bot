@@ -10,6 +10,7 @@ from coc_bot.config import BotConfig
 from coc_bot.vision import recorder
 from coc_bot.vision.auxiliary import AuxiliaryPage, AuxiliaryPageDetector
 from coc_bot.vision.matcher import TemplateMatcher
+from coc_bot.vision.idle_dialog import IdleDialogDetector
 
 
 class ScreenType(str, Enum):
@@ -109,6 +110,10 @@ class ScreenClassifier:
         self.matcher = matcher or TemplateMatcher(threshold=config.template_threshold)
         self._cache: dict[str, np.ndarray] = {}
         self._auxiliary = AuxiliaryPageDetector()
+        self._idle_dialog = IdleDialogDetector()
+
+    def find_reload_game_button(self, frame: np.ndarray) -> tuple[int, int] | None:
+        return self._idle_dialog.detect(frame)
 
     def auxiliary_page(self, frame: np.ndarray) -> AuxiliaryPage | None:
         """Recognize an obstructing page and, when safe, locate its close X."""
@@ -834,6 +839,9 @@ class ScreenClassifier:
         return screen
 
     def _classify(self, frame: np.ndarray, mode: BotMode | None) -> ScreenType:
+        # Android dialog covers any game flow; background anchors are irrelevant.
+        if self.find_reload_game_button(frame) is not None:
+            return ScreenType.POPUP
         page = self.auxiliary_page(frame)
         if page is not None:
             return ScreenType(page.screen)

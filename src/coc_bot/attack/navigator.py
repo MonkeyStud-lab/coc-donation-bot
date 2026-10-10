@@ -129,6 +129,12 @@ class AttackNavigator:
                     logger.info("leave_chat_for_home: stop requested — aborting")
                     return False
                 frame = self.capture.screenshot()
+                if self.classifier.find_reload_game_button(frame) is not None:
+                    if self.donation_nav is None or self.donation_nav._dismiss_popup(frame) is False:
+                        return False
+                    if self._sleep(1.0):
+                        return False
+                    continue
                 if self.classifier.auxiliary_page(frame) is not None:
                     if not auxiliary_recovery.close(frame) or self._sleep(0.6):
                         return False
@@ -426,6 +432,11 @@ class AttackNavigator:
             frame = self.capture.screenshot()
             screen = self.classify(frame, mode=BotMode.ATTACK)
             last_screen = screen.value
+            if self.classifier.find_reload_game_button(frame) is not None:
+                if self.donation_nav is not None:
+                    self.donation_nav._dismiss_popup(frame)
+                # A disconnected matchmaking attempt is not a deployable opponent.
+                return False
             if screen == ScreenType.BATTLE or self.classifier._looks_like_battle(frame):  # noqa: SLF001
                 logger.info("Battle field ready (screen={})", screen.value)
                 return True
@@ -466,6 +477,8 @@ class AttackNavigator:
         logger.warning("Matchmaking timed out after {}s (last_screen={})", timeout, last_screen)
         # Final peek — opponent may have loaded on the last tick.
         frame = self.capture.screenshot()
+        if self.classifier.find_reload_game_button(frame) is not None:
+            return False
         if self.classifier._looks_like_battle(frame) or self.classify(frame, mode=BotMode.ATTACK) == ScreenType.BATTLE:  # noqa: SLF001
             logger.info("Battle field ready on final check")
             return True
@@ -502,6 +515,11 @@ class AttackNavigator:
                                          stop_check=self.stop_check)
             if self._stopping():
                 return ScreenType.UNKNOWN
+            if frame is not None and self.classifier.find_reload_game_button(frame) is not None:
+                if self.donation_nav is not None:
+                    self.donation_nav._dismiss_popup(frame)
+                self.last_battle_end_reason = "inactivity_disconnect"
+                return ScreenType.POPUP
             target = self.battle_completion.detect(frame) if frame is not None else None
             now = time.monotonic()
             if target is not None:
@@ -534,6 +552,11 @@ class AttackNavigator:
         frame = self.capture.screenshot()
         if self._stopping():
             return ScreenType.UNKNOWN
+        if self.classifier.find_reload_game_button(frame) is not None:
+            if self.donation_nav is not None:
+                self.donation_nav._dismiss_popup(frame)
+            self.last_battle_end_reason = "inactivity_disconnect"
+            return ScreenType.POPUP
         self.last_battle_end_reason = "timer_fallback"
         logger.info("Battle timer done — forcing Return Home coordinates (no vision skip)")
         self._tap_return_home_coords(frame)
@@ -569,6 +592,13 @@ class AttackNavigator:
                 return False
             frame = self.capture.screenshot()
             screen = self.classify(frame, mode=BotMode.ATTACK)
+
+            if self.classifier.find_reload_game_button(frame) is not None:
+                if self.donation_nav is None or self.donation_nav._dismiss_popup(frame) is False:
+                    return False
+                if self._sleep(1.0):
+                    return False
+                continue
 
             if screen in (ScreenType.SHOP, ScreenType.CLASH_PASS):
                 if not auxiliary_recovery.close(frame) or self._sleep(0.6):
@@ -704,6 +734,13 @@ class AttackNavigator:
             if self._stopping():
                 return "stopped"
             frame = self.capture.screenshot()
+
+            if self.classifier.find_reload_game_button(frame) is not None:
+                if self.donation_nav._dismiss_popup(frame) is False:
+                    return "stopped" if self._stopping() else "failed"
+                if self._sleep(1.0):
+                    return "stopped"
+                continue
 
             if self.classifier.auxiliary_page(frame) is not None:
                 if not auxiliary_recovery.close(frame):

@@ -9,6 +9,7 @@ from loguru import logger
 
 from coc_bot.adb.input import InputController
 from coc_bot.vision.screens import ScreenClassifier
+from coc_bot.vision import recorder
 
 
 class AuxiliaryRecovery:
@@ -30,12 +31,14 @@ class AuxiliaryRecovery:
         if page is None or self.stopping():
             return False
         if page.close is None:
+            recorder.note_event("close_obscured", screen=page.screen)
             logger.warning(
                 "Recognized {} but its close button is obscured or unverified — "
                 "dismiss the covering dialog manually", page.screen,
             )
             return False
         if self.attempts >= 3:
+            recorder.note_event("close_failed", screen=page.screen, attempts=self.attempts)
             logger.warning("{} did not close after 3 attempts — stopping recovery", page.screen)
             return False
         # Stop takes priority even if requested during image matching.

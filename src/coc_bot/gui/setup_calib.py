@@ -321,7 +321,7 @@ def _calibrate_roi_or_template(
     x, y, rw, rh = (int(result[0]), int(result[1]), int(result[2]), int(result[3]))
     fh, fw = used.shape[:2]
 
-    if part.kind == "roi" or part.key.endswith("_bar"):
+    if part.kind == "roi" or part.key.endswith("_bar") or part.key == "donation_elixir_selected":
         config.rois[part.key] = _normalized_roi((x, y, rw, rh), fw, fh)
         if part.key == "donation_troop_bar":
             config.rois.pop("donation_siege_bar", None)

@@ -50,7 +50,7 @@ farm:
   pan_swipes: 3                   # default pans when programming a new sequence
   deploy_jitter_px: 6             # jitter for farm deploy sequence taps only
   match_timeout_seconds: 120      # clouds / Find a Match
-  battle_timeout_seconds: 210     # after first deploy: wait this long, then tap Return Home (3m30s)
+  battle_timeout_seconds: 210     # max wait from first deploy; confirmed results can return earlier
   retry_cooldown_seconds: 300     # only when farm fails before deploy (menu/matchmaking)
 
 # Control window (GUI)
@@ -63,3 +63,9 @@ gui:
   timing_preset: balanced         # safe | balanced | fast | custom
   dev_options: false              # when true, Settings shows raw timing ms fields
   practice_mode: false            # when true, Start runs without donate taps (dry-run)
+
+# Passive collection is opt-in and never changes game actions.
+collection:
+  enabled: false
+  daily_limit: 200
+  storage_gb: 5.0

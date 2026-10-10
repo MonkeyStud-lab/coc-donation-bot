@@ -188,14 +188,15 @@ class AttackFarmer:
         if self._stopping():
             return self._stopped_mid_battle()
 
-        # Wait remaining of the fixed battle window, tap Return Home coords, then
-        # confirm village with existing Attack!/chat leave rules.
+        # Confirm results visually, with the fixed battle window as fallback.
+        # Leave confirmation still uses the existing home / clan-chat rules.
         end_screen = self.attack_nav.wait_for_battle_end(since=deploy_started)
         if self._stopping() or end_screen == ScreenType.UNKNOWN:
             return self._stopped_mid_battle()
 
-        self._gs(GameState.BATTLE_RESULTS, "battle timer done")
-        logger.info("Confirming leave after battle timer (screen={})", end_screen.value)
+        self._gs(GameState.BATTLE_RESULTS, self.attack_nav.last_battle_end_reason)
+        logger.info("Confirming leave after battle ({}, screen={})",
+                    self.attack_nav.last_battle_end_reason, end_screen.value)
         self._gs(GameState.RETURNING_HOME, "tap Return Home")
         if not self.attack_nav.return_home_from_attack():
             if self._stopping():
@@ -239,6 +240,9 @@ class AttackFarmer:
     def _abort_to_chat(self) -> None:
         if self._stopping():
             return
+        from coc_bot.vision import recorder
+
+        recorder.note_event("farm_abort", phase=self.game_state.state.value if self.game_state else "unknown")
         self._gs(GameState.RECOVERING, "farm abort")
         try:
             self.attack_nav.return_home_from_attack()

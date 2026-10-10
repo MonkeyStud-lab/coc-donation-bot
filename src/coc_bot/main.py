@@ -50,9 +50,26 @@ def main() -> None:
         help="Compare an experimental screen model with the existing rules; "
         "predictions are logged only and cannot control the bot",
     )
+    parser.add_argument("--collect-smart", action="store_true",
+                        help="Save diverse screenshots and failure context without changing game actions")
+    parser.add_argument("--collection-daily-limit", type=int, default=200, metavar="N",
+                        help="With --collect-smart: maximum saved images per UTC day (default 200)")
+    parser.add_argument("--collection-storage-gb", type=float, default=5.0, metavar="GB",
+                        help="With --collect-smart: storage limit for the new collection (default 5 GB)")
     args = parser.parse_args()
 
     setup_logging(debug=args.debug, log_file=Path("data") / "bot.log")
+
+    if args.collect_smart:
+        from coc_bot.vision.collection import CollectionOptions
+        from coc_bot.vision import recorder
+
+        try:
+            options = CollectionOptions(daily_limit=args.collection_daily_limit,
+                                        storage_bytes=int(args.collection_storage_gb * 1024**3))
+        except (ValueError, OverflowError) as exc:
+            parser.error(str(exc))
+        recorder.configure_smart(options)
 
     if args.screen_model:
         from coc_bot.vision.screen_model import enable_observer

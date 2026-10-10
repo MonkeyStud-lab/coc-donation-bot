@@ -42,6 +42,7 @@ class ScreenModel:
         if hashlib.sha256(path.read_bytes()).hexdigest() != metadata["model_sha256"]:
             raise ValueError("Screen model and metadata do not match; retrain the model")
         self.labels = metadata["labels"]
+        self.model_id = metadata["model_sha256"][:16]
         with np.load(path, allow_pickle=False) as archive:
             self.mean = archive["mean"]
             self.scale = archive["scale"]
@@ -77,6 +78,9 @@ class ScreenObserver:
                 return
             self._last = now
             prediction = self.model.predict(frame)
+            from coc_bot.vision import recorder
+
+            recorder.note_model(frame, prediction, getattr(self.model, "model_id", "unknown"))
             logger.info(
                 "Screen observer (no actions): model={} rules={} agree={}",
                 prediction, screen, prediction == screen,

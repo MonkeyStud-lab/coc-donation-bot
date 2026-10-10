@@ -15,6 +15,7 @@ from coc_bot.donation.navigator import Navigator
 from coc_bot.stop import interrupted_sleep
 from coc_bot.vision.matcher import TemplateMatcher
 from coc_bot.vision.screens import BotMode, ScreenClassifier, ScreenType
+from coc_bot.vision.battle_completion import BattleCompletionDetector
 
 
 class AttackNavigator:
@@ -37,6 +38,8 @@ class AttackNavigator:
         self.mode = BotMode.ATTACK
         self._template_cache: dict[str, np.ndarray] = {}
         self.stop_check: Callable[[], bool] | None = None
+        self.battle_completion = BattleCompletionDetector()
+        self.last_battle_end_reason = "not_waited"
 
     def _stopping(self) -> bool:
         return bool(self.stop_check and self.stop_check())
@@ -475,25 +478,63 @@ class AttackNavigator:
         since: float | None = None,
     ) -> ScreenType:
         """
-        Simple farm leave: wait a fixed time from first deploy, then always tap
-        calibrated Return Home coordinates — no vision, no skip.
+        Recognize results after deploy, keeping the original fixed-time fallback.
+        Only this attack phase uses the conservative two-label detector. Generic
+        classifier guesses cannot end an attack early.
         """
         total = timeout if timeout is not None else float(self.config.farm_battle_timeout_seconds)
         started = since if since is not None else time.time()
         remaining = max(0.0, total - (time.time() - started))
         logger.info(
-            "Battle timer: waiting {:.0f}s more ({}s from first deploy), then Return Home",
+            "Watching for battle results; timer fallback in {:.0f}s ({}s from first deploy)",
             remaining,
             int(total),
         )
-        if remaining > 0 and self._sleep(remaining):
-            logger.info("wait_for_battle_end: stop requested — aborting")
+        deadline = time.monotonic() + remaining
+        previous = None
+        previous_at = 0.0
+        self.last_battle_end_reason = "watching"
+        while deadline - time.monotonic() > 4.0:
+            if self._stopping():
+                return ScreenType.UNKNOWN
+            # Same capture owner, bounded ADB time, no reconnect/retry loop.
+            frame = self.capture.observe(timeout_seconds=min(3.0, deadline - time.monotonic() - 1),
+                                         stop_check=self.stop_check)
+            if self._stopping():
+                return ScreenType.UNKNOWN
+            target = self.battle_completion.detect(frame) if frame is not None else None
+            now = time.monotonic()
+            if target is not None:
+                stable = (previous is not None and now - previous_at >= 1.0
+                          and max(abs(target[i] - previous[i]) for i in (0, 1))
+                          < max(frame.shape[:2]) * .02)
+                if stable:
+                    if self._stopping():
+                        return ScreenType.UNKNOWN
+                    self.last_battle_end_reason = "results_confirmed"
+                    logger.info("Battle results confirmed on two screenshots — Return Home at {}", target)
+                    from coc_bot.vision import recorder
+
+                    recorder.note_event("action_confirmed", action="battle_end", source="two_results_labels")
+                    self.input.tap(*target, jitter=0)
+                    if self._sleep(1.5):
+                        return ScreenType.UNKNOWN
+                    return ScreenType.BATTLE_RESULTS
+                previous, previous_at = target, now
+            else:
+                previous = None
+            if self._sleep(min(5.0, max(0.0, deadline - time.monotonic()))):
+                return ScreenType.UNKNOWN
+        if self._sleep(max(0.0, deadline - time.monotonic())):
             return ScreenType.UNKNOWN
 
         if self._stopping():
             return ScreenType.UNKNOWN
 
         frame = self.capture.screenshot()
+        if self._stopping():
+            return ScreenType.UNKNOWN
+        self.last_battle_end_reason = "timer_fallback"
         logger.info("Battle timer done — forcing Return Home coordinates (no vision skip)")
         self._tap_return_home_coords(frame)
         if self._sleep(1.5):
@@ -713,4 +754,7 @@ class AttackNavigator:
                     return "stopped"
 
         logger.warning("Leave confirm timed out — could not open clan chat")
+        from coc_bot.vision import recorder
+
+        recorder.note_event("return_home_confirm_failed")
         return "failed"

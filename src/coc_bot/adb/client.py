@@ -9,6 +9,7 @@ from typing import Sequence
 from loguru import logger
 
 from coc_bot.stop import interrupted_sleep
+from coc_bot.runtime.processes import ProcessStopped, run_process
 
 
 class AdbError(RuntimeError):
@@ -62,13 +63,9 @@ class AdbClient:
         cmd = [*self._base_cmd(), *args]
         logger.debug("ADB: {}", " ".join(cmd))
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=False,
-            )
+            result = run_process(cmd, text=True, timeout=timeout, stop_check=self.stop_check)
+        except ProcessStopped as exc:
+            raise AdbStopped(str(exc)) from exc
         except subprocess.TimeoutExpired as exc:
             raise AdbError(f"ADB command timed out: {' '.join(cmd)}") from exc
         except OSError as exc:
@@ -88,7 +85,9 @@ class AdbClient:
         cmd = [*self._base_cmd(), "exec-out", *args]
         logger.debug("ADB exec-out: {}", " ".join(cmd))
         try:
-            result = subprocess.run(cmd, capture_output=True, timeout=timeout, check=False)
+            result = run_process(cmd, timeout=timeout, stop_check=self.stop_check)
+        except ProcessStopped as exc:
+            raise AdbStopped(str(exc)) from exc
         except subprocess.TimeoutExpired as exc:
             raise AdbError(f"ADB exec-out timed out: {' '.join(cmd)}") from exc
         except OSError as exc:
@@ -102,13 +101,9 @@ class AdbClient:
         if ":" in self.device:
             host_port = self.device
             try:
-                result = subprocess.run(
-                    ["adb", "connect", host_port],
-                    capture_output=True,
-                    text=True,
-                    timeout=15,
-                    check=False,
-                )
+                result = run_process(["adb", "connect", host_port], text=True, timeout=15, stop_check=self.stop_check)
+            except ProcessStopped as exc:
+                raise AdbStopped(str(exc)) from exc
             except (OSError, subprocess.TimeoutExpired) as exc:
                 logger.warning("adb connect {} failed: {}", host_port, exc)
                 return False
@@ -146,6 +141,8 @@ class AdbClient:
         try:
             result = self.run(["get-state"], check=False)
             return (result.stdout or "").strip()
+        except AdbStopped:
+            raise
         except (AdbError, FileNotFoundError):
             return "offline"
 
@@ -169,6 +166,8 @@ class AdbClient:
         """
         try:
             result = self.run_shell("wm size", check=False)
+        except AdbStopped:
+            raise
         except (AdbError, FileNotFoundError):
             return None
         text = (result.stdout or "") + "\n" + (result.stderr or "")

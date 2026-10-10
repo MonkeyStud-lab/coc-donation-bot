@@ -15,4 +15,4 @@ fi
 
 # shellcheck disable=SC1091
 source "$ROOT/.venv/bin/activate"
-exec python -m coc_bot.main
+exec python -m coc_bot.main "$@"

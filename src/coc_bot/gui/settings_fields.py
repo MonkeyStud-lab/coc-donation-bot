@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -35,6 +36,9 @@ def _pair(lo_hi: tuple[int, int]) -> str:
 
 
 SETTINGS: list[SettingField] = [
+    SettingField("collection_enabled", "Collect useful screenshots", "Passively save unusual screens and failures for review. Does not change game actions. Takes effect after Stop/Start.", "bool", lambda c: c.collection_enabled, "Screenshot collection", ("collection", "enabled")),
+    SettingField("collection_daily_limit", "Daily screenshot limit", "Maximum screenshots saved per UTC day, including failure context. Collection pauses when the limit is reached.", "int", lambda c: c.collection_daily_limit, "Screenshot collection", ("collection", "daily_limit")),
+    SettingField("collection_storage_gb", "Screenshot storage limit (GB)", "Stop saving when collected images reach this size. Existing images are never automatically deleted. Review them from Tools.", "float", lambda c: c.collection_storage_gb, "Screenshot collection", ("collection", "storage_gb")),
     SettingField(
         "gui_timing_preset",
         "Timing preset",
@@ -235,9 +239,10 @@ SETTINGS: list[SettingField] = [
     ),
     SettingField(
         "farm_battle_timeout_seconds",
-        "Battle wait after deploy (seconds)",
-        "After the first troop is placed, wait this long then tap Return Home "
-        "(default 210 = 3 minutes 30 seconds). Then confirm home village / chat.",
+        "Battle results fallback (seconds)",
+        "Watch for the results screen after deploying. Return early only when its "
+        "labels are confirmed twice. If recognition fails, tap Return Home after "
+        "this time from first deploy (default 210 = 3 minutes 30 seconds).",
         "int",
         lambda c: c.farm_battle_timeout_seconds,
         "Farm",
@@ -415,6 +420,8 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
                 raise ValueError(f"{field.label} must be at most 86400 seconds")
         elif field.kind == "float":
             parsed = float(str(raw).strip())
+            if not math.isfinite(parsed):
+                raise ValueError(f"{field.label} must be a finite number")
             if field.key == "farm_pan_swipes" and parsed < 0:
                 raise ValueError("Camera pan swipes cannot be negative")
         elif field.kind == "int_pair":
@@ -439,6 +446,8 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
         else:
             parsed = str(raw).strip()
 
+        if field.key in ("collection_daily_limit", "collection_storage_gb") and parsed <= 0:
+            raise ValueError(f"{field.label} must be greater than zero")
         cursor = payload
         for part in field.yaml_path[:-1]:
             cursor = cursor.setdefault(part, {})

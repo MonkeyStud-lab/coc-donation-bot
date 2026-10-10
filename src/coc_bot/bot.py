@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from coc_bot.runtime.device_lease import exclusive_device
+
 import random
 import time
 from datetime import datetime
@@ -194,10 +196,36 @@ class DonationBot:
 
     def _start_recorder(self) -> None:
         """Phase-0 perception data collection (see vision/recorder.py)."""
-        if not self._record:
-            return
         from coc_bot.vision import recorder
         from coc_bot.vision.recorder import FrameRecorder, config_fingerprint
+
+        options = recorder.smart_options()
+        if options is None and self.config.collection_enabled:
+            from coc_bot.vision.collection import CollectionOptions
+            try:
+                options = CollectionOptions(daily_limit=self.config.collection_daily_limit,
+                                            storage_bytes=int(self.config.collection_storage_gb * 1024**3))
+            except (ValueError, OverflowError) as exc:
+                logger.warning("Invalid screenshot collection limits; bot continues without collection: {}", exc)
+                return
+        if options is not None:
+            from coc_bot.vision.collection import SmartFrameRecorder
+
+            try:
+                recorder.start(SmartFrameRecorder(
+                    self.config.data_dir / "collection", options=options,
+                    seed_export=self.config.data_dir / "labelstudio/review/curated/tasks_curated_screens_v2.json",
+                    data_dir=self.config.data_dir,
+                    extra_meta={"git_commit": recorder._git_commit(),
+                                "calib_frame": [self.config.frame_width, self.config.frame_height],
+                                "calib_fingerprint": config_fingerprint(self.config),
+                                "dry_run": self.config.dry_run},
+                ))
+            except Exception as exc:
+                logger.warning("Smart collection unavailable; bot continues normally: {}", exc)
+            return
+        if not self._record:
+            return
 
         recorder.start(
             FrameRecorder(
@@ -212,17 +240,18 @@ class DonationBot:
             )
         )
 
+    @exclusive_device
     def run(self) -> None:
         logger.info("CoC Donation Bot starting (dry_run={})", self.config.dry_run)
-        self._stop_requested = False
+        if self.should_stop():
+            return
         self._start_recorder()
         try:
             self._run_inner()
         finally:
-            if self._record:
-                from coc_bot.vision import recorder
+            from coc_bot.vision import recorder
 
-                recorder.stop()
+            recorder.stop()
 
     def _run_inner(self) -> None:
         try:
@@ -377,6 +406,11 @@ class DonationBot:
         self.game_state.transition(GameState.HOME, reason="farm start")
         self.set_mode(BotMode.HOME)
         result = self.farmer.run_one_attack()
+        from coc_bot.vision import recorder
+
+        if not self._stop_requested:
+            recorder.note_event("action_confirmed" if result.success else "farm_failed",
+                                action="farm", reason=result.reason)
         if self._stop_requested:
             self.set_mode(BotMode.DONATE)
             self.game_state.transition(GameState.CLAN_CHAT, reason="farm stopped")
@@ -568,6 +602,9 @@ class DonationBot:
                 "Donation panel did not appear after tapping Donate (attempt {})",
                 attempt + 1,
             )
+            from coc_bot.vision import recorder
+
+            recorder.note_event("donation_open_failed", attempt=attempt + 1)
             if interrupted_sleep(0.4, self.should_stop):
                 return
 
@@ -586,6 +623,9 @@ class DonationBot:
             return
         if interrupted_sleep(0.3, self.should_stop):
             return
+        from coc_bot.vision import recorder
+
+        recorder.note_event("action_confirmed", action="donation_open", source="existing_rules")
         self._set_state("donate")
 
     def _do_donate(self) -> None:
@@ -612,6 +652,9 @@ class DonationBot:
             capacity=request.capacity,
         )
         logger.info("Donation round complete (donated={})", donated)
+        from coc_bot.vision import recorder
+
+        recorder.note_event("action_confirmed", action="donation_round", donated=donated)
         if not donated:
             logger.info(
                 "No donation made — marking request handled to avoid reopening "
@@ -624,6 +667,9 @@ class DonationBot:
     def _recover(self) -> None:
         """Desync recovery: full screen scan first, then BACK only if safe, then reopen clan chat."""
         logger.info("Running recovery sequence (full classify)")
+        from coc_bot.vision import recorder
+
+        recorder.note_event("recovery", state=self._state)
         self.game_state.transition(GameState.RECOVERING, reason="watchdog/desync")
         self.set_mode(BotMode.ANY)
         frame = self.capture.screenshot()

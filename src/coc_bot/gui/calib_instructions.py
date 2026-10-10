@@ -57,6 +57,10 @@ STEP_INSTRUCTIONS: dict[str, str] = {
 
 # Per-part instructions (key = CalibrationPart.key).
 PART_INSTRUCTIONS: dict[str, CalibInstruction] = {
+    "donation_elixir_selected": CalibInstruction(
+        prepare="Open clan chat, tap Donate on a request, and click the LEFT elixir resource button next to Donation Resource. Keep that donation panel open with elixir selected.",
+        do="Draw a box around the WHOLE selected elixir button, including its highlighted border and background. Do not box only the icon or include the gem button. This image lets the bot verify elixir is selected before donating.",
+    ),
     "frame_width": CalibInstruction(
         prepare=(
             "Go to your home village (chat closed).\n"

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from coc_bot.calibration.transactions import calibration_locked, recover_pending_restores
 
 
 def project_root() -> Path:
@@ -79,6 +80,9 @@ class BotConfig:
     farm_rage_inward_frac: float = 0.22
     # Ordered army+map taps after pan (required for farm deploy).
     farm_deploy_sequence: dict[str, Any] = field(default_factory=dict)
+    collection_enabled: bool = False
+    collection_daily_limit: int = 200
+    collection_storage_gb: float = 5.0
     gui_show_debug_activity: bool = False
     gui_theme: str = "modern"
     gui_dev_options: bool = False
@@ -203,11 +207,13 @@ def _ms_range(raw: Any, default: tuple[int, int]) -> tuple[int, int]:
     return default
 
 
+@calibration_locked
 def load_config(
     default_path: Path | None = None,
     calibrated_path: Path | None = None,
 ) -> BotConfig:
     root = _project_root()
+    recover_pending_restores(root / "data")
     default_path = default_path or root / "config" / "default.yaml"
     calibrated_path = calibrated_path or Path(
         os.environ.get("COC_BOT_CONFIG", root / "data" / "calibrated.yaml")
@@ -309,6 +315,9 @@ def load_config(
         farm_deploy_sequence=normalize_farm_deploy_sequence(
             merged.get("farm_deploy_sequence")
         ),
+        collection_enabled=bool((merged.get("collection") or {}).get("enabled", False)),
+        collection_daily_limit=int((merged.get("collection") or {}).get("daily_limit", 200)),
+        collection_storage_gb=float((merged.get("collection") or {}).get("storage_gb", 5.0)),
         gui_show_debug_activity=bool((merged.get("gui") or {}).get("show_debug_activity", False)),
         gui_theme=_normalize_gui_theme(merged.get("gui") or {}),
         gui_dev_options=bool((merged.get("gui") or {}).get("dev_options", False)),

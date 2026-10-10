@@ -6,7 +6,9 @@ import time
 
 from loguru import logger
 
-from coc_bot.adb.client import AdbClient
+from coc_bot.adb.client import AdbClient, AdbStopped
+from coc_bot.stop import interrupted_sleep
+from coc_bot.vision import recorder
 
 
 class InputController:
@@ -81,13 +83,15 @@ class InputController:
 
     def _sleep(self) -> None:
         lo, hi = self.delay_ms
-        time.sleep(random.uniform(lo, hi) / 1000.0)
+        if interrupted_sleep(random.uniform(lo, hi) / 1000.0, self.client.stop_check):
+            raise AdbStopped("Stop requested during input settle")
 
     def tap(self, x: int, y: int, *, jitter: int | None = None) -> None:
         j = self.jitter_px if jitter is None else max(0, int(jitter))
         tx = x + (random.randint(-j, j) if j else 0)
         ty = y + (random.randint(-j, j) if j else 0)
         tx, ty = self._to_touch(tx, ty)
+        recorder.note_action("tap", x=tx, y=ty, dry_run=self.dry_run)
         if self.dry_run:
             logger.info("[DRY-RUN] tap ({}, {})", tx, ty)
         else:
@@ -97,6 +101,8 @@ class InputController:
     def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300) -> None:
         x1, y1 = self._to_touch(x1, y1)
         x2, y2 = self._to_touch(x2, y2)
+        recorder.note_action("swipe", start=[x1, y1], end=[x2, y2],
+                             duration_ms=duration_ms, dry_run=self.dry_run)
         if self.dry_run:
             logger.info("[DRY-RUN] swipe ({},{}) -> ({},{}), {}ms", x1, y1, x2, y2, duration_ms)
         else:
@@ -104,6 +110,7 @@ class InputController:
         self._sleep()
 
     def back(self) -> None:
+        recorder.note_action("back", dry_run=self.dry_run)
         if self.dry_run:
             logger.info("[DRY-RUN] keyevent BACK")
         else:

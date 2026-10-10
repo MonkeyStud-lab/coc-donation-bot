@@ -163,7 +163,7 @@ class ChatMonitor:
         if x1 <= x0 or y1 <= y0:
             return False
         crop = frame[y0:y1, x0:x1]
-        label = read_short_label(crop)
+        label = read_short_label(crop, stop_check=self.input.client.stop_check)
         has_trade = bool(label and "trade" in label)
         has_donate = bool(label and "donat" in label)
         if has_trade and not has_donate:
@@ -221,7 +221,7 @@ class ChatMonitor:
         if x1 <= x0 or y1 <= y0:
             return False
         region = frame[y0:y1, x0:x1]
-        text = read_short_label(region)
+        text = read_short_label(region, stop_check=self.input.client.stop_check)
         if text is None:
             return False
         return "tradeoffer" in text or ("trade" in text and "offer" in text)

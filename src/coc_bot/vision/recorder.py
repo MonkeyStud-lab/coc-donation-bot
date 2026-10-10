@@ -271,6 +271,47 @@ def config_fingerprint(config) -> str:
 # ------------------------------------------------------------ global singleton
 
 _active: FrameRecorder | None = None
+_smart_options = None
+
+
+def configure_smart(options) -> None:
+    """Opt-in collection policy shared by the CLI and GUI bot worker."""
+    global _smart_options
+    _smart_options = options
+
+
+def smart_options():
+    return _smart_options
+
+
+def smart_active() -> bool:
+    return _active is not None and hasattr(_active, "note_event")
+
+
+def _note(method: str, *args) -> None:
+    rec = _active
+    callback = getattr(rec, method, None)
+    if callback is not None:
+        try:
+            callback(*args)
+        except Exception as exc:
+            logger.debug("Collection metadata skipped (bot unaffected): {}", exc)
+
+
+def note_model(frame, prediction: str, model_id: str) -> None:
+    _note("note_model", frame, prediction, model_id)
+
+
+def note_action(kind: str, **details) -> None:
+    _note("note_action", {"kind": kind, **details})
+
+
+def note_event(kind: str, **details) -> None:
+    _note("note_event", kind, details)
+
+
+def note_phase(phase: str) -> None:
+    _note("note_phase", phase)
 
 
 def start(recorder: FrameRecorder) -> None:
@@ -280,9 +321,10 @@ def start(recorder: FrameRecorder) -> None:
 
 def stop() -> None:
     global _active
-    if _active is not None:
-        _active.close()
+    rec = _active
     _active = None
+    if rec is not None:
+        rec.close()
 
 
 def active() -> FrameRecorder | None:
@@ -292,7 +334,7 @@ def active() -> FrameRecorder | None:
 def on_frame(frame: np.ndarray) -> None:
     rec = _active
     if rec is not None:
-        rec.on_frame(frame)
+        _note("on_frame", frame)
 
 
 def note_classification(frame: np.ndarray, screen, mode) -> None:
@@ -301,4 +343,4 @@ def note_classification(frame: np.ndarray, screen, mode) -> None:
         return
     screen_s = getattr(screen, "value", str(screen))
     mode_s = getattr(mode, "value", str(mode)) if mode is not None else "any"
-    rec.note_classification(frame, screen_s, mode_s)
+    _note("note_classification", frame, screen_s, mode_s)

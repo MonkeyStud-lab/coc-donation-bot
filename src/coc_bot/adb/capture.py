@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import tempfile
+import time
 from pathlib import Path
 
 import cv2
 import numpy as np
 from loguru import logger
 
-from coc_bot.adb.client import AdbClient, AdbError
+from coc_bot.adb.client import AdbClient, AdbError, AdbStopped
+from coc_bot.adb.capture_coordinator import publish_frame, serialized_capture
 from coc_bot.vision import recorder
 
 
@@ -51,6 +53,7 @@ class ScreenCapture:
     def __init__(self, client: AdbClient, max_retries: int = 3) -> None:
         self.client = client
         self.max_retries = max_retries
+        self._deadline = None
         self._last_size: tuple[int, int] | None = None
         # InputControllers kept in sync so taps match screencap pixels.
         self._inputs: list = []
@@ -68,22 +71,29 @@ class ScreenCapture:
     def last_size(self) -> tuple[int, int] | None:
         return self._last_size
 
+    def _budget(self, maximum=12.0):
+        if self.client.stop_check and self.client.stop_check():
+            raise AdbStopped("Stop requested during screenshot")
+        left = (self._deadline - time.monotonic()) if self._deadline else maximum
+        if left <= .05:
+            raise AdbError("Screenshot time budget exhausted")
+        return min(maximum, left)
+
     def _capture_png_exec_out(self) -> np.ndarray | None:
-        png_bytes = self.client.run_exec_out(["screencap", "-p"], timeout=15.0)
+        png_bytes = self.client.run_exec_out(["screencap", "-p"], timeout=self._budget(3.0))
         return _decode_png(png_bytes)
 
     def _capture_raw_exec_out(self) -> np.ndarray | None:
-        raw = self.client.run_exec_out(["screencap"], timeout=15.0)
+        raw = self.client.run_exec_out(["screencap"], timeout=self._budget(3.0))
         return _decode_raw_screencap(raw)
 
     def _capture_via_pull(self) -> np.ndarray | None:
         remote = "/sdcard/coc_bot_screen.png"
-        self.client.run_shell(f"screencap -p {remote}", timeout=15.0)
+        self.client.run_shell(f"screencap -p {remote}", timeout=self._budget(3.0))
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
             local = tmp.name
         try:
-            self.client.run(["pull", remote, local], timeout=30.0)
-            self.client.run_shell(f"rm -f {remote}", check=False)
+            self.client.run(["pull", remote, local], timeout=self._budget())
             data = Path(local).read_bytes()
             frame = _decode_png(data)
             if frame is None:
@@ -91,8 +101,14 @@ class ScreenCapture:
             return frame
         finally:
             Path(local).unlink(missing_ok=True)
+            try:
+                self.client.run_shell(f"rm -f {remote}", timeout=self._budget(1.0), check=False)
+            except AdbError:
+                # The next capture overwrites this fixed file; cleanup is optional.
+                pass
 
-    def screenshot(self) -> np.ndarray:
+    @serialized_capture
+    def screenshot(self, timeout_seconds: float = 12.0) -> np.ndarray:
         methods = [
             ("exec-out png", self._capture_png_exec_out),
             ("exec-out raw", self._capture_raw_exec_out),
@@ -117,17 +133,68 @@ class ScreenCapture:
                     if self._preferred_method != method_name:
                         logger.info("Screencap OK via {} ({}x{})", method_name, w, h)
                         self._preferred_method = method_name
+                    publish_frame(self.client.device, frame)
                     recorder.on_frame(frame)  # no-op unless --record
                     return frame
+                except AdbStopped:
+                    raise
                 except (AdbError, cv2.error, ValueError) as exc:
                     last_error = exc
                     logger.debug("Screencap {} failed: {}", method_name, exc)
 
             logger.warning("Screencap attempt {}/{} failed on all methods", attempt, self.max_retries)
             if attempt < self.max_retries:
-                self.client.ensure_connected()
+                self._budget()  # Do not start unbounded reconnect loops from capture.
 
+        recorder.note_event("capture_failed", attempts=self.max_retries)
         raise AdbError(f"Screencap failed after {self.max_retries} attempts") from last_error
 
     def save_debug(self, frame: np.ndarray, path: str) -> None:
         cv2.imwrite(path, frame)
+
+    @serialized_capture
+    def observe(self, timeout_seconds: float = 3.0, stop_check=None) -> np.ndarray | None:
+        """Best-effort farm observation with one total ADB budget and no retries.
+
+        Use from the capture owner's thread only. A failed observation must not
+        start reconnects or delay the normal battle timeout by multiple retries.
+        """
+        deadline = self._deadline or (time.monotonic() + timeout_seconds)
+        remote = "/sdcard/coc_bot_observe.png"
+
+        def budget():
+            if stop_check and stop_check():
+                raise TimeoutError("Observation stopped")
+            remaining = deadline - time.monotonic()
+            if remaining < .1:
+                raise TimeoutError("Observation budget exhausted")
+            return remaining
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as handle:
+            local = Path(handle.name)
+        try:
+            self.client.run_shell(f"screencap -p {remote}", timeout=budget())
+            self.client.run(["pull", remote, str(local)], timeout=budget())
+            budget()
+            frame = _decode_png(local.read_bytes())
+            if frame is not None:
+                h, w = frame.shape[:2]
+                self._last_size = (w, h)
+                for inp in self._inputs:
+                    inp.set_frame_size(w, h)
+                publish_frame(self.client.device, frame)
+                recorder.on_frame(frame)
+            return frame
+        except (AdbError, TimeoutError, OSError, cv2.error, ValueError) as exc:
+            logger.debug("Battle observation skipped: {}", exc)
+            return None
+        finally:
+            local.unlink(missing_ok=True)
+            # The next sample overwrites this one fixed remote file if cleanup
+            # cannot complete in the same deadline. No unbounded remote buildup.
+            left = deadline - time.monotonic()
+            if left > .1 and not (stop_check and stop_check()):
+                try:
+                    self.client.run_shell(f"rm -f {remote}", timeout=left, check=False)
+                except (AdbError, OSError):
+                    pass

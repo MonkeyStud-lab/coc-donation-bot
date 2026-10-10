@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from coc_bot.runtime.device_lease import exclusive_device
+
 import random
 import time
 from datetime import datetime
@@ -336,6 +338,7 @@ class DebugSession:
             "Stop/Start if the bot is running."
         )
 
+    @exclusive_device
     def farm_one_shot(self, should_stop=None) -> tuple[bool, str]:
         """Run a full unranked farm attack once (leave chat → deploy → return home)."""
         from collections.abc import Callable
@@ -344,6 +347,7 @@ class DebugSession:
         from coc_bot.runtime.tracker import RuntimeTracker
 
         stop: Callable[[], bool] | None = should_stop
+        self.client.stop_check = stop
         self.client.health_check()
         farmer = AttackFarmer(
             self.config, self.capture, self.input, self.matcher, self.navigator
@@ -367,6 +371,12 @@ DEBUG_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
     (
         "System",
         [
+            (
+                "open_collection_review",
+                "Review collected screenshots",
+                "Open the local screenshot gallery, grouped by new appearances and failures. "
+                "Collection must be enabled with --collect-smart. Safe while the bot runs.",
+            ),
             (
                 "install_desktop_shortcut",
                 "Create desktop shortcut",
@@ -485,6 +495,16 @@ DEBUG_ACTIONS: list[tuple[str, str, str]] = [
 
 
 def run_debug_action(action_id: str) -> str:
+    if action_id == "open_collection_review":
+        import webbrowser
+
+        path = load_config().data_dir / "collection/review.html"
+        if not path.is_file():
+            return "No gallery yet. Enable useful screenshot collection in Settings and run the bot first."
+        if not webbrowser.open(path.resolve().as_uri()):
+            return f"Could not open a browser. Open this file manually: {path}"
+        return "Opened the local screenshot review gallery. Predictions need human verification."
+
     if action_id == "install_desktop_shortcut":
         from coc_bot.gui.util import install_desktop_shortcut
 
@@ -519,7 +539,9 @@ def run_debug_action(action_id: str) -> str:
     if fn is None:
         raise ValueError(f"Unknown debug action: {action_id}")
     try:
-        return fn()
+        from coc_bot.runtime.device_lease import DeviceLease
+        with DeviceLease(session.config.adb_device):
+            return fn()
     except AdbError as exc:
         return f"ADB error: {exc}"
     except Exception as exc:  # noqa: BLE001

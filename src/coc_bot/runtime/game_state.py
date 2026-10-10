@@ -225,6 +225,13 @@ class GameStateMachine:
         expected = new_state in allowed
         self._state = new_state
 
+        from coc_bot.vision import recorder
+
+        recorder.note_phase(new_state.value)
+        if not expected:
+            recorder.note_event("unexpected_transition", previous=old.value,
+                                next=new_state.value, reason=reason)
+
         suffix = f" ({reason})" if reason else ""
         if expected:
             if (old, new_state) in _NOISY_OK_PAIRS:

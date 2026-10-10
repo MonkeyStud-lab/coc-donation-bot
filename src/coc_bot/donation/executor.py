@@ -53,27 +53,38 @@ class DonationExecutor:
         return bool(self.stop_check and self.stop_check())
 
     def _ensure_elixir_resource(self) -> bool:
-        """
-        Tap the calibrated LEFT elixir toggle so donations cost elixir, not gems.
-
-        Safe if elixir is already selected (tap is a no-op / stays on elixir).
-        Returns False only if stop was requested mid-wait.
-        """
+        """Select elixir precisely and require visible confirmation before any donation."""
+        from coc_bot.donation.resource_mode import elixir_is_selected
         if self._stopping():
             return False
         point = self.config.tap_points.get("donation_elixir_button")
-        if not point or len(point) < 2:
-            logger.warning(
-                "donation_elixir_button not calibrated — donate may spend gems if "
-                "that toggle is selected (Setup → Donation panel → Elixir resource button)"
-            )
-            return True
-        x, y = int(point[0]), int(point[1])
-        logger.info("Ensuring Donation Resource = elixir (tap {}, {})", x, y)
-        self.input.tap(x, y)
-        if interrupted_sleep(0.28, self.stop_check):
+        if (not point or len(point) < 2 or self.config.frame_width <= 0
+                or self.config.frame_height <= 0
+                or not self.config.templates.get("donation_elixir_selected")
+                or not self.config.rois.get("donation_elixir_selected")):
+            logger.warning("Donation skipped: calibrate Elixir resource button and Selected elixir indicator in Setup → Donation panel.")
             return False
-        return True
+        frame = self.capture.screenshot()
+        if not self.classifier.is_donation_panel(frame):
+            return False
+        if elixir_is_selected(self.config, frame):
+            return True
+        h, w = frame.shape[:2]
+        x = round(point[0] * w / self.config.frame_width)
+        y = round(point[1] * h / self.config.frame_height)
+        if not (0 <= x < w and 0 <= y < h):
+            logger.warning("Elixir tap lies outside the screen; recalibrate it.")
+            return False
+        self.input.tap(x, y, jitter=0)
+        if interrupted_sleep(.28, self.stop_check):
+            return False
+        confirmed = self.capture.screenshot()
+        if self._stopping():
+            return False
+        if self.classifier.is_donation_panel(confirmed) and elixir_is_selected(self.config, confirmed):
+            return True
+        logger.warning("Elixir selection could not be confirmed — donation skipped to avoid spending gems.")
+        return False
 
     def donate_for_request(
         self,

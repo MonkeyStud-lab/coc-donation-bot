@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import re
 import shutil
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from coc_bot.config import project_root
+from coc_bot.calibration.transactions import calibration_locked, recover_pending_restores
 
 # Folder names under data/calibration_backups/ — keep filesystem-safe.
 _BACKUP_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
@@ -118,6 +120,7 @@ def get_backup(stamp: str, root: Path | None = None) -> CalibrationBackup | None
     return CalibrationBackup(path=path, stamp=stamp)
 
 
+@calibration_locked
 def restore_backup(
     backup: CalibrationBackup,
     root: Path | None = None,
@@ -127,22 +130,32 @@ def restore_backup(
     """
     Replace live ``calibrated.yaml`` and ``templates/`` from ``backup``.
 
-    Creates a safety snapshot of the current live files first (best-effort)
+    Creates a safety snapshot of the current live files first
     under ``data/calibration_backups/pre_restore_<stamp>/`` so a bad restore
     is still recoverable, unless ``safety_snapshot`` is False.
     """
     root = root or project_root()
+    recover_pending_restores(root / "data")
     if not backup.has_yaml():
         raise FileNotFoundError(f"Backup missing calibrated.yaml: {backup.path}")
 
+    import tempfile
+    import yaml
+
+    with open(backup.path / "calibrated.yaml", encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle)
+    if not isinstance(payload, dict):
+        raise ValueError("Backup calibration must be a YAML mapping.")
+    tmpl_src = backup.path / "templates"
+    for relative in (payload.get("templates") or {}).values():
+        candidate = (tmpl_src / relative).resolve()
+        if not candidate.is_relative_to(tmpl_src.resolve()) or not candidate.is_file():
+            raise ValueError(f"Backup template missing or outside template folder: {relative}")
     if safety_snapshot:
-        # Safety copy of whatever is live now (ignore if empty / missing).
+        # Safety copy of whatever is live now (ignore only if empty / missing).
         try:
             create_backup(root, stamp_prefix="pre_restore_")
         except FileNotFoundError:
-            pass
-        except OSError:
-            # Still proceed with restore; user explicitly asked to restore.
             pass
 
     yaml_dst = calibrated_yaml_path(root)
@@ -152,29 +165,53 @@ def restore_backup(
     # Stage the new templates next to the live dir first, then swap. Deleting the
     # live dir before the copy succeeded used to leave *no* templates at all if the
     # copy failed part-way (and the safety snapshot above is best-effort only).
-    tmpl_src = backup.path / "templates"
-    staging = tmpl_dst.with_name(tmpl_dst.name + ".restoring")
-    old = tmpl_dst.with_name(tmpl_dst.name + ".old")
-    for leftover in (staging, old):
-        if leftover.exists():
-            shutil.rmtree(leftover, ignore_errors=True)
-    if tmpl_src.is_dir():
-        shutil.copytree(tmpl_src, staging)
-    else:
-        staging.mkdir(parents=True, exist_ok=True)
-
-    shutil.copy2(backup.path / "calibrated.yaml", yaml_dst)
-    if tmpl_dst.exists():
-        os.replace(tmpl_dst, old)
+    transaction = Path(tempfile.mkdtemp(prefix="calibration-restore-", dir=yaml_dst.parent))
+    staging = transaction / "new_templates"
+    old = transaction / "old_templates"
+    new_yaml, old_yaml = transaction / "new.yaml", transaction / "old.yaml"
+    moved_yaml = moved_templates = installed_templates = installed_yaml = False
+    cleanup = False
+    journal = transaction / "journal.json"
+    state = {"had_yaml": yaml_dst.exists(), "had_templates": tmpl_dst.exists(), "committed": False}
     try:
+        shutil.copy2(backup.path / "calibrated.yaml", new_yaml)
+        if tmpl_src.is_dir():
+            shutil.copytree(tmpl_src, staging)
+        else:
+            staging.mkdir()
+        journal.write_text(json.dumps(state), encoding="utf-8")
+        if yaml_dst.exists():
+            os.replace(yaml_dst, old_yaml)
+            moved_yaml = True
+        if tmpl_dst.exists():
+            os.replace(tmpl_dst, old)
+            moved_templates = True
         os.replace(staging, tmpl_dst)
-    except OSError:
-        # Put the previous templates back so YAML + images stay consistent-ish.
-        if old.exists() and not tmpl_dst.exists():
+        installed_templates = True
+        os.replace(new_yaml, yaml_dst)
+        installed_yaml = True
+        state["committed"] = True
+        marker = transaction / "journal.next"
+        marker.write_text(json.dumps(state), encoding="utf-8")
+        os.replace(marker, journal)
+        cleanup = True
+    except BaseException:
+        # Restore both halves. If rollback fails, retain the recovery folder.
+        if installed_yaml:
+            os.replace(yaml_dst, transaction / "rejected.yaml")
+        if installed_templates:
+            os.replace(tmpl_dst, transaction / "rejected_templates")
+        if moved_templates:
             os.replace(old, tmpl_dst)
+        if moved_yaml:
+            os.replace(old_yaml, yaml_dst)
+        cleanup = True
         raise
-    if old.exists():
-        shutil.rmtree(old, ignore_errors=True)
+    finally:
+        if cleanup:
+            if transaction.resolve().parent != yaml_dst.parent.resolve():
+                raise ValueError("Restore cleanup outside data directory")
+            shutil.rmtree(transaction)
 
 
 def normalize_backup_name(raw: str) -> str:

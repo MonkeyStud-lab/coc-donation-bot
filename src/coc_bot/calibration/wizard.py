@@ -172,6 +172,12 @@ STEPS: dict[str, CalibrationStep] = {
                 ),
             ),
             CalibrationPart(
+                "donation_elixir_selected",
+                "Selected elixir indicator",
+                "template",
+                description="Open a donation panel, select the LEFT elixir button, then box the WHOLE selected button including its border and background.",
+            ),
+            CalibrationPart(
                 "donation_troop_bar",
                 "Troop + siege bar area",
                 "roi",
@@ -354,6 +360,8 @@ def part_is_configured(config: BotConfig, part: CalibrationPart) -> bool:
                 or config.tap_points.get("close_donation")
             )
         return bool(config.tap_points.get(key)) or bool(config.templates.get(key))
+    if part.key == "donation_elixir_selected":
+        return bool(config.templates.get(key)) and bool(config.rois.get(key))
     if part.kind == "template":
         return bool(config.templates.get(key))
     if part.kind == "roi":
@@ -851,6 +859,7 @@ class CalibrationWizard:
             for k in (
                 "donation_panel",
                 "donation_elixir_button",
+                "donation_elixir_selected",
                 "donation_troop_bar",
                 "donation_spell_bar",
                 "tap_outside_donation",
@@ -905,6 +914,16 @@ class CalibrationWizard:
                 )
                 self.config.tap_points["donation_elixir_button"] = list(pt)
                 logger.info("Saved tap point donation_elixir_button")
+
+        if self._want_part("donation_elixir_selected"):
+            print("Select the LEFT elixir resource button in the donation panel. Box the WHOLE selected button, including its border and background (not just the icon).")
+            if self._should_update("Selected elixir indicator", exists=self._has_template("donation_elixir_selected"), optional=False):
+                _press_enter("With elixir selected, press Enter...")
+                coords, picked = self._pick_roi("Whole SELECTED elixir button", self.capture.screenshot())
+                self._save_template_from_frame(picked, coords, "ui/donation_elixir_selected.png", "donation_elixir_selected")
+                ph, pw = picked.shape[:2]
+                nr = normalize_roi(*coords, pw, ph)
+                self.config.rois["donation_elixir_selected"] = [nr.x, nr.y, nr.w, nr.h]
 
         if self._want_part("donation_troop_bar") or self._want_part("donation_spell_bar"):
             print(

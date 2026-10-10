@@ -19,6 +19,7 @@ data/user_settings.yaml
 data/frames/
 data/labelstudio/
 data/models/
+data/collection/
 logs/
 .setup_linux_stamp
 

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import re
+import time
+import hashlib
+import threading
+from collections import OrderedDict
 import shutil
 import subprocess
 import tempfile
@@ -9,6 +13,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from loguru import logger
+from coc_bot.runtime.processes import ProcessStopped, run_process
 
 
 def _button_label_variants(roi_bgr: np.ndarray) -> list[np.ndarray]:
@@ -38,7 +43,11 @@ def _button_label_variants(roi_bgr: np.ndarray) -> list[np.ndarray]:
     ]
 
 
-def read_short_label(roi_bgr: np.ndarray) -> str | None:
+_LABEL_CACHE = OrderedDict()
+_LABEL_LOCK = threading.Lock()
+
+
+def read_short_label(roi_bgr: np.ndarray, *, timeout_seconds=2.0, stop_check=None) -> str | None:
     """
     OCR a short UI label (e.g. green Donate / Trade button text).
 
@@ -49,14 +58,35 @@ def read_short_label(roi_bgr: np.ndarray) -> str | None:
     if shutil.which("tesseract") is None:
         return None
 
+    if stop_check and stop_check():
+        return None
+    key = (roi_bgr.shape, hashlib.sha256(roi_bgr.tobytes()).digest())
+    with _LABEL_LOCK:
+        cached = _LABEL_CACHE.get(key)
+        if cached and time.monotonic() < cached[0]:
+            _LABEL_CACHE.move_to_end(key)
+            return cached[1]
+    deadline = time.monotonic() + timeout_seconds
     texts: list[str] = []
+
+    def remember(value):
+        with _LABEL_LOCK:
+            _LABEL_CACHE[key] = (time.monotonic() + (15 if value and ("donat" in value or "trade" in value) else 1), value)
+            _LABEL_CACHE.move_to_end(key)
+            while len(_LABEL_CACHE) > 256:
+                _LABEL_CACHE.popitem(last=False)
+        return value
+
     try:
         with tempfile.TemporaryDirectory() as tmp:
             for i, img in enumerate(_button_label_variants(roi_bgr)):
                 path = Path(tmp) / f"label_{i}.png"
                 cv2.imwrite(str(path), img)
                 for psm in ("7", "8"):
-                    proc = subprocess.run(  # noqa: S603
+                    remaining = deadline - time.monotonic()
+                    if remaining <= .05:
+                        return remember(texts[0] if texts else None)
+                    proc = run_process(
                         [
                             "tesseract",
                             str(path),
@@ -68,16 +98,17 @@ def read_short_label(roi_bgr: np.ndarray) -> str | None:
                             "-c",
                             "tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
                         ],
-                        check=False,
-                        capture_output=True,
                         text=True,
-                        timeout=3,
+                        timeout=remaining,
+                        stop_check=stop_check,
                     )
                     raw = (proc.stdout or "").strip().lower()
                     compact = re.sub(r"[^a-z]", "", raw)
                     if compact:
                         texts.append(compact)
-    except (OSError, subprocess.TimeoutExpired) as exc:
+                        if "donat" in compact or "trade" in compact:
+                            return remember(compact)
+    except (OSError, subprocess.TimeoutExpired, ProcessStopped) as exc:
         logger.debug("Button label OCR failed: {}", exc)
         return None
 
@@ -87,7 +118,7 @@ def read_short_label(roi_bgr: np.ndarray) -> str | None:
     for t in texts:
         if "donat" in t or "trade" in t:
             return t
-    return texts[0]
+    return remember(texts[0])
 
 
 def is_donate_button_label(roi_bgr: np.ndarray) -> bool | None:

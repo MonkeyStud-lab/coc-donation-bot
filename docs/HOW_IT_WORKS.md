@@ -167,10 +167,10 @@ Program from **Setup → Farm → Deploy tap sequence** (Recalibrate Selected), 
 
 ### Leave / Return Home safeguards
 
-Leaving after a fight used to rely heavily on vision mid-battle; that was flaky. The farm path is now intentionally simple:
+Battle completion uses two independent text anchors and keeps the existing timer as a fallback:
 
 1. **Timer** from first troop deploy (`farm.battle_timeout_seconds`, default **210** = 3m30s)
-2. When the timer ends, **always** tap calibrated **Return Home** coordinates — no vision, no skip
+2. During the wait, two consecutive screenshots must match both **Return Home** and **Troops expended**, with an enabled green button. When confirmed, tap the detected button. If recognition fails, the timer still **always** taps calibrated **Return Home** coordinates.
 3. Then only look for **home village** (Attack! / open chat / clan chat) and open chat. Do not re-check results/battle heuristics (they false-trigger on home)
 4. Never press Android **BACK** mid-battle (opens Surrender). On the Surrender dialog, tap **Cancel**
 
@@ -246,3 +246,7 @@ Prefer fixing vision with **mode-scoped rules** and strong UI anchors (Attack!, 
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to extend screens, farm, donations, settings
 - [README.md](../README.md) — install and use on Ubuntu / Waydroid
+
+## Reliability and interface profiles
+
+See [RELIABILITY.md](RELIABILITY.md) for selected-elixir verification, capture ownership, cooperative Stop, calibration restore recovery, interface profiles, and regression checks.

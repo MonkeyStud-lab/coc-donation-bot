@@ -13,13 +13,15 @@ cd "$ROOT"
 FORCE=0
 SKIP_ICONS=0
 SKIP_APT=0
+TESTED_DEPS=0
 for arg in "$@"; do
   case "$arg" in
     --force) FORCE=1 ;;
+    --tested-deps) TESTED_DEPS=1 ;;
     --skip-icons) SKIP_ICONS=1 ;;
     --skip-apt) SKIP_APT=1 ;;
     -h|--help)
-      echo "Usage: $0 [--force] [--skip-icons] [--skip-apt]"
+      echo "Usage: $0 [--force] [--skip-icons] [--skip-apt] [--tested-deps]"
       exit 0
       ;;
     *)
@@ -81,7 +83,9 @@ stamp_fingerprint() {
   local pyproject_hash setup_hash
   pyproject_hash="$(cksum "$ROOT/pyproject.toml" 2>/dev/null | awk '{print $1}')"
   setup_hash="$(cksum "$ROOT/scripts/setup_linux.sh" 2>/dev/null | awk '{print $1}')"
-  printf 'pyproject=%s setup=%s\n' "$pyproject_hash" "$setup_hash"
+  local constraints_hash
+  constraints_hash="$(cksum "$ROOT/constraints/linux-py314.txt" 2>/dev/null | awk '{print $1}')"
+  printf 'pyproject=%s setup=%s constraints=%s tested=%s\n' "$pyproject_hash" "$setup_hash" "$constraints_hash" "$TESTED_DEPS"
 }
 
 setup_complete() {
@@ -129,7 +133,12 @@ log "Installing Python packages into .venv (EasyOCR/torch can take several minut
 # shellcheck disable=SC1091
 source "$ROOT/.venv/bin/activate"
 python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e "$ROOT"
+if [[ "$TESTED_DEPS" -eq 1 ]]; then
+  python -c 'import sys; assert sys.version_info[:2] == (3, 14), "--tested-deps requires Python 3.14; omit this option for other versions"'
+  python -m pip install -c "$ROOT/constraints/linux-py314.txt" -e "$ROOT"
+else
+  python -m pip install -e "$ROOT"
+fi
 
 # Warm EasyOCR model download so first bot run is not stuck downloading quietly.
 log "Preloading EasyOCR English model (first time can take 1–3 minutes)…"

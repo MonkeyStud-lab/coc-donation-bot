@@ -301,13 +301,36 @@ docs/
 - Interactive setup wizard for unknown resolutions
 - Session time limits with randomized breaks, then resume
 - Optional unranked elixir farm with a programmed deploy sequence
+- Farm results recognition with two-screen confirmation and a timer fallback;
+  see [battle completion](docs/BATTLE_COMPLETION.md)
 - Dry-run and offline replay for testing
 - Recognition and recovery for Shop and Clash Pass pages
 - Optional screen-recognition prototype that only logs predictions; see
   [the perception guide](docs/PERCEPTION.md) for training and testing
+- Optional automatic collection of diverse screenshots and failure context;
+  see [the smart collection guide](docs/SMART_COLLECTION.md) for limits and review
 
 ---
 
 ## License
 
 Code is under the [MIT License](LICENSE). The same file includes a **project policy**: maintainers will not help with detection evasion, paid botting, or account farming. Live use can get you banned — your risk.
+
+### Reliability and game-update setup
+
+See [Reliability and verification](docs/RELIABILITY.md) for the safeguards and tests.
+Before using donations with this version, add **Setup → Donation panel → Selected
+elixir indicator**: select the left elixir button and capture its whole selected
+appearance, including the border. Donations skip safely until this is configured.
+Existing calibration is preserved.
+
+**Settings → Screenshot collection** controls passive recording and its limits.
+**Tools → Screenshots & interface profiles** shows collection status, opens the
+review gallery, saves named interface profiles, and checks calibration files.
+Stop the bot before switching profiles. After a game UI update, save the old
+profile, recalibrate the changed parts, then save a new profile.
+
+For a Python 3.14 installation using the direct dependency versions tested on
+Linux, run `bash scripts/setup_linux.sh --tested-deps`. Other Python versions
+should use normal setup. Developers can run the offline checks in
+[RELIABILITY.md](docs/RELIABILITY.md); GitHub runs the same checks on changes.

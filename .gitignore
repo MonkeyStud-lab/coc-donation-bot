@@ -15,6 +15,9 @@ data/templates/
 data/icons/
 data/bot.log
 data/user_settings.yaml
+data/web-auth.json
+data/web-auth.new
+web/node_modules/
 # Perception training data (large; keep out of git)
 data/frames/
 data/labelstudio/

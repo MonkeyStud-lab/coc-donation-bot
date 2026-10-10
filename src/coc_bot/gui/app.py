@@ -14,6 +14,7 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 
 from loguru import logger
+from coc_bot.control import BotController, RunOptions
 
 from coc_bot.calibration.wizard import (
     STEP_IDS,
@@ -161,10 +162,12 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         self._debug = debug
         self._record = record
         self._record_every = max(1, int(record_every))
-        self._bot = None
-        self._bot_thread: threading.Thread | None = None
-        # Set when Stop is pressed while DonationBot is still being constructed.
-        self._stop_before_run = False
+        self._controller = BotController()
+        self._controller_run_pending = False
+        self._controller_generation = 0
+        self._controller_job = "bot"
+        self._farm_job_pending = False
+        self._farm_job_result = None
         self._farm_oneshot_thread: threading.Thread | None = None
         self._farm_oneshot_stop = threading.Event()
         self._log_sink_id: int | None = None
@@ -277,6 +280,7 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         self.after(1000, self._refresh_farm_status)
         self.after(1500, self._poll_adb_status)
         self._install_log_sink()
+        self.after(100, self._poll_controller)
         self._finish_startup_splash()
 
     def _report_startup(self, fraction: float, message: str) -> None:
@@ -1038,10 +1042,12 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
             ):
                 return
             self.stop_bot()
-            if self._bot_thread is not None:
-                self._bot_thread.join(timeout=3.0)
+            self._controller.wait(timeout=3.0)
             if self._farm_oneshot_thread is not None:
                 self._farm_oneshot_thread.join(timeout=3.0)
+            if self._bot_running() or self._farm_oneshot_running():
+                messagebox.showinfo("Still stopping", "Wait for the current action to stop, then try again.")
+                return
 
         self._gui_state.last_page = "home"
         self._save_gui_state()
@@ -1571,17 +1577,53 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
             excess = line_count - max_lines
             self._log.delete("1.0", f"{excess + 1}.0")
 
+    @property
+    def _bot(self):
+        # Existing timer/farm presentation still reads the engine during this
+        # first migration step. Lifecycle ownership belongs to the controller.
+        return self._controller.bot if self._controller_job == "bot" else None
+
     def _bot_running(self) -> bool:
-        return self._bot_thread is not None and self._bot_thread.is_alive()
+        return self._controller_job == "bot" and self._controller.snapshot().active
+
+    def _poll_controller(self) -> None:
+        """Apply completed worker results only on Tk's main thread."""
+        try:
+            snapshot = self._controller.snapshot()
+            if self._farm_job_pending and not snapshot.active:
+                self._farm_job_pending = False
+                self._on_farm_oneshot_done()
+                if snapshot.error:
+                    logger.error("Farm failed: {}", snapshot.error)
+                    if not getattr(self, "_closing", False):
+                        messagebox.showerror("Farm", snapshot.error)
+                elif self._farm_job_result:
+                    self._append_log(str(self._farm_job_result[1]))
+            if (self._controller_run_pending and not snapshot.active
+                    and snapshot.generation == self._controller_generation):
+                self._controller_run_pending = False
+                self._on_bot_stopped()
+                if snapshot.error is not None:
+                    logger.error("Bot failed: {}\n{}", snapshot.error, snapshot.error_traceback or "")
+                    if not getattr(self, "_closing", False):
+                        messagebox.showerror("Bot error", snapshot.error)
+        finally:
+            if self.winfo_exists():
+                self.after(100, self._poll_controller)
 
     def _farm_oneshot_running(self) -> bool:
-        return self._farm_oneshot_thread is not None and self._farm_oneshot_thread.is_alive()
+        return (self._controller_job == "farm" and self._controller.snapshot().active) or (self._farm_oneshot_thread is not None and self._farm_oneshot_thread.is_alive())
 
     def start_bot(self) -> None:
         if getattr(self, "_closing", False):
             return
         if self._bot_running():
             return
+        # Finish presentation of an earlier run before accepting a replacement.
+        # This avoids a late completion resetting the new run's controls.
+        if self._controller_run_pending:
+            self._controller_run_pending = False
+            self._on_bot_stopped()
         if self._farm_oneshot_running():
             messagebox.showinfo(
                 "Farm in progress",
@@ -1604,6 +1646,23 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
             self._refresh_calib_status()
             return
 
+        try:
+            accepted = self._controller.start(RunOptions(
+                dry_run=self._dry_run or self._practice_mode,
+                debug_save_frames=self._debug_save_frames,
+                debug=self._debug,
+                record=self._record,
+                record_every=self._record_every,
+            ))
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Could not start bot worker")
+            messagebox.showerror("Bot error", str(exc))
+            return
+        if not accepted:
+            return
+        self._controller_job = "bot"
+        self._controller_generation = self._controller.snapshot().generation
+        self._controller_run_pending = True
         self._start_btn.configure(state=tk.DISABLED)
         self._stop_btn.configure(state=tk.NORMAL)
         self._status.set("Bot running")
@@ -1613,58 +1672,18 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         self._sync_run_chip()
         self._update_tool_buttons_state()
 
-        self._stop_before_run = False
-
-        def worker() -> None:
-            try:
-                from coc_bot.bot import DonationBot
-
-                bot = DonationBot(
-                    dry_run=self._dry_run or self._practice_mode,
-                    debug_save_frames=self._debug_save_frames,
-                    debug=self._debug,
-                    record=self._record,
-                    record_every=self._record_every,
-                )
-                if self._stop_before_run:
-                    logger.info("Stop requested during startup — not running bot")
-                    return
-                self._bot = bot
-                self.after(0, lambda: self._status.set("Bot running"))
-                self.after(0, self._sync_run_chip)
-                bot.run()
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("Bot failed: {}", exc)
-                # Bind now: `exc` is unbound once this except block exits.
-                err = str(exc)
-                self.after(0, lambda e=err: messagebox.showerror("Bot error", e))
-            finally:
-                self._bot = None
-                self.after(0, self._on_bot_stopped)
-
-        self._bot_thread = threading.Thread(target=worker, name="donation-bot", daemon=True)
-        self._bot_thread.start()
-
     def stop_bot(self) -> None:
         stopped_something = False
         if self._farm_oneshot_running():
             self._farm_oneshot_stop.set()
+            self._controller.stop()
             self._status.set("Stopping farm…")
             self._append_log("==> Stop requested (farm one-shot — Clash stays open)")
             stopped_something = True
         if self._bot_running():
-            bot = self._bot
-            if bot is not None:
-                self._status.set("Stopping…")
-                self._append_log("==> Stop requested (Clash stays open)")
-                bot.request_stop()
-            else:
-                # Worker thread is alive but DonationBot is still being constructed.
-                # Flag the stop so the worker aborts before entering the run loop;
-                # never call _on_bot_stopped() here or Start could spawn a second bot.
-                self._stop_before_run = True
-                self._status.set("Stopping…")
-                self._append_log("==> Stop requested (bot still starting)")
+            self._status.set("Stopping…")
+            self._append_log("==> Stop requested (Clash stays open)")
+            self._controller.stop()
             stopped_something = True
         if not stopped_something:
             self._on_bot_stopped()
@@ -1765,40 +1784,20 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         self._farm_timer_var.set("running")
         self._sync_run_chip()
 
-        def worker() -> None:
-            try:
-                success, msg = DebugSession().farm_one_shot(
-                    should_stop=self._farm_oneshot_stop.is_set
-                )
-                logger.info(msg)
+        from coc_bot.control.service import JobRunner
 
-                def done() -> None:
-                    self._append_log(msg)
-                    was_stopped = self._farm_oneshot_stop.is_set()
-                    self._on_farm_oneshot_done()
-                    if was_stopped:
-                        messagebox.showinfo("Farm", "Farm attack stopped.")
-                    elif success:
-                        messagebox.showinfo("Farm", "Farm attack finished.")
-                    else:
-                        messagebox.showwarning("Farm", msg)
+        def farm(cancel):
+            return DebugSession().farm_one_shot(should_stop=cancel.is_set)
 
-                self.after(0, done)
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("Farm one-shot failed")
-                err = str(exc)
+        def finished(result):
+            self._farm_job_result = result
 
-                def fail(e: str = err) -> None:
-                    # Reset UI state first so Start is never left disabled if the dialog fails.
-                    self._on_farm_oneshot_done()
-                    messagebox.showerror("Farm error", e)
-
-                self.after(0, fail)
-
-        self._farm_oneshot_thread = threading.Thread(
-            target=worker, name="farm-oneshot", daemon=True
-        )
-        self._farm_oneshot_thread.start()
+        self._controller_job = "farm"
+        self._farm_job_result = None
+        accepted = self._controller.start_job(lambda _: JobRunner(farm, finished))
+        self._farm_job_pending = accepted
+        if not accepted:
+            self._on_farm_oneshot_done()
 
     def _on_farm_oneshot_done(self) -> None:
         self._farm_oneshot_thread = None
@@ -1960,11 +1959,13 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
 
 
     def _on_bot_stopped(self) -> None:
-        was_running = self._bot_thread is not None
-        self._status.set("Ready — open Waydroid and Clash of Clans, then press Start")
-        self._start_btn.configure(state=tk.DISABLED if getattr(self, "_closing", False) else tk.NORMAL)
-        self._stop_btn.configure(state=tk.DISABLED)
-        self._bot_thread = None
+        was_running = self._controller_generation > 0
+        self._controller_generation = 0
+        oneshot = self._farm_oneshot_running()
+        self._status.set("Farm one-shot running…" if oneshot else
+                         "Ready — open Waydroid and Clash of Clans, then press Start")
+        self._start_btn.configure(state=tk.DISABLED if getattr(self, "_closing", False) or oneshot else tk.NORMAL)
+        self._stop_btn.configure(state=tk.NORMAL if oneshot else tk.DISABLED)
         # Capture a frozen farm countdown for the stopped state (refreshed once).
         self._farm_timer_frozen_text = None
         try:
@@ -2621,6 +2622,7 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         self._destroy_app()
 
     def _destroy_app(self) -> None:
+        self._controller.close()
         self._gui_state.last_page = self._page
         self._save_gui_state()
         if self._log_sink_id is not None:

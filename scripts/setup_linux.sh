@@ -14,14 +14,16 @@ FORCE=0
 SKIP_ICONS=0
 SKIP_APT=0
 TESTED_DEPS=0
+WEB=0
 for arg in "$@"; do
   case "$arg" in
     --force) FORCE=1 ;;
     --tested-deps) TESTED_DEPS=1 ;;
+    --web) WEB=1 ;;
     --skip-icons) SKIP_ICONS=1 ;;
     --skip-apt) SKIP_APT=1 ;;
     -h|--help)
-      echo "Usage: $0 [--force] [--skip-icons] [--skip-apt] [--tested-deps]"
+      echo "Usage: $0 [--force] [--skip-icons] [--skip-apt] [--tested-deps] [--web]"
       exit 0
       ;;
     *)
@@ -103,6 +105,9 @@ setup_complete() {
 }
 
 if setup_complete; then
+  if [[ "$WEB" -eq 1 ]]; then
+    "$VENV_PY" -m pip install -e "$ROOT[web]"
+  fi
   log "Linux setup already complete — skipping (use --force to redo)"
   exit 0
 fi
@@ -133,6 +138,9 @@ log "Installing Python packages into .venv (EasyOCR/torch can take several minut
 # shellcheck disable=SC1091
 source "$ROOT/.venv/bin/activate"
 python -m pip install --upgrade pip setuptools wheel
+if [[ "$WEB" -eq 1 ]]; then
+  python -m pip install -e "$ROOT[web]"
+fi
 if [[ "$TESTED_DEPS" -eq 1 ]]; then
   python -c 'import sys; assert sys.version_info[:2] == (3, 14), "--tested-deps requires Python 3.14; omit this option for other versions"'
   python -m pip install -c "$ROOT/constraints/linux-py314.txt" -e "$ROOT"

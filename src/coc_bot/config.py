@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -8,9 +9,15 @@ from typing import Any
 import yaml
 from coc_bot.calibration.transactions import calibration_locked, recover_pending_restores
 
+profile_root: ContextVar[Path | None] = ContextVar("coc_bot_profile_root", default=None)
+
 
 def project_root() -> Path:
     """Repo root (contains ``scripts/``, ``config/``, ``data/``)."""
+    if profile_root.get() is not None:
+        return profile_root.get()
+    if os.environ.get("COC_BOT_HOME"):
+        return Path(os.environ["COC_BOT_HOME"]).expanduser().resolve()
     return Path(__file__).resolve().parents[2]
 
 
@@ -179,6 +186,7 @@ def _atomic_yaml_dump(path: Path, payload: Any) -> None:
         raise
 
 
+@calibration_locked
 def save_user_settings(payload: dict[str, Any], path: Path | None = None) -> Path:
     path = path or user_settings_path()
     _atomic_yaml_dump(path, payload)
@@ -216,7 +224,8 @@ def load_config(
     recover_pending_restores(root / "data")
     default_path = default_path or root / "config" / "default.yaml"
     calibrated_path = calibrated_path or Path(
-        os.environ.get("COC_BOT_CONFIG", root / "data" / "calibrated.yaml")
+        (root / "data" / "calibrated.yaml") if profile_root.get() is not None
+        else os.environ.get("COC_BOT_CONFIG", root / "data" / "calibrated.yaml")
     )
 
     with open(default_path, encoding="utf-8") as f:
@@ -329,7 +338,7 @@ def load_config(
 
 
 def _normalize_gui_theme(gui: dict[str, Any]) -> str:
-    from coc_bot.gui.theme import normalize_theme_id
+    from coc_bot.control.themes import normalize_theme_id
 
     # Prefer gui.theme; fall back to legacy gui.ui_style.
     raw = gui.get("theme", gui.get("ui_style", "modern"))
@@ -337,7 +346,7 @@ def _normalize_gui_theme(gui: dict[str, Any]) -> str:
 
 
 def _normalize_gui_timing_preset(gui: dict[str, Any]) -> str:
-    from coc_bot.gui.timing_presets import normalize_timing_preset
+    from coc_bot.control.timing_presets import normalize_timing_preset
 
     return normalize_timing_preset(gui.get("timing_preset", "balanced"))
 
@@ -364,6 +373,7 @@ def normalize_farm_deploy_sequence(raw: Any) -> dict[str, Any]:
     return {"side": side, "pan_swipes": pan, "taps": taps}
 
 
+@calibration_locked
 def save_calibrated(config: BotConfig, path: Path | None = None) -> None:
     root = _project_root()
     path = path or root / "data" / "calibrated.yaml"

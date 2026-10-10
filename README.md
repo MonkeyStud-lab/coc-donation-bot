@@ -71,6 +71,11 @@ parts. Farming is optional and can be configured later.
 
 ## Use the app
 
+A browser interface is also available as an opt-in preview. Access it from another
+device on your network while keeping the desktop interface as a fallback. See
+[browser setup and usage](docs/WEB_UI.md) for installation, password setup, network
+access, calibration, and rollout limits.
+
 To open it again:
 
 ```bash

@@ -35,6 +35,10 @@ installing a standalone Python wheel does not include all scripts and defaults.
 
 ## Terminal operation
 
+For the opt-in browser interface, use [browser setup](WEB_UI.md). It covers
+password setup, localhost/LAN access, browser calibration, and returning to the
+desktop app. The web server still needs the same running Waydroid session.
+
 From the project folder, activate the installed environment:
 
 ```bash

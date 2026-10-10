@@ -21,6 +21,7 @@ def __getattr__(name: str) -> Any:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="CoC Donation Bot (educational)")
+    parser.add_argument("--web", action="store_true", help="Open the optional browser server on localhost:8765")
     parser.add_argument("--dry-run", action="store_true", help="Skip donate taps; navigation still runs")
     parser.add_argument("--debug-save-frames", action="store_true", help="Save debug screenshots")
     parser.add_argument("--debug", action="store_true", help="Verbose logging")
@@ -57,6 +58,11 @@ def main() -> None:
     parser.add_argument("--collection-storage-gb", type=float, default=5.0, metavar="GB",
                         help="With --collect-smart: storage limit for the new collection (default 5 GB)")
     args = parser.parse_args()
+
+    if args.web:
+        from coc_bot.web.__main__ import main as web_main
+        web_main(["--screen-model", str(args.screen_model)] if args.screen_model else [])
+        return
 
     setup_logging(debug=args.debug, log_file=Path("data") / "bot.log")
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from coc_bot.gui.calib_backup import create_backup, normalize_backup_name, rename_backup, backups_root
+from coc_bot.control.backups import create_backup, normalize_backup_name, rename_backup, backups_root
 
 
 def save_interface_profile(name, config):
@@ -23,7 +23,7 @@ def save_interface_profile(name, config):
 
 
 def check_calibration(config, actual_size=None):
-    from coc_bot.calibration.wizard import STEPS, part_is_configured
+    from coc_bot.calibration.schema import STEPS, part_is_configured
     issues = []
     if config.frame_width <= 0 or config.frame_height <= 0:
         issues.append("Screen size is missing. Complete Screen size in Setup.")

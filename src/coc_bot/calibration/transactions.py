@@ -8,6 +8,7 @@ from functools import wraps
 from pathlib import Path
 
 _lock = threading.RLock()
+_held = threading.local()
 
 
 def calibration_locked(method):
@@ -17,8 +18,11 @@ def calibration_locked(method):
         from coc_bot.config import project_root
         # All config reads and restores share the same lock, including across GUIs.
         with _lock:
+            identity = str(project_root().resolve())
+            if getattr(_held, "identity", None) == identity:
+                return method(*args, **kwargs)
             deadline = time.monotonic() + 5
-            lease = DeviceLease("calibration:" + str(project_root().resolve()))
+            lease = DeviceLease("calibration:" + identity)
             while True:
                 try:
                     lease.__enter__()
@@ -28,8 +32,11 @@ def calibration_locked(method):
                         raise RuntimeError("Calibration is busy in another app. Try again shortly.")
                     time.sleep(.05)
             try:
+                previous = getattr(_held, "identity", None)
+                _held.identity = identity
                 return method(*args, **kwargs)
             finally:
+                _held.identity = previous
                 lease.__exit__()
     return guarded
 

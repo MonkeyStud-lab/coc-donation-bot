@@ -37,7 +37,7 @@ The bot never reads game memory or uses an official API. It:
              (donation/)              (attack/)                  (runtime/)
 ```
 
-The orchestrator is `DonationBot` in [`src/coc_bot/bot.py`](../src/coc_bot/bot.py). `main.py` is the command-line entry point. By default the bot runs behind a Tkinter GUI ([`src/coc_bot/gui/app.py`](../src/coc_bot/gui/app.py)); page builders are separated into `gui/page_views.py` and collection/profile controls into `gui/data_tools.py`.
+The orchestrator is `DonationBot` in [`src/coc_bot/bot.py`](../src/coc_bot/bot.py). `main.py` is the command-line entry point. By default the bot runs behind a Tkinter GUI ([`src/coc_bot/gui/app.py`](../src/coc_bot/gui/app.py)); page builders are separated into `gui/page_views.py` and collection/profile controls into `gui/data_tools.py`. The opt-in browser interface uses `control/` services and `web/` routes with the same engine and file formats. See [browser architecture and setup](WEB_UI.md).
 
 ---
 
@@ -229,7 +229,7 @@ Activity log is a loguru sink. The Play status chip shows the current phase (wat
 
 ## Calibration
 
-[`src/coc_bot/calibration/wizard.py`](../src/coc_bot/calibration/wizard.py) defines steps (home → chat → donation → colors/grid → farm). Setup **Recalibrate Selected** / **Recalibrate All** use in-app pickers ([`gui/setup_calib.py`](../src/coc_bot/gui/setup_calib.py) + `InteractivePicker`) for all part kinds (including slot colors and grid). **Classic terminal calibrator** still launches `scripts/calibrate.py` as a fallback.
+[`src/coc_bot/calibration/schema.py`](../src/coc_bot/calibration/schema.py) defines shared steps (home → chat → donation → colors/grid → farm), and `calibration/instructions.py` supplies their directions. The terminal wizard imports those definitions. Desktop Setup uses in-app pickers (`gui/setup_calib.py` and `InteractivePicker`); browser Setup uses immutable captures and `control/calibration.py`. **Classic terminal calibrator** still launches `scripts/calibrate.py` locally as a fallback.
 
 Saves:
 

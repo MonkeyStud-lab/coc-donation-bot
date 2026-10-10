@@ -12,6 +12,10 @@ def main(argv=None):
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--origin", action="append", help="Exact browser origin, including port")
     parser.add_argument("--set-password", action="store_true")
+    access = parser.add_mutually_exclusive_group()
+    access.add_argument("--require-password", action="store_true",
+                        help="Opt in to password protection instead of opening the dashboard directly")
+    access.add_argument("--no-password", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--home", type=Path, help="Separate config/data root for testing")
     parser.add_argument("--secure-cookie", action="store_true", help="Required when serving over HTTPS")
     parser.add_argument("--screen-model", type=Path, help="Optional observer model (never controls actions)")
@@ -32,6 +36,10 @@ def main(argv=None):
         loopback = args.host == "localhost" or ipaddress.ip_address(args.host).is_loopback
     except ValueError:
         parser.error("Host must be localhost or an IP address")
+    if not args.require_password and not loopback:
+        address = ipaddress.ip_address(args.host)
+        if not address.is_private or address.is_unspecified or address.is_multicast or address.is_link_local:
+            parser.error("Password-free mode must bind to a specific private LAN IP or localhost.")
     if not loopback and not args.origin:
         parser.error("LAN access needs an explicit --origin, preferably through an HTTPS reverse proxy.")
     if not 1 <= args.port <= 65535:
@@ -47,7 +55,8 @@ def main(argv=None):
         enable_observer(args.screen_model)
     # Locks the server, not the Android device; engine jobs retain device leases.
     with DeviceLease("web-server:" + str(project_root())):
-        uvicorn.run(create_app(origins=origins, secure_cookie=args.secure_cookie),
+        uvicorn.run(create_app(origins=origins, secure_cookie=args.secure_cookie,
+                              password_required=args.require_password),
                     host=args.host, port=args.port, workers=1, access_log=False)
 
 

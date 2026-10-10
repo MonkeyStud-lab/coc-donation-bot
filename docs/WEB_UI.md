@@ -12,13 +12,11 @@ In the project folder, for an existing installation:
 ```bash
 source .venv/bin/activate
 python -m pip install -e '.[web]'
-python -m coc_bot.web --set-password
 python -m coc_bot.web
 ```
 
-Choose a password of at least 12 characters. Its salted verifier is saved in
-`data/web-auth.json`. Run the password command again and restart the server to
-change it. For a new installation, run `bash scripts/setup_linux.sh --web` first.
+No password or sign-in is required. For a new installation,
+run `bash scripts/setup_linux.sh --web` first.
 Normal users do not need Node.js; compiled assets are included in the checkout
 and Python package.
 
@@ -26,7 +24,7 @@ Keep the source checkout: a standalone wheel includes the browser assets but not
 all project defaults/scripts. Advanced package installations need `--home` pointing
 to a separate directory with the project's `config/` files and a writable `data/`.
 
-Open **http://127.0.0.1:8765** on Linux and sign in. After installation,
+Open **http://127.0.0.1:8765** on Linux to go directly to the dashboard. After installation,
 `bash scripts/run_web.sh` or `python -m coc_bot.main --web` also launch the local
 server. The existing `python -m coc_bot.main` still opens the desktop interface.
 
@@ -40,7 +38,7 @@ Waydroid desktop session.
 Find Linux's local IP in network settings. If it is `192.168.1.50`, run:
 
 ```bash
-python -m coc_bot.web --host 0.0.0.0 --origin http://192.168.1.50:8765
+python -m coc_bot.web --host 192.168.1.50 --origin http://192.168.1.50:8765
 ```
 
 Open **http://192.168.1.50:8765** on your other device. Substitute your address.
@@ -58,6 +56,17 @@ ssh -L 8765:127.0.0.1:8765 YOUR_USER@YOUR_LINUX_ADDRESS
 
 Then open localhost on that computer. Do not forward the port from your router
 to the internet. Public hosting and automatic HTTPS installation are outside scope.
+
+The dashboard opens directly and there is no Sign out button. Anyone who can reach this address can
+control the bot, view the game, and edit its setup. Use this only on a trusted
+LAN or localhost; this mode rejects public or wildcard bind addresses.
+Origin, host, session-cookie and CSRF checks remain enabled. Password-free
+sessions reconnect automatically after a service restart. No password file is needed,
+and previously saved passwords are ignored during normal startup.
+
+Password protection is optional for installations that need it: run
+`python -m coc_bot.web --set-password` once, then launch with `--require-password`.
+This is never required for normal local or LAN use.
 
 ## Use the pages
 
@@ -152,9 +161,8 @@ python scripts/verify_gui_offline.py
 PYTHONPATH=src python scripts/preview_web_offline.py
 ```
 
-The preview uses disposable data, a fake device, and password `offline-preview-123`.
+The preview uses disposable data and a fake device; it opens without a password.
 Real ADB is forbidden. On headless Linux, run desktop checks through `xvfb-run -a`.
-Do not use that preview password for a real installation.
 
 Before cutover, back up settings/calibration and test on Ubuntu: capture/readiness,
 supervised Start/Stop and farming, original-pixel calibration, a second LAN device,

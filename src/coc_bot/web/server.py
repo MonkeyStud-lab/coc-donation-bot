@@ -53,10 +53,11 @@ class Rename(Payload):
 
 
 def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
-               scope=None, shared_auth=None, enable_simulation=True):
+               scope=None, shared_auth=None, enable_simulation=True, password_required=False):
     service = service or ControlService()
-    auth = shared_auth or Authentication(auth_path or project_root() / "data/web-auth.json")
-    if not auth.path.is_file():
+    auth = shared_auth or Authentication(auth_path or project_root() / "data/web-auth.json",
+                                         password_required=password_required)
+    if auth.password_required and not auth.path.is_file():
         raise RuntimeError("Set a browser password first: python -m coc_bot.web --set-password")
     allowed_origins = set(origins or ["http://127.0.0.1:8765", "http://localhost:8765"])
     captures = Captures()
@@ -93,7 +94,8 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
         if api_path.startswith("/api/"):
             if request.headers.get("origin") and request.headers["origin"] not in allowed_origins:
                 return Response("Origin rejected", status_code=403)
-            if api_path != "/api/login":
+            bootstrap = not auth.password_required and api_path == "/api/session" and request.method == "GET"
+            if api_path != "/api/login" and not bootstrap:
                 csrf = auth.session(request.cookies.get("coc_session"))
                 if not csrf:
                     return Response("Login required", status_code=401)
@@ -153,7 +155,16 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
 
     @app.get("/api/session")
     def session(request: Request):
-        return {"csrf": auth.session(request.cookies.get("coc_session"))}
+        csrf = auth.session(request.cookies.get("coc_session"))
+        token = None
+        if not csrf and not auth.password_required:
+            token, csrf = auth.open_session()
+        response = Response(json.dumps({"csrf": csrf, "password_required": auth.password_required}),
+                            media_type="application/json")
+        if token:
+            response.set_cookie("coc_session", token, httponly=True, samesite="strict",
+                                secure=secure_cookie, max_age=auth.lifetime)
+        return response
 
     @app.post("/api/logout")
     def logout(request: Request):

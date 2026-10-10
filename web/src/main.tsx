@@ -52,6 +52,7 @@ function useDialog(ref:React.RefObject<HTMLElement|null>,close:()=>void){
 
 function App(){
   const [signed,setSigned]=useState(false),[password,setPassword]=useState('');
+  const [passwordRequired,setPasswordRequired]=useState(true),[checkingSession,setCheckingSession]=useState(true);
   const [page,setPage]=useState(FIRST_LAUNCH?'Setup':'Dashboard'),[notice,setNotice]=useState('');
   const [online,setOnline]=useState(false),[status,setStatus]=useState<Status|null>(null);
   const [logs,setLogs]=useState<Entry[]>([]),[debug,setDebug]=useState(false),[scroll,setScroll]=useState(true);
@@ -67,7 +68,16 @@ function App(){
   const [viewer,setViewer]=useState(false);
   const [captureIntent,setCaptureIntent]=useState<Part|null>(null);
   const pendingCapture=useRef(false),logEnd=useRef<HTMLDivElement>(null);
-  const expired=()=>{setSigned(false);setOnline(false);csrf='';};
+  function acceptSession(x:{csrf:string;password_required:boolean}){
+    csrf=x.csrf;setPasswordRequired(x.password_required!==false);setSigned(true);
+  }
+  const expired=()=>{
+    setSigned(false);setOnline(false);csrf='';
+    if(!passwordRequired){
+      setCheckingSession(true);
+      api('session').then(acceptSession).catch(()=>{}).finally(()=>setCheckingSession(false));
+    }
+  };
   async function attempt(fn:()=>Promise<unknown>){
     setBusy(true);try{return await fn();}catch(e){setNotice((e as Error).message);return undefined;}
     finally{setBusy(false);}
@@ -81,9 +91,9 @@ function App(){
   }
   useEffect(()=>{
     window.addEventListener('session-expired',expired);
-    api('session').then(x=>{csrf=x.csrf;setSigned(true);}).catch(()=>{});
+    api('session').then(acceptSession).catch(()=>{}).finally(()=>setCheckingSession(false));
     return ()=>window.removeEventListener('session-expired',expired);
-  },[]);
+  },[passwordRequired]);
   useEffect(()=>{
     if(!signed)return;
     attempt(reload);
@@ -102,7 +112,7 @@ function App(){
       socket.onclose=e=>{setOnline(false);if(e.code===1008){expired();return;}
         // A restarted server rejects an old cookie before WebSocket acceptance,
         // which browsers report as 1006 rather than the application close code.
-        api('session').catch(()=>{}).finally(()=>{
+        api('session').then(acceptSession).catch(()=>{}).finally(()=>{
           if(!stopped)reconnect=setTimeout(connect,2500);
         });};
     }
@@ -155,6 +165,7 @@ function App(){
     const updated=await attempt(()=>api(path,'POST',body));
     if(updated)setStatus(updated as Status);
   }
+  if(checkingSession||(!signed&&!passwordRequired))return <main className="login" role="status">Connecting…</main>;
   if(!signed)return <main className="login"><form onSubmit={e=>{e.preventDefault();attempt(async()=>{
     const result=await api('login','POST',{password});csrf=result.csrf;setSigned(true);setPassword('');
   });}}><h1>CoC Bot</h1><label>Password<input type="password" autoComplete="current-password"
@@ -167,7 +178,7 @@ function App(){
     <nav>{['Dashboard','Settings','Setup','Library','Diagnostics'].map(p=><button key={p}
       className={page===p?'selected':''} onClick={()=>navigate(p)}>{p}</button>)}</nav>
     {FIRST_LAUNCH&&<button disabled={locked} onClick={()=>location.assign('/')}>Exit first-launch test</button>}
-    <button onClick={()=>attempt(async()=>{await api('logout','POST');expired();})}>Sign out</button></aside>
+    {passwordRequired&&<button onClick={()=>attempt(async()=>{await api('logout','POST');expired();})}>Sign out</button>}</aside>
     <main>{FIRST_LAUNCH&&<div className="notice">First-launch test · changes are kept separate from your saved setup.</div>}
     <header><h1>{page}</h1><span className={'connection '+(online?'connected':'')}>
       {online?'Connected':'Reconnecting'}</span></header>

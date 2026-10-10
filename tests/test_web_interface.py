@@ -33,7 +33,7 @@ class WebTests(TestCase):
         self.auth_path = self.home / "data/web-auth.json"
         set_password(self.auth_path, "testing-password-123")
         self.service = ControlService()
-        self.client = TestClient(create_app(self.service, origins=["http://testserver"]))
+        self.client = TestClient(create_app(self.service, origins=["http://testserver"], password_required=True))
         self.client.__enter__()
         self.addCleanup(self.client.__exit__, None, None, None)
         result = self.client.post("/api/login", json={"password": "testing-password-123"})
@@ -46,6 +46,38 @@ class WebTests(TestCase):
         self.assertEqual(self.client.get("/api/status", headers={"Origin": "http://evil.invalid"}).status_code, 403)
         self.client.post("/api/logout", headers=self.headers)
         self.assertEqual(self.client.get("/api/status").status_code, 401)
+
+    def test_password_free_bootstrap_keeps_csrf_origin_and_socket_guards(self):
+        service = ControlService()
+        with TestClient(create_app(service, auth_path=self.home / "missing-password.json",
+                                   origins=["http://testserver"])) as client:
+            self.assertEqual(client.get("/api/status").status_code, 401)
+            self.assertEqual(client.get("/api/session", headers={"Origin": "http://evil.invalid"}).status_code, 403)
+            session = client.get("/api/session")
+            self.assertEqual(session.status_code, 200)
+            self.assertFalse(session.json()["password_required"])
+            headers = {"X-CSRF-Token": session.json()["csrf"]}
+            self.assertEqual(client.get("/api/session").json()["csrf"], session.json()["csrf"])
+            self.assertEqual(client.get("/api/status").status_code, 200)
+            self.assertEqual(client.post("/api/stop").status_code, 403)
+            self.assertEqual(client.post("/api/stop", headers=headers).status_code, 200)
+            self.assertEqual(client.post("/api/stop", headers={**headers, "Origin": "http://evil.invalid"}).status_code, 403)
+            with client.websocket_connect("/api/events/ws", headers={"Origin": "http://testserver"}) as socket:
+                self.assertIn("status", socket.receive_json())
+            auth = client.app.state.auth
+            auth.logout(client.cookies.get("coc_session"))
+            self.assertEqual(client.get("/api/status").status_code, 401)
+            renewed = client.get("/api/session").json()
+            self.assertNotEqual(renewed["csrf"], headers["X-CSRF-Token"])
+            self.assertEqual(client.get("/api/status").status_code, 200)
+            self.assertFalse((self.home / "missing-password.json").exists())
+
+    def test_password_free_launcher_rejects_public_and_wildcard_bind(self):
+        from coc_bot.web.__main__ import main
+        for host in ("0.0.0.0", "::", "8.8.8.8", "224.0.0.1", "169.254.1.1"):
+            with self.subTest(host=host), self.assertRaises(SystemExit) as raised:
+                main(["--host", host, "--origin", "http://testserver"])
+            self.assertEqual(raised.exception.code, 2)
 
     def test_settings_revision_and_validation(self):
         settings = self.client.get("/api/settings").json()

@@ -26,13 +26,16 @@ def set_password(path: Path, password: str):
 
 
 class Authentication:
-    def __init__(self, path, lifetime=8*3600):
+    def __init__(self, path, lifetime=8*3600, password_required=True):
         self.path, self.lifetime = path, lifetime
+        self.password_required = password_required
         self.sessions = OrderedDict()
         self.attempts = OrderedDict()
         self.lock = threading.RLock()
 
     def login(self, password, address):
+        if not self.password_required:
+            return self.open_session()
         with self.lock:
             return self._login(password, address)
 
@@ -50,11 +53,21 @@ class Authentication:
                                 n=16384, r=8, p=1)
         if not hmac.compare_digest(digest.hex(), record["hash"]):
             raise ValueError("Incorrect password")
+        self.attempts.pop(address, None)
+        return self._issue_session(now)
+
+    def open_session(self):
+        """Bootstrap a CSRF-protected browser session in explicit password-free mode."""
+        if self.password_required:
+            raise ValueError("Password required")
+        with self.lock:
+            return self._issue_session(time.monotonic())
+
+    def _issue_session(self, now):
         token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
         self.sessions[token] = (now+self.lifetime, csrf)
         while len(self.sessions) > 64:
             self.sessions.popitem(last=False)
-        self.attempts.pop(address, None)
         return token, csrf
 
     def session(self, token):

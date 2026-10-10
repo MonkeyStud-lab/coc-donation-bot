@@ -13,7 +13,6 @@ import uvicorn
 from coc_bot.config import project_root
 from coc_bot.control.lifecycle import BotController
 from coc_bot.control.service import ControlService
-from coc_bot.web.auth import set_password
 from coc_bot.web.server import create_app
 
 
@@ -47,7 +46,6 @@ def main():
         (root / "data").mkdir()
         (root / "data/calibrated.yaml").write_text(
             "frame_width: 1280\nframe_height: 720\nrois:\n  clan_chat: [0, 0, 0.4, 0.8]\n")
-        set_password(root / "data/web-auth.json", "offline-preview-123")
         frame = np.zeros((720, 1280, 3), np.uint8)
         frame[:] = (40, 70, 40)
         cv2.rectangle(frame, (300, 120), (1000, 580), (220, 220, 220), -1)
@@ -65,7 +63,7 @@ def main():
             from coc_bot.adb.client import AdbClient
             with patch.object(AdbClient, "run", side_effect=AssertionError("Live ADB forbidden")):
                 app = create_app(service, origins=origins)
-                print(f"Offline preview at {origins[0]}; password: offline-preview-123", flush=True)
+                print(f"Offline preview at {origins[0]}; opens directly without a password", flush=True)
                 uvicorn.run(app, host=args.host, port=args.port, access_log=False)
 
 

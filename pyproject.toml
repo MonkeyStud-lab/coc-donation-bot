@@ -25,7 +25,7 @@ coc-bot-web = "coc_bot.web.__main__:main"
 
 [project.optional-dependencies]
 web = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "websockets>=13,<18"]
-web-test = ["httpx>=0.27,<1"]
+web-test = ["httpx>=0.27,<1", "httpx2>=2,<3"]
 web-live = ["aiortc>=1.14,<2"]
 
 [tool.setuptools.packages.find]

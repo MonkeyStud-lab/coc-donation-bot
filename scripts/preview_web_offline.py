@@ -26,6 +26,9 @@ class FakeBot:
         self.cancel.wait()
     def request_stop(self):
         self.cancel.set()
+    def request_stop_after_action(self):
+        # This fake bot has no in-flight actions; the safe boundary is immediate.
+        self.cancel.set()
     def request_farm_attack(self):
         pass
 

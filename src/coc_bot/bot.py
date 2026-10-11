@@ -141,6 +141,14 @@ class DonationBot:
         self._stop_requested = True
         logger.info("Stop requested — interrupting current action")
 
+    def request_stop_after_action(self) -> None:
+        self._finish_action_requested = True
+        logger.info("Settings update queued — finishing current action before stopping")
+
+    def _settings_stop_ready(self) -> bool:
+        return (getattr(self, "_finish_action_requested", False)
+                and self._state not in ("open_donation", "donate", "farm"))
+
     def request_farm_attack(self) -> None:
         """Queue one farm attack as soon as the loop is not mid-donation."""
         self._farm_requested = True
@@ -279,6 +287,8 @@ class DonationBot:
             self._last_anti_idle = time.monotonic()
 
             while not self._stop_requested:
+                if self._settings_stop_ready():
+                    break
                 try:
                     self._loop_tick()
                 except KeyboardInterrupt:
@@ -311,10 +321,10 @@ class DonationBot:
             self.tracker.pause_farm_clock()
 
     def _loop_tick(self) -> None:
-        if self._stop_requested:
+        if self._stop_requested or self._settings_stop_ready():
             return
         self._check_watchdog()
-        if self._stop_requested:
+        if self._stop_requested or self._settings_stop_ready():
             return
         self._maybe_anti_idle()
         if self._stop_requested:
@@ -327,6 +337,8 @@ class DonationBot:
             return
 
         # Farm between donation states only — never mid open_donation / donate.
+        if self._settings_stop_ready():
+            return
         if self._maybe_run_farm():
             self.tracker.tick()
             lo, hi = self.config.scan_interval_ms

@@ -41,6 +41,8 @@ class ControlService:
         self._finished_generation = -1
         self._break_active = False
         self.peers = []
+        self.settings_update = None
+        self._settings_cancel = None
 
     def saved_timers(self):
         """Read frozen persisted clocks without rerolling or rewriting anything."""
@@ -75,7 +77,8 @@ class ControlService:
                 pass
 
     def idle(self):
-        if any(s.controller.snapshot().active or s.manual_owner for s in [self, *self.peers]):
+        if any(s.controller.snapshot().active or s.manual_owner or s.settings_update
+               for s in [self, *self.peers]):
             raise BusyError("Stop the bot and finish the current tool first.")
 
     def start(self, practice=False):
@@ -91,10 +94,74 @@ class ControlService:
             self.events.append("INFO", "Bot starting")
 
     def stop(self):
-        self.controller.stop()
-        if self.manual_cancel is not None:
-            self.manual_cancel.set()
+        with self.lock:
+            if self._settings_cancel is not None:
+                self._settings_cancel.set()
+            self.controller.stop()
+            if self.manual_cancel is not None:
+                self.manual_cancel.set()
         self.events.append("INFO", "Stop requested")
+
+    def apply_settings(self, values, expected_revision):
+        """Validate first; reserve ownership while waiting for the safe stop.
+
+        The HTTP worker waits without holding service locks, so priority Stop
+        and status remain available throughout a battle or donation.
+        """
+        from copy import deepcopy
+        from coc_bot.control.settings import validate_settings, save_settings
+        values = deepcopy(values)
+        with self.lock:
+            validate_settings(values, expected_revision)
+            if self.settings_update or self.manual_owner or any(
+                p.controller.snapshot().active or p.manual_owner or p.settings_update for p in self.peers
+            ):
+                raise BusyError("Release manual control and finish the current tool before saving.")
+            state = self.controller.snapshot()
+            if not state.active:
+                with self.mutation():
+                    result = save_settings(values, expected_revision)
+                    self._finished_generation = -1
+                    return result | {"restarted": False}
+            if self.operation != "bot" or state.stop_requested or state.closing:
+                raise BusyError("Finish the current tool or wait for the bot to stop before saving.")
+            cancel = self._settings_cancel = threading.Event()
+            state_generation = state.generation
+            options = self.controller.options
+            self.settings_update = "Finishing current action before applying settings"
+            try:
+                self.controller.stop_after_action()
+            except Exception:
+                self.settings_update = self._settings_cancel = None
+                raise
+        self.events.append("INFO", self.settings_update)
+        try:
+            while not self.controller.wait(0.2):
+                if cancel.is_set():
+                    raise BusyError("Settings update canceled by Stop. Changes were not applied.")
+            with self.lock:
+                state = self.controller.snapshot()
+                if cancel.is_set() or state.closing or state.generation != state_generation:
+                    raise BusyError("Settings update canceled. The bot will not restart.")
+                if state.error:
+                    raise RuntimeError("Bot failed before settings could be applied: " + state.error)
+                self.settings_update = "Applying settings and restarting"
+                # Recheck the revision after waiting; never overwrite another editor.
+                from coc_bot.config import load_config
+                from coc_bot.runtime.device_lease import DeviceLease
+                with DeviceLease(load_config().adb_device):
+                    result = save_settings(values, expected_revision)
+                self._finished_generation = -1
+                if not self.controller.start(options):
+                    raise RuntimeError("Settings saved, but the bot could not restart.")
+                self.events.append("INFO", "Settings saved — bot restarting")
+                return result | {"restarted": True}
+        except Exception as exc:
+            self.events.append("ERROR", str(exc))
+            raise
+        finally:
+            with self.lock:
+                self.settings_update = self._settings_cancel = None
 
     def job(self, name, function):
         with self.lock:
@@ -121,6 +188,8 @@ class ControlService:
 
     def farm(self):
         with self.lock:
+            if self.settings_update:
+                raise BusyError("Wait for the settings update to finish")
             if self.controller.snapshot().active and self.operation == "bot":
                 bot = self.controller.bot
                 if bot is None or self.controller.snapshot().stop_requested:
@@ -199,6 +268,7 @@ class ControlService:
             return state | {"operation": self.operation, "result": self.result,
                             "timers": dict(self._timer_snapshot),
                             "manual_control": self.manual_owner is not None,
+                            "settings_update": self.settings_update,
                             "activity": activity,
                             "on_break": self._break_active}
 

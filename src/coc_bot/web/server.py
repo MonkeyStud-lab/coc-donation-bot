@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from urllib.parse import urlparse
 from coc_bot.control.service import ControlService, BusyError
-from coc_bot.control.settings import settings_snapshot, save_settings, RevisionConflict
+from coc_bot.control.settings import settings_snapshot, RevisionConflict
 from coc_bot.control.calibration import Captures, checklist
 from coc_bot.config import load_config, project_root, profile_root
 from coc_bot.web.auth import Authentication
@@ -204,10 +204,7 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
 
     @app.put("/api/settings")
     def update(body: Settings):
-        with service.mutation():
-            result = save_settings(body.values, body.revision)
-            service._finished_generation = -1
-            return result
+        return service.apply_settings(body.values, body.revision)
 
     @app.get("/api/setup")
     def setup():

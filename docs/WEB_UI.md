@@ -74,8 +74,13 @@ This is never required for normal local or LAN use.
   Stopped scheduling clocks freeze. An already-started mandatory break expires
   by real time.
 - **Settings:** common controls first; **Advanced** reveals the rest. Timing
-  presets simplify delays; **Dev options** exposes raw timings. Save while stopped,
-  then Start. Another browser's save causes a conflict: Reload before retrying.
+  presets simplify delays; **Dev options** exposes raw timings. Fields are always
+  editable. **Save** while stopped applies changes without starting the bot.
+  **Save & restart** while running validates the draft, finishes the current
+  donation or attack, and restarts with the same practice/run options. **Stop**
+  cancels the pending update and automatic restart. Release manual control before
+  saving, and finish standalone tools first. Another browser's save causes a
+  conflict: Reload before retrying. Edits made while applying remain unsaved drafts.
 - **Setup:** select a part directly or follow missing/all calibration. Prepare
   the game as instructed, capture, click a point or draw a box, then Save. Grid
   parts ask for rows/columns. Skip and Cancel preserve existing calibration.

@@ -3,7 +3,7 @@ import {createRoot} from 'react-dom/client';
 import './style.css';
 
 type Status = {active:boolean; state:string; operation:string|null; activity:string|null; result:any; error:string|null;
-  timers:{farm_seconds:number|null;break_seconds:number|null}; manual_control:boolean;on_break:boolean};
+  timers:{farm_seconds:number|null;break_seconds:number|null}; manual_control:boolean;on_break:boolean;settings_update:string|null};
 type Entry = {id:number; level:string; text:string; at:string};
 type Field = {key:string;label:string;description:string;kind:string;choices:string[];section:string;advanced:boolean};
 type SettingsData = {revision:string;values:Record<string,any>;fields:Field[];themes:any[]};
@@ -58,6 +58,8 @@ function App(){
   const [logs,setLogs]=useState<Entry[]>([]),[debug,setDebug]=useState(false),[scroll,setScroll]=useState(true);
   const [settings,setSettings]=useState<SettingsData|null>(null),[values,setValues]=useState<Record<string,any>>({});
   const [dirty,setDirty]=useState(false),[search,setSearch]=useState(''),[advanced,setAdvanced]=useState(false);
+  const [savingSettings,setSavingSettings]=useState(false);
+  const draftVersion=useRef(0);
   const [setup,setSetup]=useState<SetupData|null>(null),[selected,setSelected]=useState('');
   const [queue,setQueue]=useState<string[]>([]),[collection,setCollection]=useState<any>(null);
   const [galleryOffset,setGalleryOffset]=useState(0),[galleryTotal,setGalleryTotal]=useState(0);
@@ -85,6 +87,7 @@ function App(){
   }
   async function reload(){
     const [a,b,c,d]=await Promise.all([api('settings'),api('setup'),api('backups'),api('library')]);
+    draftVersion.current++;
     setSettings(a);setValues(a.values);setSetup(b);setBackups(c);setGallery(d.images);setDirty(false);
     setCollection(d.collection);setGalleryTotal(d.total);setGalleryOffset(0);
     setPractice(!!a.values.gui_practice_mode);setDebug(!!a.values.gui_show_debug_activity);
@@ -144,7 +147,7 @@ function App(){
   }
   function navigate(next:string){
     if(dirty&&!confirm('Leave these unsaved settings?'))return;
-    if(dirty&&settings){setValues(settings.values);setDirty(false);}
+    if(dirty&&settings){draftVersion.current++;setValues(settings.values);setDirty(false);}
     setPage(next);
   }
   function advance(){
@@ -156,11 +159,22 @@ function App(){
     if(!keys.length){setNotice('All required calibration parts are saved');return;}
     setSelected(keys[0]);setQueue(keys.slice(1));
   }
-  const locked=!!status?.active||!!status?.manual_control||busy||!online;
+  const locked=!!status?.active||!!status?.manual_control||!!status?.settings_update||busy||!online;
   const part=setup?.steps.flatMap(s=>s.parts).find(p=>p.key===selected);
   async function save(){
-    const updated=await attempt(()=>api('settings','PUT',{revision:settings!.revision,values}));
-    if(updated){setSettings(updated as SettingsData);setValues((updated as SettingsData).values);setDirty(false);setNotice('Settings saved');}
+    const version=draftVersion.current;
+    setSavingSettings(true);
+    setNotice(status?.active?'Finishing the current action before applying settings. Stop cancels the restart.':'Saving settings…');
+    try {
+      const updated=await api('settings','PUT',{revision:settings!.revision,values});
+      setSettings(updated);
+      if(version===draftVersion.current){setValues(updated.values);setDirty(false);}
+      setNotice(updated.restarted?'Settings saved — bot restarting':'Settings saved');
+    } catch(e){setNotice((e as Error).message);}
+    finally{setSavingSettings(false);}
+  }
+  function editSetting(key:string,value:any){
+    draftVersion.current++;setValues(previous=>({...previous,[key]:value}));setDirty(true);
   }
   async function command(path:string,body?:unknown){
     const updated=await attempt(()=>api(path,'POST',body));
@@ -188,7 +202,7 @@ function App(){
       <section className="play"><span className="chip">{status?.active?
         (status.state==='running'&&status.activity?status.activity:status.operation+' · '+status.state):status?.state||'Stopped'}</span>
       <div className="controls"><button className="primary" disabled={locked} onClick={()=>command('start',{practice})}>Start</button>
-        <button className="danger" disabled={!online||(!status?.active&&!status?.manual_control)} onClick={()=>command('stop')}>Stop</button>
+        <button className="danger" disabled={!online||(!status?.active&&!status?.manual_control&&!status?.settings_update&&!savingSettings)} onClick={()=>command('stop')}>Stop</button>
         <button disabled={!online||busy||status?.manual_control||
           (status?.active&&(status.operation!=='bot'||status.state!=='running'))}
           onClick={()=>attempt(()=>api('farm','POST'))}>Farm now</button>
@@ -206,17 +220,20 @@ function App(){
     {page==='Settings'&&<>
       <div className="toolbar"><input aria-label="Search settings" placeholder="Search settings" value={search} onChange={e=>setSearch(e.target.value)}/>
         <label className="toggle"><input type="checkbox" checked={advanced} onChange={e=>setAdvanced(e.target.checked)}/>Advanced</label>
-        <button disabled={locked||!dirty} className="primary" onClick={save}>Save</button>
-        <button disabled={busy} onClick={()=>{if(!dirty||confirm('Discard unsaved settings?'))attempt(reload);}}>Reload</button></div>
+        <button disabled={!online||busy||savingSettings||!!status?.settings_update||!!status?.manual_control||!dirty} className="primary" onClick={save}>
+          {savingSettings||status?.settings_update?'Applying…':status?.active&&status.operation==='bot'?'Save & restart':'Save'}</button>
+        <button disabled={busy||savingSettings||!!status?.settings_update} onClick={()=>{if(!dirty||confirm('Discard unsaved settings?'))attempt(reload);}}>Reload</button>
+        {(savingSettings||status?.settings_update)&&<button className="danger" disabled={!online} onClick={()=>command('stop')}>Stop</button>}</div>
+      {status?.settings_update&&<p role="status">{status.settings_update}</p>}
       <section className="settings">{fields.map(f=><div className="setting" key={f.key}>
         <label htmlFor={f.key}>{f.label}<span>{f.description}</span></label>
-        {f.kind==='bool'?<input id={f.key} className="switch" type="checkbox" checked={!!values[f.key]} disabled={locked}
-          onChange={e=>{setValues({...values,[f.key]:e.target.checked});setDirty(true);}}/>:
-        f.kind==='choice'?<select id={f.key} value={values[f.key]} disabled={locked}
-          onChange={e=>{setValues({...values,[f.key]:e.target.value});setDirty(true);}}>
+        {f.kind==='bool'?<input id={f.key} className="switch" type="checkbox" checked={!!values[f.key]}
+          onChange={e=>editSetting(f.key,e.target.checked)}/>:
+        f.kind==='choice'?<select id={f.key} value={values[f.key]}
+          onChange={e=>editSetting(f.key,e.target.value)}>
           {f.choices.map(c=><option key={c}>{c}</option>)}</select>:
-        <input id={f.key} value={values[f.key]??''} disabled={locked} type={['int','float'].includes(f.kind)?'number':'text'}
-          min={0} step={f.kind==='float'?'any':1} onChange={e=>{setValues({...values,[f.key]:e.target.value});setDirty(true);}}/>}
+        <input id={f.key} value={values[f.key]??''} type={['int','float'].includes(f.kind)?'number':'text'}
+          min={0} step={f.kind==='float'?'any':1} onChange={e=>editSetting(f.key,e.target.value)}/>}
       </div>)}</section>
     </>}
     {page==='Setup'&&<><div className="toolbar">

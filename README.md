@@ -95,8 +95,11 @@ bash scripts/get_started.sh
 standalone **Farm attack now** run. **Close Waydroid + Clash** closes the game
 and Waydroid session. Farm and break countdowns pause while the bot is stopped.
 
-After changing settings, save them. If the bot is running, use the offered
-**Apply & restart** action, or Stop and Start it yourself.
+After changing settings in the browser, use **Save** when stopped or
+**Save & restart** when running. The latter finishes the current donation or
+attack first. **Stop** cancels the pending update and restart. Release manual
+control before saving. In the desktop interface, use **Apply & restart**, or
+Stop and Start it yourself.
 
 For a clickable launcher, use **Diagnostics → Actions → Create desktop shortcut**. Open Waydroid
 and Clash of Clans before starting the bot. If Ubuntu asks, choose **Allow Launching**

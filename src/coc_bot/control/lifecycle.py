@@ -75,6 +75,8 @@ class BotController:
         self._thread: threading.Thread | None = None
         self._bot: BotRunner | None = None
         self._cancel = threading.Event()
+        self._finish_action = False
+        self.options = RunOptions()
         self._generation = 0
         self._state = RunState.STOPPED
         self._closing = False
@@ -122,6 +124,8 @@ class BotController:
                 return False
             self._generation += 1
             self._cancel = threading.Event()
+            self._finish_action = False
+            self.options = options
             self._bot = None
             self._error = self._error_traceback = None
             self._state = RunState.STARTING
@@ -138,6 +142,16 @@ class BotController:
                 self._thread = None
                 raise
             return True
+
+    def stop_after_action(self) -> None:
+        """Finish an in-flight donation/attack without interrupting its inputs."""
+        with self._lock:
+            if self._cancel.is_set() or self._closing:
+                raise RuntimeError("Bot is already stopping")
+            bot = self._bot
+            if bot is not None:
+                bot.request_stop_after_action()
+            self._finish_action = True
 
     def stop(self) -> bool:
         with self._lock:
@@ -176,6 +190,8 @@ class BotController:
                 self._bot = bot
                 canceled = self._cancel.is_set()
                 self._state = RunState.STOPPING if canceled else RunState.RUNNING
+                if self._finish_action and not canceled:
+                    bot.request_stop_after_action()
             if canceled:
                 bot.request_stop()
             else:

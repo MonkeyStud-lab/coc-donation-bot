@@ -6,6 +6,7 @@ from coc_bot.config import load_config, user_settings_path
 from coc_bot.control.settings_fields import (
     SETTINGS, current_setting_values, save_settings_from_gui, parse_int_pair,
     is_raw_timing_field,
+    build_user_settings_payload,
 )
 from coc_bot.control.themes import THEMES
 from coc_bot.calibration.transactions import calibration_locked
@@ -29,7 +30,7 @@ def settings_snapshot():
 
 
 @calibration_locked
-def save_settings(values, expected_revision):
+def validate_settings(values, expected_revision):
     if revision() != expected_revision:
         raise RevisionConflict("Settings changed elsewhere. Reload before saving.")
     known = {f.key: f for f in SETTINGS}
@@ -57,5 +58,12 @@ def save_settings(values, expected_revision):
         if f.kind not in ("bool", "choice", "int", "float", "int_pair"):
             if not isinstance(raw, str) or len(raw) > 500 or "\n" in raw:
                 raise ValueError(f"Invalid {f.label}")
+    build_user_settings_payload(complete)  # Include field-specific persistence rules before stopping.
+    return complete
+
+
+@calibration_locked
+def save_settings(values, expected_revision):
+    complete = validate_settings(values, expected_revision)
     save_settings_from_gui(complete)
     return settings_snapshot()

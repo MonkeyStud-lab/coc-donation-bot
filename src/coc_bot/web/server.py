@@ -53,7 +53,8 @@ class Rename(Payload):
 
 
 def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
-               scope=None, shared_auth=None, enable_simulation=True, password_required=False):
+               scope=None, shared_auth=None, enable_simulation=True, password_required=False,
+               shared_live_lock=None):
     service = service or ControlService()
     auth = shared_auth or Authentication(auth_path or project_root() / "data/web-auth.json",
                                          password_required=password_required)
@@ -63,6 +64,7 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
     captures = Captures()
     simulation = None
     simulation_temp = None
+    live_lock = shared_live_lock if shared_live_lock is not None else asyncio.Lock()
 
     @asynccontextmanager
     async def lifespan(app):
@@ -122,7 +124,7 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; img-src 'self' blob:; connect-src 'self'; "
+            "default-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; "
             "style-src 'self' 'unsafe-inline'; script-src 'self'; "
             "frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
         if api_path.startswith("/api/"):
@@ -399,6 +401,15 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
         finally:
             profile_root.reset(token)
 
+    @app.websocket("/api/live/ws")
+    async def live(ws: WebSocket):
+        from coc_bot.web.live import run_live
+        token = profile_root.set(scope)
+        try:
+            await run_live(ws, auth, allowed_origins, live_lock, service)
+        finally:
+            profile_root.reset(token)
+
     if enable_simulation:
         import tempfile
         import shutil
@@ -421,7 +432,7 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
                 simulation._finished_generation = -1
                 return {"reset": True}
         child = create_app(simulation, origins=allowed_origins, secure_cookie=secure_cookie,
-            scope=simulation_root, shared_auth=auth, enable_simulation=False)
+            scope=simulation_root, shared_auth=auth, enable_simulation=False, shared_live_lock=live_lock)
         app.mount("/first-launch", child)
 
     assets = Path(__file__).parent / "static"

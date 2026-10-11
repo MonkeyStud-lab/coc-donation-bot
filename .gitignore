@@ -23,6 +23,7 @@ data/frames/
 data/labelstudio/
 data/models/
 data/collection/
+data/live/
 logs/
 .setup_linux_stamp
 

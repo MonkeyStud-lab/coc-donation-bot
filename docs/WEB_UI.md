@@ -128,6 +128,46 @@ No calibration conversion is needed.
 
 ## Development and checks
 
+### Experimental live video
+
+Dashboard → **Live view** opens a WebRTC video stream. It can watch
+while automation runs. Stop the bot, then select **Take control** to click/tap
+and drag/swipe on the video. Android Back and Home controls are also available.
+Manual control holds an exclusive device lease; automation cannot start until
+you release control. **Stop**, disconnecting, or closing the view cancels control
+and discards queued gestures. Releasing control never restarts automation.
+Clicks outside the displayed picture are ignored. The stream does not change
+screen size or start another game instance. Closing the view stops its encoder
+and ADB forward. Only one live stream can run at a time. **Diagnostics → Open game**
+remains the slower screenshot viewer with manual controls while the bot is stopped.
+
+Install optional components in the bot's virtual environment:
+
+```bash
+python -m pip install -e '.[web,web-live]'
+python scripts/setup_live_view.py
+```
+
+Restart the web server after installation. The installer downloads the official
+scrcpy 3.3.3 Android server and verifies its pinned SHA-256 checksum. It is stored
+under `data/live/`, not committed or included in calibration backups. No native
+scrcpy desktop window is opened. Audio is disabled. Video is capped at 1280 pixels,
+20 fps and 2 Mbps, with encoded H.264 passed through without host re-encoding.
+WebRTC uses local network candidates without external STUN or TURN servers.
+Firewalls must allow the local WebRTC UDP connection as well as the web port.
+
+Live video requires a working Android surface encoder. Waydroid can freeze its
+container when no window is open, which leaves ADB connected but stops video.
+Live view resumes an already-running frozen Waydroid container through its native
+D-Bus method when its IP matches the selected device. It does not open Waydroid's
+full window or start a stopped session. Closing the stream leaves the game running.
+While the view is open, it checks for re-freezing every three seconds. Closing the
+view cancels these checks, so Waydroid resumes its normal idle behavior.
+A successful browser connection alone does not mean video works; the server checks
+for a video packet before offering the stream. If your Android build cannot encode
+video, use the existing screenshot viewer. Waydroid Android 13 H.264 capture and
+LAN browser playback were verified on the test host after resolving its frozen state.
+
 Shared services live in `control/` and `calibration/`; routes/authentication in
 `src/coc_bot/web/`; React/TypeScript source in top-level `web/`. Desktop compatibility
 imports preserve existing callers. Game recognition and donation/farming methods

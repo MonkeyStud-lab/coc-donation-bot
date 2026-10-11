@@ -66,6 +66,7 @@ function App(){
   const [gallery,setGallery]=useState<{id:string;label:string}[]>([]);
   const [practice,setPractice]=useState(false),[busy,setBusy]=useState(false);
   const [viewer,setViewer]=useState(false);
+  const [live,setLive]=useState(false);
   const [captureIntent,setCaptureIntent]=useState<Part|null>(null);
   const pendingCapture=useRef(false),logEnd=useRef<HTMLDivElement>(null);
   function acceptSession(x:{csrf:string;password_required:boolean}){
@@ -190,7 +191,8 @@ function App(){
         <button className="danger" disabled={!online||(!status?.active&&!status?.manual_control)} onClick={()=>command('stop')}>Stop</button>
         <button disabled={!online||busy||status?.manual_control||
           (status?.active&&(status.operation!=='bot'||status.state!=='running'))}
-          onClick={()=>attempt(()=>api('farm','POST'))}>Farm now</button></div>
+          onClick={()=>attempt(()=>api('farm','POST'))}>Farm now</button>
+        <button disabled={!online} onClick={()=>setLive(true)}>Live view</button></div>
       <div className="timers"><span>Farm <strong>{fmt(status?.timers.farm_seconds??null)}</strong></span>
         <span>{status?.on_break?'Break ends':'Next break'} <strong>{fmt(status?.timers.break_seconds??null)}</strong></span></div>
       <label className="toggle"><input type="checkbox" checked={practice} disabled={!!status?.active} onChange={e=>setPractice(e.target.checked)}/>Practice mode</label>
@@ -282,12 +284,83 @@ function App(){
     </>}
     </main>
     {viewer&&<GameViewer close={()=>setViewer(false)}/>}
+    {live&&<LiveView close={()=>setLive(false)} active={!!status?.active} stop={()=>command('stop')}/>}
     {capture&&<Editor capture={capture} part={editor} locked={locked} refresh={()=>captureScreen(editor)}
       close={()=>{setCapture(null);setEditor(null);}}
       save={async(selection,cols,rows,jitter)=>{const saved=await attempt(()=>api('setup','POST',{
         capture:capture.id,part:editor!.key,selection,revision:capture.revision,cols,rows,jitter}));
         if(saved){setSetup(saved as SetupData);setCapture(null);setEditor(null);setNotice('Calibration saved');if(queue.length)advance();}}}/>}
   </div>;
+}
+
+function LiveView({close,active,stop}:{close:()=>void;active:boolean;stop:()=>void}){
+  const dialog=useRef<HTMLElement|null>(null);useDialog(dialog,close);
+  const video=useRef<HTMLVideoElement>(null);
+  const socket=useRef<WebSocket|null>(null),gesture=useRef<{point:number[];pointer:number;token:string}|null>(null);
+  const [token,setToken]=useState<string|null>(null),[controlError,setControlError]=useState(''),[playing,setPlaying]=useState(false);
+  function send(value:object){if(socket.current?.readyState===WebSocket.OPEN)socket.current.send(JSON.stringify(value));}
+  function point(e:React.PointerEvent<HTMLVideoElement>){
+    const v=e.currentTarget,r=v.getBoundingClientRect();
+    if(!v.videoWidth||!v.videoHeight)return null;
+    const scale=Math.min(r.width/v.videoWidth,r.height/v.videoHeight),w=v.videoWidth*scale,h=v.videoHeight*scale;
+    const x=(e.clientX-r.left-(r.width-w)/2)/w,y=(e.clientY-r.top-(r.height-h)/2)/h;
+    return x>=0&&x<=1&&y>=0&&y<=1?[x,y]:null;
+  }
+  const [state,setState]=useState('Connecting…'),[error,setError]=useState('');
+  const [retry,setRetry]=useState(0);
+  useEffect(()=>{
+    let disposed=false,failed=false,timer:ReturnType<typeof setInterval>,timeout:ReturnType<typeof setTimeout>;
+    const pc=new RTCPeerConnection({iceServers:[]});
+    pc.addTransceiver('video',{direction:'recvonly'});
+    const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+BASE+'/api/live/ws');
+    socket.current=ws;setToken(null);setPlaying(false);gesture.current=null;
+    setError('');setState('Connecting…');
+    const element=video.current,played=()=>clearTimeout(timeout);
+    element?.addEventListener('playing',played);
+    function fail(message:string){if(disposed||failed)return;failed=true;setState('Unavailable');setError(message);clearInterval(timer);clearTimeout(timeout);ws.close();pc.close();}
+    pc.ontrack=e=>{if(video.current){video.current.srcObject=new MediaStream([e.track]);video.current.play().catch(()=>fail('Playback blocked. Close and reopen Live view.'));}};
+    pc.onconnectionstatechange=()=>{
+      if(pc.connectionState==='failed')fail('Live connection failed. Retry to reconnect.');
+    };
+    ws.onmessage=async e=>{
+      try{
+        const m=JSON.parse(e.data);
+        if(m.type==='control'){setToken(m.token);setControlError(m.message||'');gesture.current=null;return;}
+        if(m.type==='error'){fail(m.message);return;}
+        if(m.type==='ready'){
+          await pc.setLocalDescription(await pc.createOffer());
+          // Send a complete offer, including LAN ICE candidates. No public relay.
+          if(pc.iceGatheringState!=='complete')await new Promise<void>(resolve=>{
+            const changed=()=>{if(pc.iceGatheringState==='complete'){pc.removeEventListener('icegatheringstatechange',changed);resolve();}};
+            pc.addEventListener('icegatheringstatechange',changed);changed();
+          });
+          if(!disposed&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'offer',sdp:pc.localDescription!.sdp}));
+        }
+        if(m.type==='answer'){
+          await pc.setRemoteDescription({type:'answer',sdp:m.sdp});
+          timer=setInterval(()=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'ping'}));},5000);
+        }
+      }catch(e){fail((e as Error).message);}
+    };
+    ws.onclose=()=>{if(!disposed)fail('Live view disconnected. Retry to reconnect.');};
+    ws.onerror=()=>fail('Unable to connect to live view.');
+    timeout=setTimeout(()=>fail('Live view timed out. Check the device connection and retry.'),25000);
+    return ()=>{disposed=true;clearInterval(timer);clearTimeout(timeout);ws.close();pc.close();socket.current=null;gesture.current=null;element?.removeEventListener('playing',played);if(element)element.srcObject=null;};
+  },[retry]);
+  return <div className="modal-backdrop"><section ref={dialog} className="modal" role="dialog" aria-modal="true" aria-label="Live view">
+    <div className="toolbar"><h2>Live view</h2><span>{playing&&!error?(token?'Live · You have control':'Live · View only'):state}</span>
+      <button disabled={!playing||!!error||(!token&&active)} onClick={()=>{gesture.current=null;setControlError('');send({type:token?'release_control':'take_control'});}}>{token?'Release control':'Take control'}</button>
+      <button className="danger" disabled={!active&&!token} onClick={()=>{gesture.current=null;stop();}}>Stop</button><button onClick={close}>Close</button></div>
+    {controlError&&<div className="notice" role="alert">{controlError}</div>}
+    {error&&<div className="notice" role="alert">{error}<button onClick={()=>setRetry(x=>x+1)}>Retry</button></div>}
+    <video ref={video} hidden={!!error} className={'game live-video'+(token?' controlled':'')} autoPlay playsInline muted onPlaying={()=>{setPlaying(true);setState('Live');}}
+      onPointerDown={e=>{if(!token||e.button!==0)return;const p=point(e);if(!p)return;gesture.current={point:p,pointer:e.pointerId,token};e.currentTarget.setPointerCapture(e.pointerId);e.preventDefault();}}
+      onPointerCancel={()=>{gesture.current=null;}}
+      onPointerUp={e=>{const g=gesture.current;if(!g||g.pointer!==e.pointerId)return;gesture.current=null;const p=point(e);if(!p||!token||token!==g.token)return;
+        const v=e.currentTarget;const swipe=Math.hypot((p[0]-g.point[0])*v.videoWidth,(p[1]-g.point[1])*v.videoHeight)>12;
+        send({type:swipe?'swipe':'tap',from:g.point,to:p,token});}}/>
+    {token&&<div className="toolbar"><button onClick={()=>send({type:'key',key:'back',token})}>Android Back</button><button onClick={()=>send({type:'key',key:'home',token})}>Android Home</button></div>}
+  </section></div>;
 }
 
 function GameViewer({close}:{close:()=>void}){

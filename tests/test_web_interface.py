@@ -231,6 +231,23 @@ class WebTests(TestCase):
         self.assertFalse(self.service.snapshot()["manual_control"])
         self.assertFalse(self.service.controller.snapshot().active)
 
+    def test_live_failure_is_clear_and_does_not_take_input_ownership(self):
+        with patch("coc_bot.web.live.check_dependencies", side_effect=ValueError("Install live view first")):
+            with self.client.websocket_connect("/api/live/ws", headers={"Origin": "http://testserver"}) as ws:
+                self.assertEqual(ws.receive_json(), {"type": "error", "message": "Install live view first"})
+        self.assertFalse(self.service.snapshot()["manual_control"])
+        self.assertFalse(self.service.controller.snapshot().active)
+
+    def test_live_rejects_wrong_origin_and_logged_out_session(self):
+        from starlette.websockets import WebSocketDisconnect
+        with self.assertRaises(WebSocketDisconnect):
+            with self.client.websocket_connect("/api/live/ws", headers={"Origin": "http://evil.invalid"}):
+                pass
+        self.client.post("/api/logout", headers=self.headers)
+        with self.assertRaises(WebSocketDisconnect):
+            with self.client.websocket_connect("/api/live/ws", headers={"Origin": "http://testserver"}):
+                pass
+
     def test_first_launch_isolation_reset_and_shared_ownership(self):
         original = (self.home / "data").glob("*")
         before = {p.name: p.read_bytes() for p in original if p.is_file()}

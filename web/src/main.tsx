@@ -297,9 +297,10 @@ function LiveView({close,active,stop}:{close:()=>void;active:boolean;stop:()=>vo
   const dialog=useRef<HTMLElement|null>(null);useDialog(dialog,close);
   const video=useRef<HTMLVideoElement>(null);
   const socket=useRef<WebSocket|null>(null),gesture=useRef<{point:number[];pointer:number;token:string}|null>(null);
+  const pointerInputAt=useRef(-Infinity);
   const [token,setToken]=useState<string|null>(null),[controlError,setControlError]=useState(''),[playing,setPlaying]=useState(false);
   function send(value:object){if(socket.current?.readyState===WebSocket.OPEN)socket.current.send(JSON.stringify(value));}
-  function point(e:React.PointerEvent<HTMLVideoElement>){
+  function point(e:React.PointerEvent<HTMLVideoElement>|React.MouseEvent<HTMLVideoElement>){
     const v=e.currentTarget,r=v.getBoundingClientRect();
     if(!v.videoWidth||!v.videoHeight)return null;
     const scale=Math.min(r.width/v.videoWidth,r.height/v.videoHeight),w=v.videoWidth*scale,h=v.videoHeight*scale;
@@ -357,8 +358,10 @@ function LiveView({close,active,stop}:{close:()=>void;active:boolean;stop:()=>vo
       onPointerDown={e=>{if(!token||e.button!==0)return;const p=point(e);if(!p)return;gesture.current={point:p,pointer:e.pointerId,token};e.currentTarget.setPointerCapture(e.pointerId);e.preventDefault();}}
       onPointerCancel={()=>{gesture.current=null;}}
       onPointerUp={e=>{const g=gesture.current;if(!g||g.pointer!==e.pointerId)return;gesture.current=null;const p=point(e);if(!p||!token||token!==g.token)return;
+        pointerInputAt.current=performance.now();
         const v=e.currentTarget;const swipe=Math.hypot((p[0]-g.point[0])*v.videoWidth,(p[1]-g.point[1])*v.videoHeight)>12;
-        send({type:swipe?'swipe':'tap',from:g.point,to:p,token});}}/>
+        send({type:swipe?'swipe':'tap',from:g.point,to:p,token});}}
+      onClick={e=>{if(!token||performance.now()-pointerInputAt.current<500)return;const p=point(e);if(p)send({type:'tap',from:p,token});}}/>
     {token&&<div className="toolbar"><button onClick={()=>send({type:'key',key:'back',token})}>Android Back</button><button onClick={()=>send({type:'key',key:'home',token})}>Android Home</button></div>}
   </section></div>;
 }

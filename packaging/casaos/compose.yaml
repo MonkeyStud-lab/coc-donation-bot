@@ -1,0 +1,71 @@
+name: coc-bot
+services:
+  setup:
+    image: ${COC_IMAGE:-coc-bot-casaos:local}
+    user: "0:0"
+    entrypoint: ["/bin/sh", "/app/packaging/casaos/bootstrap.sh"]
+    privileged: true
+    pid: host
+    network_mode: host
+    environment:
+      COC_ADOPT_USER: ${COC_ADOPT_USER:-}
+      COC_WAYLAND_DISPLAY: ${COC_WAYLAND_DISPLAY:-wayland-0}
+      COC_IMPORT_PROFILE: ${COC_IMPORT_PROFILE:-}
+      COC_SKIP_HOST_SETUP: ${COC_SKIP_HOST_SETUP:-0}
+    volumes:
+      - type: bind
+        source: /
+        target: /host
+        bind:
+          propagation: rslave
+    restart: "no"
+  bot:
+    image: ${COC_IMAGE:-coc-bot-casaos:local}
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    user: "1000:1000"
+    network_mode: host
+    environment:
+      COC_WEB_HOST: ${COC_WEB_HOST:-auto}
+      COC_WEB_PORT: ${COC_WEB_PORT:-8767}
+      COC_WEB_ORIGIN: ${COC_WEB_ORIGIN:-}
+      COC_HOST_SOCKET: /host-runtime/host.sock
+      COC_BOT_HOME: /profile
+    volumes:
+      - /DATA/AppData/coc-bot/profile:/profile
+      - /run/coc-waydroid:/host-runtime:ro
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    stop_grace_period: 45s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; from pathlib import Path; u=json.loads(Path('/tmp/coc-web-address.json').read_text())['url']; urllib.request.urlopen(u+'/api/session',timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+    x-casaos:
+      envs:
+        - container: COC_WEB_HOST
+          description:
+            en_us: Host LAN address for opening the dashboard
+        - container: COC_WEB_ORIGIN
+          description:
+            en_us: Full dashboard URL, including its port
+x-casaos:
+  icon: ${COC_ICON_URL:-https://raw.githubusercontent.com/MonkeyStud-lab/coc-donation-bot/main/web/public/casaos-icon.png}
+  architectures: [amd64]
+  main: bot
+  category: Utilities
+  title:
+    en_us: CoC Bot
+  tagline:
+    en_us: Browser controls with managed Waydroid startup
+  description:
+    en_us: Installs host prerequisites and manages a Waydroid session. Import your own Clash APK files, then sign in through Live view. Existing calibrations are backed up before host installation.
+  port_map: "8767"
+  scheme: http
+  index: /

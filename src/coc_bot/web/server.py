@@ -71,6 +71,11 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
         from loguru import logger
         sink = logger.add(lambda message: service.events.append(
             message.record["level"].name, message.record["message"]))
+        import os
+        if os.environ.get("COC_HOST_SOCKET") and scope is None:
+            from coc_bot.control.platform import Platform
+            service.platform = Platform()
+            service.platform.start()
         try:
             yield
         finally:
@@ -105,10 +110,11 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
                         request.headers.get("x-csrf-token", ""), csrf):
                     return Response("Request token rejected", status_code=403)
             length = request.headers.get("content-length", "0")
-            max_size = 50*1024*1024 if api_path == "/api/backups/import" else 100000
+            uploads = {"/api/backups/import": 50*1024*1024, "/api/runtime/import-game": 2*1024*1024*1024}
+            max_size = uploads.get(api_path, 100000)
             if not length.isdigit() or int(length) > max_size:
                 return Response("Request too large", status_code=413)
-            if request.method not in ("GET", "HEAD") and api_path != "/api/backups/import":
+            if request.method not in ("GET", "HEAD") and api_path not in uploads:
                 chunks, size = [], 0
                 async for chunk in request.stream():
                     size += len(chunk)
@@ -196,6 +202,39 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
     @app.post("/api/farm")
     def farm():
         return {"message": service.farm()}
+
+    @app.post("/api/runtime/retry")
+    def retry_runtime():
+        if service.platform is None:
+            raise HTTPException(404, "Managed runtime is not enabled")
+        with service.lock:
+            service.idle()
+            service.platform.start()
+        return service.snapshot()
+
+    @app.post("/api/runtime/import-game")
+    async def import_game(request: Request):
+        if service.platform is None:
+            raise HTTPException(404, "Managed runtime is not enabled")
+        import tempfile
+        from coc_bot.control.platform import import_apks, APK_LIMIT
+        upload_dir = project_root() / "data"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryFile(dir=upload_dir) as file:
+            size = 0
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > APK_LIMIT:
+                    raise HTTPException(413, "APK archive exceeds 2 GB")
+                await asyncio.to_thread(file.write, chunk)
+            file.seek(0)
+            def publish():
+                with service.lock:
+                    with service.mutation():
+                        import_apks(file, project_root() / "data/game-apks")
+                    service.platform.start()
+            await asyncio.to_thread(publish)
+        return service.snapshot()
 
     @app.get("/api/settings")
     def settings():

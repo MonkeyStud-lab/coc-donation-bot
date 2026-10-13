@@ -3,7 +3,8 @@ import {createRoot} from 'react-dom/client';
 import './style.css';
 
 type Status = {active:boolean; state:string; operation:string|null; activity:string|null; result:any; error:string|null;
-  timers:{farm_seconds:number|null;break_seconds:number|null}; manual_control:boolean;on_break:boolean;settings_update:string|null};
+  timers:{farm_seconds:number|null;break_seconds:number|null}; manual_control:boolean;on_break:boolean;settings_update:string|null;
+  platform:{stage:string;message:string;ready:boolean;busy:boolean;error:string|null}|null};
 type Entry = {id:number; level:string; text:string; at:string};
 type Field = {key:string;label:string;description:string;kind:string;choices:string[];section:string;advanced:boolean};
 type SettingsData = {revision:string;values:Record<string,any>;fields:Field[];themes:any[]};
@@ -159,7 +160,7 @@ function App(){
     if(!keys.length){setNotice('All required calibration parts are saved');return;}
     setSelected(keys[0]);setQueue(keys.slice(1));
   }
-  const locked=!!status?.active||!!status?.manual_control||!!status?.settings_update||busy||!online;
+  const locked=!!status?.active||!!status?.manual_control||!!status?.settings_update||!!status?.platform?.busy||busy||!online;
   const part=setup?.steps.flatMap(s=>s.parts).find(p=>p.key===selected);
   async function save(){
     const version=draftVersion.current;
@@ -180,6 +181,14 @@ function App(){
     const updated=await attempt(()=>api(path,'POST',body));
     if(updated)setStatus(updated as Status);
   }
+  async function importGame(file:File){
+    await attempt(async()=>{
+      const response=await fetch(BASE+'/api/runtime/import-game',{method:'POST',
+        headers:{'Content-Type':'application/zip','X-CSRF-Token':csrf},body:file});
+      if(!response.ok)throw new Error(await response.text());
+      setStatus(await response.json());setNotice('Game archive imported. Preparing Clash…');
+    });
+  }
   if(checkingSession||(!signed&&!passwordRequired))return <main className="login" role="status">Connecting…</main>;
   if(!signed)return <main className="login"><form onSubmit={e=>{e.preventDefault();attempt(async()=>{
     const result=await api('login','POST',{password});csrf=result.csrf;setSigned(true);setPassword('');
@@ -198,12 +207,20 @@ function App(){
     <header><h1>{page}</h1><span className={'connection '+(online?'connected':'')}>
       {online?'Connected':'Reconnecting'}</span></header>
     {notice&&<div className="notice" role="status">{notice}<button aria-label="Dismiss message" onClick={()=>setNotice('')}>×</button></div>}
+    {status?.platform&&!status.platform.ready&&<div className="notice" role="status">{status.platform.message}
+      {!status.platform.busy&&<button disabled={locked} onClick={()=>command('runtime/retry')}>Retry startup</button>}
+      {status.platform.stage==='needs_game'&&<label className="upload">Import Clash APK archive
+        <input type="file" accept=".zip" disabled={locked} onChange={e=>{
+          const file=e.target.files?.[0];e.target.value='';if(file)importGame(file);
+        }}/></label>}
+      {status.platform.busy&&<button className="danger" disabled={!online} onClick={()=>command('stop')}>Stop</button>}
+    </div>}
     {page==='Dashboard'&&<>
       <section className="play"><span className="chip">{status?.active?
         (status.state==='running'&&status.activity?status.activity:status.operation+' · '+status.state):status?.state||'Stopped'}</span>
-      <div className="controls"><button className="primary" disabled={locked} onClick={()=>command('start',{practice})}>Start</button>
+      <div className="controls"><button className="primary" disabled={locked||!!(status?.platform&&!status.platform.ready)} onClick={()=>command('start',{practice})}>Start</button>
         <button className="danger" disabled={!online||(!status?.active&&!status?.manual_control&&!status?.settings_update&&!savingSettings)} onClick={()=>command('stop')}>Stop</button>
-        <button disabled={!online||busy||status?.manual_control||
+        <button disabled={!online||busy||status?.manual_control||!!(status?.platform&&!status.platform.ready)||
           (status?.active&&(status.operation!=='bot'||status.state!=='running'))}
           onClick={()=>attempt(()=>api('farm','POST'))}>Farm now</button>
         <button disabled={!online} onClick={()=>setLive(true)}>Live view</button></div>

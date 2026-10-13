@@ -105,6 +105,14 @@ For a clickable launcher, use **Diagnostics → Actions → Create desktop short
 and Clash of Clans before starting the bot. If Ubuntu asks, choose **Allow Launching**
 on the shortcut.
 
+### CasaOS package (development)
+
+A CasaOS package is being tested. It includes automatic host preparation for
+Waydroid and a container for the browser dashboard. Existing-session testing has
+passed; clean installation and unattended reboot remain acceptance checks.
+Your game APKs and calibration are kept in private storage, outside the image.
+See [CasaOS setup and limitations](docs/CASAOS_PACKAGE.md) before migrating.
+
 ### Optional farming
 
 1. In the game, select the army you want to use for unranked attacks.

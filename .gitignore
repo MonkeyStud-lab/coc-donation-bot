@@ -24,6 +24,12 @@ data/labelstudio/
 data/models/
 data/collection/
 data/live/
+data/game-apks/
+data/ocr-cache/
+data/torch-cache/
+data/.calibration.lock
+*.apk
+clash-apks*.zip
 logs/
 .setup_linux_stamp
 

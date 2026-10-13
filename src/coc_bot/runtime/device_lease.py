@@ -17,9 +17,21 @@ class DeviceLease:
         name = hashlib.sha256(device.encode()).hexdigest()
         self.device = device
         self.path = Path(tempfile.gettempdir()) / f"coc-bot-device-{name}.lock"
+        if os.environ.get("COC_HOST_SOCKET") and device.startswith("calibration:"):
+            # Shared profile storage synchronizes container edits with host backups.
+            self.path = Path(device.removeprefix("calibration:")) / "data/.calibration.lock"
         self.handle = None
+        self.bridge = None
 
     def __enter__(self):
+        if os.environ.get("COC_HOST_SOCKET") and not self.device.startswith(("web-server:", "calibration:")):
+            from coc_bot.host_bridge import acquire_lease
+            try:
+                self.bridge = acquire_lease(self.device)
+            except RuntimeError as exc:
+                raise DeviceBusy(str(exc)) from exc
+            return self
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.handle = self.path.open("a+b")
         self.handle.seek(0, os.SEEK_END)
         if self.handle.tell() == 0:
@@ -40,6 +52,12 @@ class DeviceLease:
         return self
 
     def __exit__(self, *args):
+        if self.bridge is not None:
+            from coc_bot.host_bridge import release_lease
+            try:
+                release_lease(self.bridge)
+            finally:
+                self.bridge = None
         if self.handle is not None:
             self.handle.close()
             self.handle = None

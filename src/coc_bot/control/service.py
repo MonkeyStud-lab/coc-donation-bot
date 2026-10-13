@@ -43,6 +43,7 @@ class ControlService:
         self.peers = []
         self.settings_update = None
         self._settings_cancel = None
+        self.platform = None
 
     def saved_timers(self):
         """Read frozen persisted clocks without rerolling or rewriting anything."""
@@ -78,12 +79,15 @@ class ControlService:
 
     def idle(self):
         if any(s.controller.snapshot().active or s.manual_owner or s.settings_update
+               or (s.platform is not None and s.platform.snapshot()["busy"])
                for s in [self, *self.peers]):
             raise BusyError("Stop the bot and finish the current tool first.")
 
     def start(self, practice=False):
         with self.lock:
             self.idle()
+            if self.platform is not None and not self.platform.snapshot()["ready"]:
+                raise BusyError("Finish Android and game setup before starting the bot.")
             from coc_bot.config import load_config
             config = load_config()
             if not config.calibrated:
@@ -97,6 +101,8 @@ class ControlService:
         with self.lock:
             if self._settings_cancel is not None:
                 self._settings_cancel.set()
+            if self.platform is not None:
+                self.platform.stop()
             self.controller.stop()
             if self.manual_cancel is not None:
                 self.manual_cancel.set()
@@ -188,6 +194,8 @@ class ControlService:
 
     def farm(self):
         with self.lock:
+            if self.platform is not None and not self.platform.snapshot()["ready"]:
+                raise BusyError("Finish Android and game setup before farming.")
             if self.settings_update:
                 raise BusyError("Wait for the settings update to finish")
             if self.controller.snapshot().active and self.operation == "bot":
@@ -219,7 +227,10 @@ class ControlService:
             from coc_bot.runtime.device_lease import DeviceLease
             session = self.session(cancel)
             with DeviceLease(session.config.adb_device):
-                return getattr(session, actions[action])()
+                result = getattr(session, actions[action])()
+                if self.platform is not None and action in ("force_stop", "close_waydroid"):
+                    self.platform.update("stopped", "Game closed — use Retry startup when ready")
+                return result
         self.job(action, execute)
 
     def snapshot(self):
@@ -269,6 +280,7 @@ class ControlService:
                             "timers": dict(self._timer_snapshot),
                             "manual_control": self.manual_owner is not None,
                             "settings_update": self.settings_update,
+                            "platform": self.platform.snapshot() if self.platform is not None else None,
                             "activity": activity,
                             "on_break": self._break_active}
 

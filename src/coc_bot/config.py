@@ -269,8 +269,10 @@ def load_config(
     if deploy_side not in ("left", "right"):
         deploy_side = "left"
 
+    from coc_bot.host_bridge import managed_device
+
     return BotConfig(
-        adb_device=os.environ.get("ADB_DEVICE", adb.get("device", "127.0.0.1:5555")),
+        adb_device=managed_device() or os.environ.get("ADB_DEVICE", adb.get("device", "127.0.0.1:5555")),
         coc_package=adb.get("coc_package", "com.supercell.clashofclans"),
         template_threshold=vision.get("template_threshold", 0.82),
         donate_button_threshold=vision.get("donate_button_threshold", 0.78),

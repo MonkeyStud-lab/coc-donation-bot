@@ -94,6 +94,29 @@ class WebTests(TestCase):
             body = {"revision": revision(), "values": values}
             self.assertEqual(self.client.put("/api/settings", headers=self.headers, json=body).status_code, 400)
 
+    def test_managed_runtime_import_is_optional_guarded_and_preserves_calibration(self):
+        from types import SimpleNamespace
+        import io
+        import zipfile
+        self.assertEqual(self.client.post("/api/runtime/retry", headers=self.headers).status_code, 404)
+        starts = []
+        self.service.platform = SimpleNamespace(
+            snapshot=lambda: {"ready": False, "busy": False, "stage": "needs_game", "message": "Import", "error": None},
+            start=lambda: starts.append(True), stop=lambda: None)
+        self.assertEqual(self.client.post("/api/runtime/import-game", content=b"bad").status_code, 403)
+        self.assertEqual(self.client.post("/api/runtime/import-game", headers=self.headers, content=b"bad").status_code, 400)
+        self.assertEqual(self.client.post("/api/runtime/import-game", headers={**self.headers,
+            "Content-Length": str(2*1024**3+1)}, content=b"bad").status_code, 413)
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w") as file:
+            file.writestr("base.apk", b"private-installation-file")
+        with patch("coc_bot.control.platform.validate_apks"):
+            response = self.client.post("/api/runtime/import-game", headers=self.headers, content=archive.getvalue())
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(starts, [True])
+        self.assertEqual((self.home / "data/game-apks/part-00.apk").read_bytes(), b"private-installation-file")
+        self.assertFalse((self.home / "data/calibrated.yaml").exists())
+
     def test_jobs_priority_stop_and_busy_settings(self):
         entered = threading.Event()
         def job(cancel):

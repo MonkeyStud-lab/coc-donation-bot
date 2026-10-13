@@ -1,0 +1,15 @@
+.git
+.venv
+web/node_modules
+build
+logs
+experiments
+profile
+backups
+runtime
+*.apk
+*.zip
+**/__pycache__
+data/*
+!data/game
+!data/game/**

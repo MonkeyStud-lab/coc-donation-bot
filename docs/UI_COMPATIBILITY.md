@@ -65,10 +65,17 @@ spelling `End Battie` is accepted only with the second anchor. The same gate app
 frame immediately before deployment; generic BATTLE classification is insufficient.
 Missing OCR fails closed. Calibration and the programmed tap sequence are preserved.
 
-The full-screen **Capital Gold** reward can appear after Return Home. Its title,
+Full-screen resource rewards can appear after Return Home. Recognition covers
+Gold, Elixir, Dark Elixir, Capital Gold, Raid Medals, Gems, Builder Gold and
+Builder Elixir. The warm brown reward hall on both sides, a supported title,
 green button, and readable **Continue** label are checked together before a tap.
+Long resource titles tolerate one substituted OCR letter (the observed Dark
+Elixir title read `ddrkelixir`); unrelated titles and generic green buttons fail.
 Both donation startup and attack-return recovery dismiss this page before
 attempting to open clan chat; it must not be classified as the home village.
+The inner home-confirmation loop checks each fresh frame too, allowing successive
+resource reveals to clear without repeatedly tapping the clan-chat coordinates.
+Unknown reward names or a different backdrop need a new inspected screenshot.
 
 ## Live validation — October 14, 2026
 

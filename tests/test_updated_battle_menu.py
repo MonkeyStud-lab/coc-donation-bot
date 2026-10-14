@@ -133,10 +133,40 @@ class UpdatedMenuTests(unittest.TestCase):
             self.assertFalse(nav.wait_for_battle(timeout=0))
         nav.input.tap.assert_not_called()
 
-    def test_reward_continue_requires_capital_gold_and_continue(self):
+    def reward_frame(self):
         frame=self.frame()
+        frame[:]=(40,90,150)
         cv2.rectangle(frame,(800,905),(1090,995),(40,220,100),-1)
-        for labels in (['shop'],['capitalgold','buy'],['capitalgold','continue']):
+        return frame
+
+    def test_resource_rewards_require_known_title_and_continue(self):
+        frame=self.reward_frame()
+        for labels in (['shop'],['capitalgold','buy'],['capitalgold','continue'],
+                       ['darkelixir','continue'],['ddrkelixir','continue'],['gold','continue'],['elixir','continue']):
             with patch('coc_bot.vision.battle_menu._white_label',side_effect=labels):
                 target=reward_continue_button(frame)
-                self.assertEqual(target is not None,labels==['capitalgold','continue'])
+                self.assertEqual(target is not None,len(labels)==2 and labels[1]=='continue')
+
+    def test_resource_title_and_green_button_without_reward_backdrop_are_rejected(self):
+        frame=self.frame()
+        cv2.rectangle(frame,(800,905),(1090,995),(40,220,100),-1)
+        with patch('coc_bot.vision.battle_menu._white_label',return_value='darkelixir') as ocr:
+            self.assertIsNone(reward_continue_button(frame))
+            ocr.assert_not_called()
+
+    def test_each_reward_is_cleared_before_home_confirmation(self):
+        nav=self.navigator()
+        nav.donation_nav=MagicMock()
+        nav.classifier._clan_chat_anchor_visible=MagicMock(return_value=True)
+        with patch('coc_bot.vision.battle_menu.reward_continue_button',side_effect=[(941,945),(941,945),None]):
+            self.assertEqual(nav._confirm_leave_via_clan_chat(timeout=5),'confirmed')
+        self.assertEqual(nav.input.tap.call_count,2)
+        nav.donation_nav._open_clan_chat.assert_not_called()
+
+    def test_stop_during_reward_recognition_prevents_continue_tap(self):
+        nav=self.navigator()
+        nav.donation_nav=MagicMock()
+        nav.stop_check=MagicMock(side_effect=[False,True])
+        with patch('coc_bot.vision.battle_menu.reward_continue_button',return_value=(941,945)):
+            self.assertEqual(nav._confirm_leave_via_clan_chat(timeout=5),'stopped')
+        nav.input.tap.assert_not_called()

@@ -630,7 +630,7 @@ class AttackNavigator:
             if self._stopping():
                 return False
             if reward is not None:
-                logger.info("Capital Gold reward verified — tapping Continue at {}", reward)
+                logger.info("Resource reward verified — tapping Continue at {}", reward)
                 self.input.tap(*reward, jitter=0)
                 if self._sleep(1.0):
                     return False
@@ -777,6 +777,19 @@ class AttackNavigator:
             if self._stopping():
                 return "stopped"
             frame = self.capture.screenshot()
+
+            # A sequence of resource reveals can interrupt home confirmation.
+            # Check each fresh frame before any village/chat anchors.
+            from coc_bot.vision.battle_menu import reward_continue_button
+            reward = reward_continue_button(frame, stop_check=self.stop_check)
+            if self._stopping():
+                return "stopped"
+            if reward is not None:
+                logger.info("Leave confirm: resource reward — tapping Continue at {}", reward)
+                self.input.tap(*reward, jitter=0)
+                if self._sleep(1.0):
+                    return "stopped"
+                continue
 
             if self.classifier.find_reload_game_button(frame) is not None:
                 if self.donation_nav._dismiss_popup(frame) is False:

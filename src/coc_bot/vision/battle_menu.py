@@ -52,8 +52,18 @@ def battlefield_ready(frame, *, stop_check=None):
 
 
 def reward_continue_button(frame, *, stop_check=None):
-    """Only the full-screen Capital Gold reward, never a generic green button."""
+    """Recognize resource reveals by their backdrop, title and Continue button."""
     h, w = frame.shape[:2]
+    # The full-screen reward hall is warm brown on both sides. A resource
+    # heading over the home village or a shop card is not a reward reveal.
+    for left, right in ((.02, .22), (.78, .98)):
+        side = frame[int(h*.20):int(h*.80), int(w*left):int(w*right)]
+        if not side.size:
+            return None
+        warm = cv2.inRange(cv2.cvtColor(side, cv2.COLOR_BGR2HSV),
+                           (5, 65, 25), (35, 255, 255))
+        if float(warm.mean())/255 < .55:
+            return None
     crop = frame[int(h*.86):int(h*.95), int(w*.43):int(w*.59)]
     if not crop.size:
         return None
@@ -61,7 +71,17 @@ def reward_continue_button(frame, *, stop_check=None):
                         (30, 70, 100), (90, 255, 255))
     if float(green.mean())/255 < .25:
         return None
-    if "capitalgold" not in _white_label(frame, (.43,.27,.59,.32), stop_check):
+    title = _white_label(frame, (.40,.27,.62,.32), stop_check)
+    resources = {"capitalgold", "gold", "elixir", "darkelixir", "raidmedals",
+                 "gems", "buildergold", "builderelixir"}
+    # Bold lettering can turn Dark Elixir into 'ddrkelixir'. Allow one
+    # substituted letter in long titles, still requiring backdrop + Continue.
+    readable = title in resources or any(
+        len(title) == len(name) and len(name) >= 5
+        and sum(a != b for a, b in zip(title, name)) <= 1
+        for name in resources
+    )
+    if not readable:
         return None
     if "continue" not in _white_label(frame, (.455,.875,.565,.925), stop_check):
         return None

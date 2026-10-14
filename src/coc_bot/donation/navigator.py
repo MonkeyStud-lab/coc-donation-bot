@@ -459,7 +459,7 @@ class Navigator:
         if self._stopping():
             return False
         if reward is not None:
-            logger.info("Capital Gold reward verified — tapping Continue at {}", reward)
+            logger.info("Resource reward verified — tapping Continue at {}", reward)
             self.input.tap(*reward, jitter=0)
             return True
         if reload_point is not None:

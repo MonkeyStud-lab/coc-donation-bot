@@ -71,7 +71,7 @@ def read_short_label(roi_bgr: np.ndarray, *, timeout_seconds=2.0, stop_check=Non
 
     def remember(value):
         with _LABEL_LOCK:
-            known = value and any(word in value for word in ("donat", "trade", "findamatch", "findmatch", "multiplayer", "build", "myarmy", "cookbook", "attack", "endbattle", "next"))
+            known = value and any(word in value for word in ("donat", "trade", "findamatch", "findmatch", "multiplayer", "build", "myarmy", "cookbook", "attack", "endbattle", "next", "elixir", "continue", "capitalgold", "raidmedals"))
             _LABEL_CACHE[key] = (time.monotonic() + (15 if known else 1), value)
             _LABEL_CACHE.move_to_end(key)
             while len(_LABEL_CACHE) > 256:
@@ -107,7 +107,7 @@ def read_short_label(roi_bgr: np.ndarray, *, timeout_seconds=2.0, stop_check=Non
                     compact = re.sub(r"[^a-z]", "", raw)
                     if compact:
                         texts.append(compact)
-                        if any(word in compact for word in ("donat", "trade", "findamatch", "findmatch", "multiplayer", "build", "myarmy", "cookbook", "attack", "endbattle", "next")):
+                        if any(word in compact for word in ("donat", "trade", "findamatch", "findmatch", "multiplayer", "build", "myarmy", "cookbook", "attack", "endbattle", "next", "elixir", "continue", "capitalgold", "raidmedals")):
                             return remember(compact)
     except (OSError, subprocess.TimeoutExpired, ProcessStopped) as exc:
         logger.debug("Button label OCR failed: {}", exc)

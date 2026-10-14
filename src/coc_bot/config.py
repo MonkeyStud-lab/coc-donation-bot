@@ -78,6 +78,8 @@ class BotConfig:
     farm_match_timeout_seconds: int = 120
     farm_battle_timeout_seconds: int = 210
     farm_retry_cooldown_seconds: int = 300
+    # Calibration metadata: current Battle menu launches search with one tap.
+    farm_direct_search: bool = False
     farm_edrag_deploy_taps: int = 14
     farm_hero_count: int = 4
     farm_deploy_siege: bool = True
@@ -253,6 +255,7 @@ def load_config(
         "colors",
         "grid",
         "farm_deploy_sequence",
+        "farm_direct_search",
     ):
         if key in calibrated:
             merged[key] = calibrated[key]
@@ -326,6 +329,7 @@ def load_config(
         farm_deploy_sequence=normalize_farm_deploy_sequence(
             merged.get("farm_deploy_sequence")
         ),
+        farm_direct_search=merged.get("farm_direct_search") is True,
         collection_enabled=bool((merged.get("collection") or {}).get("enabled", False)),
         collection_daily_limit=int((merged.get("collection") or {}).get("daily_limit", 200)),
         collection_storage_gb=float((merged.get("collection") or {}).get("storage_gb", 5.0)),
@@ -388,5 +392,6 @@ def save_calibrated(config: BotConfig, path: Path | None = None) -> None:
         "colors": config.colors,
         "grid": config.grid,
         "farm_deploy_sequence": normalize_farm_deploy_sequence(config.farm_deploy_sequence),
+        "farm_direct_search": config.farm_direct_search,
     }
     _atomic_yaml_dump(path, payload)

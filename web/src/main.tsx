@@ -4,7 +4,7 @@ import './style.css';
 
 type Status = {active:boolean; state:string; operation:string|null; activity:string|null; result:any; error:string|null;
   timers:{farm_seconds:number|null;break_seconds:number|null}; manual_control:boolean;on_break:boolean;settings_update:string|null;
-  platform:{stage:string;message:string;ready:boolean;busy:boolean;error:string|null}|null};
+  platform:{stage:string;message:string;ready:boolean;busy:boolean;error:string|null;game_update?:string|null}|null};
 type Entry = {id:number; level:string; text:string; at:string};
 type Field = {key:string;label:string;description:string;kind:string;choices:string[];section:string;advanced:boolean};
 type SettingsData = {revision:string;values:Record<string,any>;fields:Field[];themes:any[]};
@@ -294,6 +294,10 @@ function App(){
         {delta<0?'Previous':'Next'}</button>)}</div>}
     </>}
     {page==='Diagnostics'&&<>
+      {status?.platform&&<div className="toolbar">
+        <button disabled={locked} onClick={()=>command('runtime/update-game')}>Update Clash</button>
+        {status.platform.game_update&&<span role="status">{status.platform.game_update}</span>}
+      </div>}
       <div className="toolbar"><button disabled={locked} onClick={()=>captureScreen()}>Current screenshot</button>
         <button disabled={locked} onClick={()=>setViewer(true)}>Open game</button>
         {!!values.gui_dev_options&&<button disabled={locked} onClick={()=>attempt(async()=>{
@@ -342,17 +346,19 @@ function LiveView({close,active,stop}:{close:()=>void;active:boolean;stop:()=>vo
     return x>=0&&x<=1&&y>=0&&y<=1?[x,y]:null;
   }
   const [state,setState]=useState('Connecting…'),[error,setError]=useState('');
+  const [fps,setFps]=useState<number|null>(null);
   const [retry,setRetry]=useState(0);
   useEffect(()=>{
     let disposed=false,failed=false,timer:ReturnType<typeof setInterval>,timeout:ReturnType<typeof setTimeout>;
+    let frameTimer:ReturnType<typeof setInterval>,lastFrames=0,lastCheck=performance.now(),lastProgress=performance.now(),sampled=false;
     const pc=new RTCPeerConnection({iceServers:[]});
     pc.addTransceiver('video',{direction:'recvonly'});
     const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+BASE+'/api/live/ws');
     socket.current=ws;setToken(null);setPlaying(false);gesture.current=null;
-    setError('');setState('Connecting…');
-    const element=video.current,played=()=>clearTimeout(timeout);
+    setError('');setState('Connecting…');setFps(null);
+    const element=video.current,played=()=>{clearTimeout(timeout);lastProgress=performance.now();};
     element?.addEventListener('playing',played);
-    function fail(message:string){if(disposed||failed)return;failed=true;setState('Unavailable');setError(message);clearInterval(timer);clearTimeout(timeout);ws.close();pc.close();}
+    function fail(message:string){if(disposed||failed)return;failed=true;setPlaying(false);setFps(null);setToken(null);gesture.current=null;setState('Unavailable');setError(message);clearInterval(timer);clearInterval(frameTimer);clearTimeout(timeout);ws.close();pc.close();}
     pc.ontrack=e=>{if(video.current){video.current.srcObject=new MediaStream([e.track]);video.current.play().catch(()=>fail('Playback blocked. Close and reopen Live view.'));}};
     pc.onconnectionstatechange=()=>{
       if(pc.connectionState==='failed')fail('Live connection failed. Retry to reconnect.');
@@ -374,16 +380,34 @@ function LiveView({close,active,stop}:{close:()=>void;active:boolean;stop:()=>vo
         if(m.type==='answer'){
           await pc.setRemoteDescription({type:'answer',sdp:m.sdp});
           timer=setInterval(()=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'ping'}));},5000);
+          frameTimer=setInterval(async()=>{
+            if(disposed||failed)return;
+            try{
+              const stats=await pc.getStats();let frames:number|undefined;
+              stats.forEach(report=>{if(report.type==='inbound-rtp'&&(report.kind==='video'||report.mediaType==='video')&&typeof report.framesDecoded==='number')frames=report.framesDecoded;});
+              if(disposed||failed)return;
+              frames??=element?.getVideoPlaybackQuality?.().totalVideoFrames;
+              const now=performance.now();
+              if(document.visibilityState!=='visible'){lastProgress=now;sampled=false;setFps(null);return;}
+              if(typeof frames!=='number')return;
+              if(sampled){
+                setFps(Math.max(0,Math.round((frames-lastFrames)*1000/(now-lastCheck))));
+                if(frames>lastFrames)lastProgress=now;
+                else if(element?.readyState===4&&now-lastProgress>12000)fail('Video stopped updating. Retry to reconnect the live stream.');
+              }else{lastProgress=now;sampled=true;}
+              lastFrames=frames;lastCheck=now;
+            }catch{if(!disposed&&!failed)fail('Unable to verify live video. Retry to reconnect.');}
+          },2000);
         }
       }catch(e){fail((e as Error).message);}
     };
     ws.onclose=()=>{if(!disposed)fail('Live view disconnected. Retry to reconnect.');};
     ws.onerror=()=>fail('Unable to connect to live view.');
     timeout=setTimeout(()=>fail('Live view timed out. Check the device connection and retry.'),25000);
-    return ()=>{disposed=true;clearInterval(timer);clearTimeout(timeout);ws.close();pc.close();socket.current=null;gesture.current=null;element?.removeEventListener('playing',played);if(element)element.srcObject=null;};
+    return ()=>{disposed=true;clearInterval(timer);clearInterval(frameTimer);clearTimeout(timeout);ws.close();pc.close();socket.current=null;gesture.current=null;element?.removeEventListener('playing',played);if(element)element.srcObject=null;};
   },[retry]);
   return <div className="modal-backdrop"><section ref={dialog} className="modal" role="dialog" aria-modal="true" aria-label="Live view">
-    <div className="toolbar"><h2>Live view</h2><span>{playing&&!error?(token?'Live · You have control':'Live · View only'):state}</span>
+    <div className="toolbar"><h2>Live view</h2><span>{playing&&!error?`${token?'Live · You have control':'Live · View only'}${fps===null?'':` · ${fps} fps`}`:state}</span>
       <button disabled={!playing||!!error||(!token&&active)} onClick={()=>{gesture.current=null;setControlError('');send({type:token?'release_control':'take_control'});}}>{token?'Release control':'Take control'}</button>
       <button className="danger" disabled={!active&&!token} onClick={()=>{gesture.current=null;stop();}}>Stop</button><button onClick={close}>Close</button></div>
     {controlError&&<div className="notice" role="alert">{controlError}</div>}

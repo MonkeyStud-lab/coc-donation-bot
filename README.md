@@ -111,7 +111,11 @@ A CasaOS package is being tested. It includes automatic host preparation for
 Waydroid and a container for the browser dashboard. Existing-session testing has
 passed; clean installation and unattended reboot remain acceptance checks.
 Your game APKs and calibration are kept in private storage, outside the image.
+After a trusted game installation, the package checks for newer Clash APKs on
+startup and verifies their signing certificate against the installed game.
+Stop the bot and use **Diagnostics → Update Clash** to check immediately.
 See [CasaOS setup and limitations](docs/CASAOS_PACKAGE.md) before migrating.
+For changed game buttons, see [game UI compatibility and recalibration](docs/UI_COMPATIBILITY.md).
 
 ### Optional farming
 

@@ -161,6 +161,13 @@ scrcpy desktop window is opened. Audio is disabled. Video is capped at 1280 pixe
 WebRTC uses local network candidates without external STUN or TURN servers.
 Firewalls must allow the local WebRTC UDP connection as well as the web port.
 
+Capture starts after WebRTC negotiation so old frames do not accumulate while
+the browser connects. The Live view header shows the decoded frame rate; this
+measures received video, not screenshot polling. If a visible view stops decoding
+new frames for about 12 seconds, it displays a Retry message and releases control
+instead of keeping a frozen image marked Live. Hidden browser tabs are excluded
+from this check because browsers may suspend background playback.
+
 Live video requires a working Android surface encoder. Waydroid can freeze its
 container when no window is open, which leaves ADB connected but stops video.
 Live view resumes an already-running frozen Waydroid container through its native
@@ -169,7 +176,7 @@ full window or start a stopped session. Closing the stream leaves the game runni
 While the view is open, it checks for re-freezing every three seconds. Closing the
 view cancels these checks, so Waydroid resumes its normal idle behavior.
 A successful browser connection alone does not mean video works; the server checks
-for a video packet before offering the stream. If your Android build cannot encode
+for a fresh video packet before sending its answer. If your Android build cannot encode
 video, use the existing screenshot viewer. Waydroid Android 13 H.264 capture and
 LAN browser playback were verified on the test host after resolving its frozen state.
 

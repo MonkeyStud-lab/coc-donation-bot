@@ -203,13 +203,15 @@ async def run_live(ws, auth, origins, owner_lock, service):
             source = ScrcpySource(load_config().adb_device, path)
             from coc_bot.web.live_control import LiveControl
             control = LiveControl(service, source.device)
-            await source.start()
-            # Metadata alone is not proof that Android can produce video.
-            pending = [await source.packet()]
+            # Negotiate first: otherwise Android queues old frames while the
+            # browser gathers ICE candidates and the user initially sees a still.
+            pending = []
+            source_ready = asyncio.Event()
             failed = asyncio.Event()
             class EncodedTrack(VideoStreamTrack):
                 async def recv(self):
                     try:
+                        await source_ready.wait()
                         if pending:
                             return pending.pop()
                         return await source.packet()
@@ -227,6 +229,10 @@ async def run_live(ws, auth, origins, owner_lock, service):
                 raise ValueError("Invalid live view offer")
             await peer.setRemoteDescription(RTCSessionDescription(message["sdp"], "offer"))
             await peer.setLocalDescription(await peer.createAnswer())
+            await source.start()
+            # Metadata alone is not proof that Android can produce video.
+            pending.append(await source.packet())
+            source_ready.set()
             await ws.send_json({"type": "answer", "sdp": peer.localDescription.sdp})
             import time
             last_message = time.monotonic()

@@ -275,6 +275,8 @@ class AttackNavigator:
 
     def _find_attack_button_blob(self, frame: np.ndarray) -> tuple[int, int] | None:
         """Find the large orange Attack! rectangle (map icon) in the bottom-left."""
+        if self.classifier.find_direct_match_button(frame) is not None:
+            return None
         h, w = frame.shape[:2]
         x0, x1 = 0, int(w * 0.15)
         y0, y1 = int(h * 0.78), h
@@ -317,6 +319,13 @@ class AttackNavigator:
         return self._find_attack_button_blob(frame) is not None
 
     def _attack_menu_open(self, frame: np.ndarray, *, had_attack_chip: bool = False) -> bool:
+        if self.classifier.find_direct_match_button(frame) is not None:
+            return True
+        if self.classifier.is_donation_panel(frame):
+            return False
+        full_screen = self.classifier.classify(frame, mode=BotMode.ANY)
+        if full_screen in (ScreenType.CLAN_CHAT, ScreenType.LIVE_REPLAY):
+            return False
         screen = self.classify(frame, mode=BotMode.ATTACK)
         if screen in (ScreenType.ATTACK_MENU, ScreenType.MATCHMAKING):
             return True
@@ -406,14 +415,22 @@ class AttackNavigator:
         return False
 
     def start_unranked_battle(self) -> bool:
-        """Tap unranked Battle, then Find a Match if calibrated."""
+        """Open unranked, then confirm the visible army page before search."""
         if self._stopping():
             return False
         frame = self.capture.screenshot()
+        direct = self.classifier.find_direct_match_button(frame)
+        if direct is not None:
+            logger.info("Unranked Find a Match — opening army confirmation")
+            self.input.tap(*direct, jitter=0)
+            return not self._sleep(1.0)
         if not self._tap_named("unranked_battle", frame):
             return False
         if self._sleep(1.0):
             return False
+        if self.config.farm_direct_search:
+            logger.info("Calibrated direct-search menu — skipping legacy Find a Match tap")
+            return True
         if self.config.tap_points.get("find_match") or self.config.templates.get("find_match"):
             frame = self.capture.screenshot()
             self._tap_named("find_match", frame)
@@ -421,15 +438,34 @@ class AttackNavigator:
                 return False
         return True
 
+    def battlefield_ready(self, frame) -> bool:
+        from coc_bot.vision.battle_menu import battlefield_ready
+        return battlefield_ready(frame, stop_check=self.stop_check)
+
     def wait_for_battle(self, timeout: float | None = None) -> bool:
         timeout = timeout if timeout is not None else float(self.config.farm_match_timeout_seconds)
         deadline = time.time() + timeout
         last_screen = "unknown"
+        army_taps = 0
+        last_army_tap = 0.0
         while time.time() < deadline:
             if self._stopping():
                 logger.info("wait_for_battle: stop requested — aborting")
                 return False
             frame = self.capture.screenshot()
+            from coc_bot.vision.battle_menu import army_confirmation_button
+            army_button = army_confirmation_button(frame, stop_check=self.stop_check)
+            if self._stopping():
+                return False
+            if army_button is not None:
+                if army_taps < 2 and time.monotonic() - last_army_tap >= 5:
+                    logger.info("Army confirmation verified — tapping Attack! at {}", army_button)
+                    self.input.tap(*army_button, jitter=0)
+                    army_taps += 1
+                    last_army_tap = time.monotonic()
+                if self._sleep(1.0):
+                    return False
+                continue
             screen = self.classify(frame, mode=BotMode.ATTACK)
             last_screen = screen.value
             if self.classifier.find_reload_game_button(frame) is not None:
@@ -437,8 +473,8 @@ class AttackNavigator:
                     self.donation_nav._dismiss_popup(frame)
                 # A disconnected matchmaking attempt is not a deployable opponent.
                 return False
-            if screen == ScreenType.BATTLE or self.classifier._looks_like_battle(frame):  # noqa: SLF001
-                logger.info("Battle field ready (screen={})", screen.value)
+            if self.battlefield_ready(frame):
+                logger.info("Battlefield verified: End Battle and Next visible (screen={})", screen.value)
                 return True
             if screen == ScreenType.MATCHMAKING:
                 logger.debug("wait_for_battle: still searching (matchmaking)")
@@ -450,9 +486,6 @@ class AttackNavigator:
             ):
                 # Load screens often false-trigger results. Only abort when side
                 # silhouettes look like a real finished fight.
-                if self.classifier._looks_like_battle(frame):  # noqa: SLF001
-                    logger.info("Battle field ready (overrode false results)")
-                    return True
                 if self.classifier.looks_like_results_side_silhouettes(frame):
                     logger.warning(
                         "Saw battle results before deploy — opponent may have ended early"
@@ -466,9 +499,8 @@ class AttackNavigator:
                     return False
                 continue
             # Only treat as "returned home" when village chrome is actually visible.
-            if screen == ScreenType.HOME and self.attack_button_visible(frame):
-                logger.warning("Returned to home during matchmaking")
-                return False
+            # A broad Attack-chip color match also fires on opponent scenery.
+            # Wait through uncertain frames; only the positive battle gate can deploy.
             if screen == ScreenType.POPUP and self.donation_nav is not None:
                 self.donation_nav._dismiss_popup(frame)  # noqa: SLF001
             logger.debug("wait_for_battle: screen={}", screen.value)
@@ -479,7 +511,7 @@ class AttackNavigator:
         frame = self.capture.screenshot()
         if self.classifier.find_reload_game_button(frame) is not None:
             return False
-        if self.classifier._looks_like_battle(frame) or self.classify(frame, mode=BotMode.ATTACK) == ScreenType.BATTLE:  # noqa: SLF001
+        if not self._stopping() and self.battlefield_ready(frame):
             logger.info("Battle field ready on final check")
             return True
         return False
@@ -592,6 +624,17 @@ class AttackNavigator:
                 return False
             frame = self.capture.screenshot()
             screen = self.classify(frame, mode=BotMode.ATTACK)
+
+            from coc_bot.vision.battle_menu import reward_continue_button
+            reward = reward_continue_button(frame, stop_check=self.stop_check)
+            if self._stopping():
+                return False
+            if reward is not None:
+                logger.info("Capital Gold reward verified — tapping Continue at {}", reward)
+                self.input.tap(*reward, jitter=0)
+                if self._sleep(1.0):
+                    return False
+                continue
 
             if self.classifier.find_reload_game_button(frame) is not None:
                 if self.donation_nav is None or self.donation_nav._dismiss_popup(frame) is False:

@@ -15,6 +15,8 @@ def validate_payload(payload, staging):
     if not isinstance(payload, dict):
         raise ValueError("Calibration must be a mapping")
     w, h = payload.get("frame_width"), payload.get("frame_height")
+    if "farm_direct_search" in payload and type(payload["farm_direct_search"]) is not bool:
+        raise ValueError("Invalid farm menu calibration")
     if type(w) is not int or type(h) is not int or not (0 < w <= 8192 and 0 < h <= 8192):
         raise ValueError("Invalid calibration screen size")
     def mapping(key):

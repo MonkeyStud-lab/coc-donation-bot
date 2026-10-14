@@ -723,26 +723,29 @@ class CalibrationWizard:
 
         if self._want_part("unranked_battle"):
             print(
-                "\nOpen the Attack menu so you see Ranked vs Battle (unranked).\n"
-                "You can tap Attack yourself, then press Enter."
+                "\nPress Battle at the bottom-left of home and stay on the Multiplayer tab.\n"
+                "Show Find a Match on the LEFT Battle card; do not press it yet.\n"
+                "Older versions: show the unranked Battle button instead."
             )
             _press_enter()
             frame = self.capture.screenshot()
-            print("\n--- Unranked Battle (NOT Ranked) ---")
+            print("\n--- Unranked Find a Match (NOT Ranked Battle / Join Tournament) ---")
             has_battle = self._has_tap("unranked_battle") or self._has_template("unranked_battle")
             if self._should_update("unranked_battle", exists=has_battle):
+                from coc_bot.vision.battle_menu import direct_match_button
+                self.config.farm_direct_search = direct_match_button(frame) is not None
                 if prompt_yes_no("Capture unranked_battle as image template?"):
-                    coords, picked = self._pick_roi("Unranked Battle button", frame)
+                    coords, picked = self._pick_roi("LEFT Find a Match button (older UI: unranked Battle)", frame)
                     self._save_template_from_frame(
                         picked, coords, "ui/unranked_battle.png", "unranked_battle"
                     )
                 pt = self._pick_point(
-                    "Tap point at CENTER of unranked Battle (not Ranked)", frame
+                    "CENTER of LEFT Find a Match (older UI: unranked Battle), never Ranked", frame
                 )
                 self.config.tap_points["unranked_battle"] = list(pt)
                 logger.info("Saved tap point unranked_battle")
 
-        if self._want_part("find_match"):
+        if self._want_part("find_match") and not self.config.farm_direct_search:
             print(
                 "\nIf Find a Match is a separate button after Battle, show that screen.\n"
                 "Otherwise skip Find a Match (Battle may start search immediately)."

@@ -6,10 +6,45 @@ import sys
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch, AsyncMock
-from coc_bot.web.live import ScrcpySource
+from coc_bot.web.live import ScrcpySource, run_live
 
 
 class LiveVideoTests(IsolatedAsyncioTestCase):
+    async def test_capture_starts_after_negotiation_and_answer_has_a_fresh_packet(self):
+        trace=[]
+        class Source:
+            def __init__(self,device,path):
+                self.device=device;self.process=SimpleNamespace(returncode=None)
+            async def start(self): trace.append('capture')
+            async def packet(self): trace.append('packet');return object()
+            async def close(self): trace.append('source_closed')
+        class Peer:
+            connectionState='connected'
+            localDescription=SimpleNamespace(sdp='answer')
+            def __init__(self,*args): pass
+            def addTrack(self,track): self.track=track
+            def getTransceivers(self): return [SimpleNamespace(setCodecPreferences=lambda codecs:None)]
+            async def setRemoteDescription(self,description): trace.append('offer')
+            async def createAnswer(self): return self.localDescription
+            async def setLocalDescription(self,description): trace.append('negotiated')
+            async def close(self): trace.append('peer_closed')
+        async def send(message): trace.append(message['type'])
+        ws=SimpleNamespace(headers={'origin':'local'},cookies={'coc_session':'test'},
+            accept=AsyncMock(),send_json=send,close=AsyncMock(),receive_json=AsyncMock(
+                side_effect=[{'type':'offer','sdp':'offer'},ValueError('test disconnect')]))
+        codec=SimpleNamespace(mimeType='video/H264',parameters={'profile-level-id':'42e01f'})
+        fake=SimpleNamespace(RTCPeerConnection=Peer,RTCConfiguration=lambda **kwargs:None,
+            RTCSessionDescription=lambda *args:None,VideoStreamTrack=object,
+            RTCRtpSender=SimpleNamespace(getCapabilities=lambda kind:SimpleNamespace(codecs=[codec])))
+        control=SimpleNamespace(token=None,release=lambda:None)
+        with patch.dict(sys.modules,{'aiortc':fake}),patch('coc_bot.web.live.check_dependencies',return_value='unused'),\
+             patch('coc_bot.web.live.ScrcpySource',Source),patch('coc_bot.config.load_config',
+             return_value=SimpleNamespace(adb_device='test')),patch('coc_bot.web.live_control.LiveControl',return_value=control):
+            await run_live(ws,SimpleNamespace(session=lambda token:True),{'local'},asyncio.Lock(),object())
+        self.assertLess(trace.index('negotiated'),trace.index('capture'))
+        self.assertLess(trace.index('packet'),trace.index('answer'))
+        self.assertIn('source_closed',trace)
+
     def source(self, data):
         source = ScrcpySource("test-device", "unused")
         source.reader = asyncio.StreamReader()

@@ -236,6 +236,15 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
             await asyncio.to_thread(publish)
         return service.snapshot()
 
+    @app.post("/api/runtime/update-game")
+    def update_game():
+        if service.platform is None:
+            raise HTTPException(404, "Managed runtime is not enabled")
+        with service.lock:
+            service.idle()
+            service.platform.start(update_game=True)
+        return service.snapshot()
+
     @app.get("/api/settings")
     def settings():
         with service.lock:

@@ -23,6 +23,8 @@ RUN python -m pip install --no-cache-dir '.[web,web-live]' \
     && chmod 755 /app/bin/waydroid /app/bin/gdbus
 ENV PATH=/app/bin:/opt/venv/bin:$PATH COC_BOT_HOME=/profile COC_HOST_SOCKET=/host-runtime/host.sock
 ENV HOME=/profile EASYOCR_MODULE_PATH=/profile/data/ocr-cache TORCH_HOME=/profile/data/torch-cache
+RUN apt-get update && apt-get install -y --no-install-recommends apksigner default-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
 USER 1000:1000
 EXPOSE 8767
 ENTRYPOINT ["python", "/app/packaging/casaos/entrypoint.py"]

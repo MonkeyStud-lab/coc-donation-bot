@@ -504,7 +504,9 @@ class DonationBot:
             frame = self.capture.screenshot()
         screen = self.navigator.classify(frame, mode=BotMode.DONATE)
         self.last_screen = screen.value
-        if screen in (ScreenType.CLAN_CHAT, ScreenType.DONATION_PANEL):
+        global_chat = screen != ScreenType.DONATION_PANEL and self.navigator.classifier.is_global_chat(
+            frame, allow_ocr=False)
+        if screen in (ScreenType.CLAN_CHAT, ScreenType.DONATION_PANEL) and not global_chat:
             self._unknown_streak = 0
             return True
         if screen in (ScreenType.UNKNOWN, ScreenType.LOADING):
@@ -525,7 +527,8 @@ class DonationBot:
         else:
             self._unknown_streak = 0
 
-        logger.info("Chat not open (screen={}) — reopening clan chat", screen.value)
+        logger.info("{} — reopening clan chat", "Global chat is open" if global_chat
+                    else f"Chat not open (screen={screen.value})")
         ok = self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request)
         self.set_mode(BotMode.DONATE)
         if not ok:

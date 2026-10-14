@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import threading
 import zipfile
+import os
 
 
 PACKAGE = "com.supercell.clashofclans"
@@ -21,11 +22,14 @@ class Platform:
         self.message = "Preparing Android"
         self.ready = False
         self.error = None
+        self.game_update = None
+        self.explicit_update = False
 
     def snapshot(self):
         with self.lock:
             return {"stage": self.stage, "message": self.message, "ready": self.ready,
-                    "busy": self.thread is not None and self.thread.is_alive(), "error": self.error}
+                    "busy": self.thread is not None and self.thread.is_alive(), "error": self.error,
+                    "game_update": self.game_update}
 
     def update(self, stage, message, *, ready=False, error=None):
         with self.lock:
@@ -34,11 +38,12 @@ class Platform:
     def stop(self):
         self.cancel.set()
 
-    def start(self):
+    def start(self, *, update_game=False):
         with self.lock:
             if self.thread is not None and self.thread.is_alive():
                 raise ValueError("Runtime startup is already in progress")
             self.cancel = threading.Event()
+            self.explicit_update = update_game
             self.update("starting", "Starting Waydroid")
             self.thread = threading.Thread(target=copy_context().run, args=(self.prepare,), daemon=True,
                                            name="casaos-runtime")
@@ -73,6 +78,19 @@ class Platform:
                 if not client.connect():
                     raise RuntimeError("Android connection could not be refreshed. Use Retry.")
                 installed = client.run_shell("pm path " + PACKAGE, check=False).stdout.strip()
+                if installed and (self.explicit_update or os.environ.get("COC_AUTO_UPDATE_GAME", "1") == "1"):
+                    from coc_bot.control.game_updates import update_game
+                    from loguru import logger
+                    try:
+                        self.game_update = update_game(client, config.data_dir,
+                            lambda message: self.update("updating_game", message), self.check_cancel)
+                        logger.info(self.game_update)
+                    except Exception as exc:
+                        self.check_cancel()
+                        self.game_update = f"Clash update check could not finish: {exc}"
+                        logger.warning(self.game_update)
+                        if self.explicit_update:
+                            raise
                 if not installed:
                     files = sorted((config.data_dir / "game-apks").glob("*.apk"))
                     if not files:

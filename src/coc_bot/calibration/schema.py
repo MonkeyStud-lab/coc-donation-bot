@@ -231,27 +231,27 @@ STEPS: dict[str, CalibrationStep] = {
     "farm": CalibrationStep(
         "farm",
         "Farm / unranked attack",
-        "Home for Attack, Attack menu for Battle, end of battle for Return Home, then battlefield for deploy taps",
+        "Home for Battle, Multiplayer menu for Find a Match, results for Return Home, battlefield for deploy taps",
         ("attack_button", "unranked_battle", "return_home"),
         (
             CalibrationPart(
                 "attack_button",
-                "Attack! button",
+                "Battle button",
                 "tap",
-                description="Home village, chat closed — Attack! button (usually bottom-left)",
+                description="Home village, chat closed — Battle (Attack! on older versions), bottom-left",
             ),
             CalibrationPart(
                 "unranked_battle",
-                "Unranked Battle",
+                "Unranked Find a Match",
                 "tap",
-                description="Attack menu open — Battle (not Ranked)",
+                description="Multiplayer menu — Find a Match on the LEFT Battle card, never Ranked",
             ),
             CalibrationPart(
                 "find_match",
-                "Find a Match / start search",
+                "Second search button (older UI)",
                 "tap",
                 optional=True,
-                description="Only if Find a Match is a separate button after Battle",
+                description="Skip on the current UI. Only for older versions with a second search screen",
             ),
             CalibrationPart(
                 "return_home",

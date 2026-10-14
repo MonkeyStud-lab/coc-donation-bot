@@ -191,3 +191,54 @@ preservation prevents container socket mounts becoming stale during restart.
 
 These checks do not satisfy the clean-host, headless reboot, or CasaOS GUI gates
 listed above. Do not describe this as a universally compatible one-click release.
+
+## Updating Clash
+
+Once a trusted copy of Clash is installed, CasaOS checks for updates each time
+its managed runtime starts. To check immediately, stop the bot and close manual
+control, then choose **Diagnostics → Update Clash**. Download progress appears
+in the dashboard. Automation stays stopped; start it again after checking the
+updated game's layout.
+
+The source is APKPure's direct HTTPS endpoint:
+`https://d.apkpure.net/b/APK/com.supercell.clashofclans?version=latest`.
+APKPure is a third-party distributor, not Supercell. Supercell's official Android
+download links use Google Play. APKMirror also publishes releases and describes
+its signature checks, but its multi-page download flow is not the integration
+used here. No Google login is added.
+
+Before installation the updater verifies the actual APK signature with
+`apksigner`, compares its SHA-256 certificate identity with the installed base
+APK, checks the package name and a strictly newer version code, and refuses
+split-only downloads. Android additionally verifies the in-place update.
+Signature rotation to a different certificate is deliberately rejected and
+requires manual review. A fresh installation still requires a trusted APK
+archive; this download endpoint cannot establish the initial trusted signer.
+
+Calibration is backed up before an update. The previous installed APK set is
+retained in `data/game-update-backup` (one previous version); account data is
+never cleared and the game is never uninstalled. These APK copies are not a
+backup of Android account data and automatic downgrade/rollback is not attempted.
+Downloads are capped at 2 GB and require 6 GB free staging space. Downloads have
+timeouts and cancellation checks. Only the HTTPS source host and its observed
+`data.winudf.com` CDN are allowed; unexpected redirects fail closed. An unavailable
+source leaves startup usable with the existing game and reports the failed check.
+An explicit update failure is shown as a runtime error; Retry startup can reopen
+the existing game. Updates never run periodically during gameplay.
+
+Set container environment `COC_AUTO_UPDATE_GAME=0` to disable startup checks;
+the Diagnostics button still works. Existing CasaOS installations need the new
+container image to gain this feature. ZIP import remains the fallback if the
+provider changes its endpoint or stops publishing compatible standalone APKs.
+
+Waydroid may keep an APK temporarily frozen during installation. The updater
+uses non-streamed ADB installation and checks the committed version even when
+ADB loses its final response. Runtime readiness still requires Clash to stay
+running. If Waydroid reports `Session: RUNNING` with `Container: STOPPED`, a host
+administrator may need to run `sudo systemctl restart waydroid-container.service`,
+then choose Retry startup in the dashboard. Do not uninstall Clash or reset
+Android to resolve this condition; both would risk losing account data.
+
+Sources: [Supercell](https://supercell.com/en/games/clashofclans/),
+[APKPure](https://apkpure.net/p/com.supercell.clashofclans),
+[APKMirror FAQ](https://www.apkmirror.com/faq/).

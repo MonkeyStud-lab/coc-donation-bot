@@ -64,6 +64,12 @@ or run it. A fresh clone does not include the private reviewed dataset or a
 trained model. Start by [collecting useful screenshots](SMART_COLLECTION.md),
 then export tasks with `python scripts/export_collection_tasks.py`.
 
+For visually reviewed screen labels and bounding boxes, use the
+[annotation workflow](ANNOTATION_WORKFLOW.md). Its exports preserve source hashes
+and sessions and explicitly distinguish AI-reviewed partial boxes from training
+ground truth. Schema version 3 adds reward reveals and visited villages so those
+screens are not forced into home or battle-results categories.
+
 For an existing Label Studio installation:
 
 1. Enable local-file serving with its document root set to this project's

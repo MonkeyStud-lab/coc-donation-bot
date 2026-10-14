@@ -78,6 +78,11 @@ class Navigator:
                     logger.info("ensure_clan_chat: stop requested — aborting")
                     return False
                 frame = self.capture.screenshot()
+                if self.classifier.is_global_chat(frame, allow_ocr=False):
+                    self._return_from_global_chat(frame)
+                    if self._sleep(0.8):
+                        return False
+                    continue
                 screen = self.classify(frame, mode=BotMode.ANY)
                 logger.debug("ensure_clan_chat: detected screen={}", screen.value)
 
@@ -367,6 +372,12 @@ class Navigator:
         if frame is None:
             frame = self.capture.screenshot()
 
+        if self.classifier.is_global_chat(frame, allow_ocr=False):
+            # Global chat moves the orange arrow. Switch back before using the
+            # calibrated clan drawer close point; the caller verifies afterward.
+            self._return_from_global_chat(frame)
+            return self.clan_chat_tab_point(frame) is not None
+
         point = self.config.tap_points.get("close_chat")
         if point:
             logger.info("Closing clan chat via tap point ({}, {})", point[0], point[1])
@@ -443,6 +454,14 @@ class Navigator:
         if self._stopping():
             return False
         reload_point = self.classifier.find_reload_game_button(frame)
+        from coc_bot.vision.battle_menu import reward_continue_button
+        reward = reward_continue_button(frame, stop_check=self.stop_check)
+        if self._stopping():
+            return False
+        if reward is not None:
+            logger.info("Capital Gold reward verified — tapping Continue at {}", reward)
+            self.input.tap(*reward, jitter=0)
+            return True
         if reload_point is not None:
             now = time.monotonic()
             self._idle_reload_times = [t for t in self._idle_reload_times if now - t < 120]

@@ -387,6 +387,9 @@ class ScreenClassifier:
         """
         if not self.live_replay_watch_armed():
             return False
+        from coc_bot.vision.battle_menu import home_build_control_visible
+        if home_build_control_visible(frame):
+            return False
         if self._open_chat_icon_visible(frame) or self._home_attack_chip_visible(frame):
             return False
         h, w = frame.shape[:2]
@@ -463,6 +466,10 @@ class ScreenClassifier:
 
         Triggered by Android BACK / red Surrender — must Cancel, never Okay.
         """
+        # The new picker has gold/green card artwork in the old dialog regions.
+        # Its verified Multiplayer / Find a Match anchors exclude surrender.
+        if self.find_direct_match_button(frame) is not None:
+            return False
         h, w = frame.shape[:2]
         # Button row on the centered card.
         y0, y1 = int(h * 0.50), int(h * 0.72)
@@ -521,6 +528,8 @@ class ScreenClassifier:
 
         Modern CoC shows a large center card with green action buttons after Attack!.
         """
+        if self.find_direct_match_button(frame) is not None:
+            return True
         if self._template_visible(frame, "attack_menu") or self._template_visible(
             frame, "unranked_battle"
         ):
@@ -552,6 +561,10 @@ class ScreenClassifier:
         if (not attack_chip) and bright_frac > 0.10 and green_frac > 0.025:
             return True
         return False
+
+    def find_direct_match_button(self, frame):
+        from coc_bot.vision.battle_menu import direct_match_button
+        return direct_match_button(frame)
 
     def _looks_like_matchmaking(self, frame: np.ndarray) -> bool:
         """Opponent-search screen — template or upper-half blue sky heuristic."""
@@ -842,6 +855,9 @@ class ScreenClassifier:
         # Android dialog covers any game flow; background anchors are irrelevant.
         if self.find_reload_game_button(frame) is not None:
             return ScreenType.POPUP
+        from coc_bot.vision.battle_menu import reward_continue_button
+        if reward_continue_button(frame) is not None:
+            return ScreenType.POPUP
         page = self.auxiliary_page(frame)
         if page is not None:
             return ScreenType(page.screen)
@@ -849,6 +865,14 @@ class ScreenClassifier:
             return ScreenType.LOADING
 
         effective = mode if mode is not None else BotMode.ANY
+        # The redesigned menu's cards otherwise resemble a live battlefield.
+        # Require the two readable menu anchors before overriding weak heuristics.
+        if effective != BotMode.DONATE and self.find_direct_match_button(frame) is not None:
+            return ScreenType.ATTACK_MENU
+        if effective != BotMode.DONATE:
+            from coc_bot.vision.battle_menu import army_confirmation_button
+            if army_confirmation_button(frame) is not None:
+                return ScreenType.ATTACK_MENU
         if effective == BotMode.HOME:
             return self._classify_home(frame)
         if effective == BotMode.DONATE:
@@ -1025,9 +1049,37 @@ class ScreenClassifier:
         """
         if self._template_visible(frame, "chat_groups"):
             return True
+        if self._global_conversation_drawer_visible(frame):
+            return True
         if not allow_ocr:
             return False
         return self._chat_groups_title_ocr_visible(frame)
+
+    def _global_conversation_drawer_visible(self, frame: np.ndarray) -> bool:
+        """The global conversation has no title, but its drawer is wider.
+
+        Require both calibrated controls on the expanded drawer edge. Matching
+        the swords icon alone is insufficient because clan chat also has tabs.
+        """
+        point = self.config.tap_points.get("clan_chat_tab")
+        close_point = self.config.tap_points.get("close_chat")
+        swords = self._load("clan_chat_tab")
+        close = self._load("close_chat")
+        if not point or not close_point or swords is None or close is None:
+            return False
+        h, w = frame.shape[:2]
+        tab = self.matcher.find(frame, swords, threshold=max(.80, self.config.template_threshold))
+        if tab is None:
+            return False
+        x, y = tab.center
+        if abs(x - point[0]) > w * .04 or abs(y - point[1]) > h * .05:
+            return False
+        arrow = self.matcher.find(frame, close, threshold=max(.85, self.config.template_threshold))
+        if arrow is None:
+            return False
+        ax, ay = arrow.center
+        return (abs(ax - x) < w * .04 and h * .05 < ay - y < h * .30
+                and ax - close_point[0] > max(40, w * .08))
 
     def _chat_groups_title_ocr_visible(self, frame: np.ndarray) -> bool:
         """True if “Chat Groups” is readable in the top-left chat drawer."""

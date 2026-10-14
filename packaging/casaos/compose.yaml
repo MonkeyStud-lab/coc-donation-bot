@@ -32,6 +32,7 @@ services:
       COC_WEB_ORIGIN: ${COC_WEB_ORIGIN:-}
       COC_HOST_SOCKET: /host-runtime/host.sock
       COC_BOT_HOME: /profile
+      COC_AUTO_UPDATE_GAME: ${COC_AUTO_UPDATE_GAME:-1}
     volumes:
       - /DATA/AppData/coc-bot/profile:/profile
       - /run/coc-waydroid:/host-runtime:ro

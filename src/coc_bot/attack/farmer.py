@@ -152,10 +152,7 @@ class AttackFarmer:
             # Opponent may already be loaded even if wait_for_battle mis-timed.
             if (
                 self.attack_nav.classifier.find_reload_game_button(frame) is None
-                and (
-                    self.attack_nav.classify(frame, mode=BotMode.ATTACK) == ScreenType.BATTLE
-                    or self.attack_nav.classifier._looks_like_battle(frame)  # noqa: SLF001
-                )
+                and self.attack_nav.battlefield_ready(frame)
             ):
                 logger.warning(
                     "wait_for_battle returned false but battle is on screen — deploying anyway"
@@ -172,6 +169,11 @@ class AttackFarmer:
             return FarmResult(False, "stopped")
 
         frame = self.capture.screenshot()
+        if not self.attack_nav.battlefield_ready(frame):
+            logger.warning("Deployment blocked: scout controls are not visible on the fresh frame")
+            return FarmResult(False, "battlefield verification failed before deploy")
+        if self._stopping():
+            return FarmResult(False, "stopped")
         logger.info(
             "Opponent ready — replaying deploy sequence ({} taps, side={})",
             len(sequence["taps"]),

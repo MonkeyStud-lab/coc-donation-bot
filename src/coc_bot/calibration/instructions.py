@@ -254,20 +254,20 @@ PART_INSTRUCTIONS: dict[str, CalibInstruction] = {
     "attack_button": CalibInstruction(
         prepare=(
             "Go to your home village.\n"
-            "CLOSE clan chat so you see the Attack button (usually bottom-left)."
+            "CLOSE clan chat so you see the Battle button (usually bottom-left)."
         ),
         do=(
-            "Crop or click the center of the Attack! button, then Confirm."
+            "Crop or click the center of the Battle button (Attack! on older versions), then Confirm."
         ),
     ),
     "unranked_battle": CalibInstruction(
         prepare=(
-            "From home, open the Attack menu so you see Ranked vs Battle.\n"
-            "You can tap Attack yourself, then continue."
+            "From home, press Battle at the bottom-left. Stay on the Multiplayer tab.\n"
+            "Do not start searching for an opponent yet."
         ),
         do=(
-            "Crop or click the center of unranked Battle "
-            "(NOT Ranked), then Confirm."
+            "Crop or click Find a Match on the LEFT Battle card, then Confirm.\n"
+            "Do not choose Ranked Battle or Join Tournament. On older versions, select unranked Battle."
         ),
     ),
     "find_match": CalibInstruction(

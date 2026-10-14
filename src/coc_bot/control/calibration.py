@@ -80,6 +80,9 @@ class Captures:
             raise ValueError("Unknown calibration part")
         config = load_config()
         w, h = meta["width"], meta["height"]
+        if key == "unranked_battle":
+            from coc_bot.vision.battle_menu import direct_match_button
+            config.farm_direct_search = direct_match_button(frame) is not None
         if key != "frame_width" and config.frame_width and (
                 config.frame_width != w or config.frame_height != h):
             raise ValueError("Screen size changed. Calibrate screen size first.")

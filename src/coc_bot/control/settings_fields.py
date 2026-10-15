@@ -36,6 +36,14 @@ def _pair(lo_hi: tuple[int, int]) -> str:
 
 
 SETTINGS: list[SettingField] = [
+    SettingField('upgrade_buildings_enabled','Automatic building upgrades','Follow Suggested upgrades using spare builders. Town Hall, heroes, walls, new buildings and purchases are excluded.','bool',lambda c:c.upgrade_buildings_enabled,'Upgrades',('upgrades','buildings_enabled')),
+    SettingField('upgrade_research_enabled','Automatic army research','Start the first eligible Suggested troop or spell research when the laboratory is free. Never spend gems or items.','bool',lambda c:c.upgrade_research_enabled,'Upgrades',('upgrades','research_enabled')),
+    SettingField('upgrade_interval_seconds','Upgrade check interval (seconds)','Check between donation rounds, never during a battle or donation. Minimum 60 seconds.','int',lambda c:c.upgrade_interval_seconds,'Upgrades',('upgrades','interval_seconds')),
+    SettingField('upgrade_builders_reserved','Builders to keep free','Do not start a building upgrade if it would leave fewer free builders than this number.','int',lambda c:c.upgrade_builders_reserved,'Upgrades',('upgrades','builders_reserved')),
+    SettingField('upgrade_gold_reserve','Gold to keep','Minimum gold remaining after an upgrade.','int',lambda c:c.upgrade_gold_reserve,'Upgrades',('upgrades','gold_reserve')),
+    SettingField('upgrade_elixir_reserve','Elixir to keep for donations','Minimum elixir remaining after building or army upgrades.','int',lambda c:c.upgrade_elixir_reserve,'Upgrades',('upgrades','elixir_reserve')),
+    SettingField('upgrade_dark_elixir_reserve','Dark elixir to keep for donations','Minimum dark elixir remaining after army research.','int',lambda c:c.upgrade_dark_elixir_reserve,'Upgrades',('upgrades','dark_elixir_reserve')),
+    SettingField('upgrade_excluded_names','Never upgrade these names','Optional comma-separated names, for example Bowler, Blacksmith. Other recommendations remain eligible.','str',lambda c:c.upgrade_excluded_names,'Upgrades',('upgrades','excluded_names')),
     SettingField("collection_enabled", "Collect useful screenshots", "Passively save unusual screens and failures for review. Does not change game actions. Takes effect after Stop/Start.", "bool", lambda c: c.collection_enabled, "Screenshot collection", ("collection", "enabled")),
     SettingField("collection_daily_limit", "Daily screenshot limit", "Maximum screenshots saved per UTC day, including failure context. Collection pauses when the limit is reached.", "int", lambda c: c.collection_daily_limit, "Screenshot collection", ("collection", "daily_limit")),
     SettingField("collection_storage_gb", "Screenshot storage limit (GB)", "Stop saving when collected images reach this size. Existing images are never automatically deleted. Review them from Library.", "float", lambda c: c.collection_storage_gb, "Screenshot collection", ("collection", "storage_gb")),
@@ -407,6 +415,10 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
             parsed: Any = bool(raw)
         elif field.kind == "int":
             parsed = int(str(raw).strip())
+            if field.key.startswith('upgrade_'):
+                lower,upper=(60,86400) if field.key=='upgrade_interval_seconds' else ((0,6) if field.key=='upgrade_builders_reserved' else (0,100_000_000))
+                if not lower <= parsed <= upper:
+                    raise ValueError(f'{field.label} must be between {lower} and {upper}')
             if field.key in (
                 "farm_interval_variance_seconds",
                 "session_limit_variance_seconds",
@@ -444,6 +456,8 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
                         break
         else:
             parsed = str(raw).strip()
+            if field.key=='upgrade_excluded_names' and len(parsed)>1000:
+                raise ValueError('Upgrade exclusions are too long')
 
         if field.key in ("collection_daily_limit", "collection_storage_gb") and parsed <= 0:
             raise ValueError(f"{field.label} must be greater than zero")

@@ -92,6 +92,12 @@ This is never required for normal local or LAN use.
   close, readiness checks, and report/activity downloads. These tools can interact
   with the game; practice mode only governs normal bot donation taps.
 
+**Building upgrades** and **Army research** in Diagnostics provide a non-spending
+**Check upgrades** action and a separate **Start recommended upgrade** action.
+Stop the bot and close manual controls first. Settings includes optional automatic
+checks and resource reserves; both upgrade automation switches start off. See
+[Suggested upgrades](UPGRADES.md) for instructions and limitations.
+
 For **Deploy tap sequence**, prepare an opponent screen and use **Pan and capture**,
 or capture an already-positioned view. Click army slots and deployment locations
 in execution order. Variation is the maximum offset on each axis, in original

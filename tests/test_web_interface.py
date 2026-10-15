@@ -81,7 +81,7 @@ class WebTests(TestCase):
 
     def test_settings_revision_and_validation(self):
         settings = self.client.get("/api/settings").json()
-        self.assertEqual(len(settings["fields"]), 38)
+        self.assertEqual(len(settings["fields"]), 46)
         self.assertEqual(len(settings["themes"]), 7)
         body = {"revision": settings["revision"], "values": {"farm_interval_seconds": 7200}}
         result = self.client.put("/api/settings", headers=self.headers, json=body)
@@ -93,6 +93,42 @@ class WebTests(TestCase):
                        {"scan_interval_ms": "200, 100"}, {"gui_theme": "missing"}, {"unknown": 1}):
             body = {"revision": revision(), "values": values}
             self.assertEqual(self.client.put("/api/settings", headers=self.headers, json=body).status_code, 400)
+
+    def test_upgrade_api_validation_and_exclusive_ownership(self):
+        self.assertEqual(self.client.post('/api/upgrades/preview', json={'kind':'research'}).status_code, 403)
+        for body in ({'kind':'gems'}, {'kind':'research','token':'x'*65}):
+            self.assertEqual(self.client.post('/api/upgrades/preview', headers=self.headers,
+                                             json=body).status_code, 422)
+        self.assertEqual(self.client.post('/api/upgrades/start', headers=self.headers,
+                                         json={'kind':'research'}).status_code, 400)
+        with patch.object(self.service, 'upgrade') as upgrade:
+            self.assertEqual(self.client.post('/api/upgrades/preview', headers=self.headers,
+                                             json={'kind':'buildings'}).status_code, 200)
+            upgrade.assert_called_once_with('buildings')
+            upgrade.reset_mock()
+            self.assertEqual(self.client.post('/api/upgrades/start', headers=self.headers,
+                                             json={'kind':'research','token':'a'*64}).status_code, 200)
+            upgrade.assert_called_once_with('research',execute=True,token='a'*64)
+        entered=threading.Event()
+        def work(cancel):
+            entered.set()
+            cancel.wait(2)
+        self.service.job('holding-device',work)
+        self.assertTrue(entered.wait(1))
+        self.assertEqual(self.client.post('/api/upgrades/preview',headers=self.headers,
+                                         json={'kind':'research'}).status_code,409)
+        self.service.stop()
+        self.assertTrue(self.service.controller.wait(1))
+
+    def test_upgrade_settings_validate_reserves_and_keep_automation_off(self):
+        config=load_config()
+        self.assertFalse(config.upgrade_buildings_enabled)
+        self.assertFalse(config.upgrade_research_enabled)
+        for values in ({'upgrade_gold_reserve':-1}, {'upgrade_builders_reserved':7},
+                       {'upgrade_interval_seconds':0}, {'upgrade_research_enabled':'true'}):
+            response=self.client.put('/api/settings',headers=self.headers,
+                                     json={'revision':revision(),'values':values})
+            self.assertEqual(response.status_code,400,response.text)
 
     def test_managed_runtime_import_is_optional_guarded_and_preserves_calibration(self):
         from types import SimpleNamespace

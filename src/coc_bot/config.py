@@ -70,6 +70,14 @@ class BotConfig:
     debug_save_frames: bool = False
     dry_run: bool = False
     farm_enabled: bool = False
+    upgrade_buildings_enabled: bool = False
+    upgrade_research_enabled: bool = False
+    upgrade_interval_seconds: int = 900
+    upgrade_builders_reserved: int = 1
+    upgrade_gold_reserve: int = 1_000_000
+    upgrade_elixir_reserve: int = 2_000_000
+    upgrade_dark_elixir_reserve: int = 50_000
+    upgrade_excluded_names: str = ''
     farm_interval_seconds: int = 3600
     farm_interval_variance_seconds: int = 300
     farm_deploy_side: str = "left"
@@ -267,6 +275,7 @@ def load_config(
     donation = merged.get("donation", {})
     clan = merged.get("clan", {})
     farm = merged.get("farm", {})
+    upgrades = merged.get("upgrades", {})
     clan_limits = _load_clan_perks(root)
     deploy_side = str(farm.get("deploy_side", "left")).strip().lower()
     if deploy_side not in ("left", "right"):
@@ -311,6 +320,14 @@ def load_config(
         clan_donation_limits=clan_limits,
         ocr_confidence_threshold=vision.get("ocr_confidence_threshold", 0.5),
         farm_enabled=bool(farm.get("enabled", False)),
+        upgrade_buildings_enabled=upgrades.get('buildings_enabled') is True,
+        upgrade_research_enabled=upgrades.get('research_enabled') is True,
+        upgrade_interval_seconds=max(60,int(upgrades.get('interval_seconds',900))),
+        upgrade_builders_reserved=max(0,min(6,int(upgrades.get('builders_reserved',1)))),
+        upgrade_gold_reserve=max(0,int(upgrades.get('gold_reserve',1_000_000))),
+        upgrade_elixir_reserve=max(0,int(upgrades.get('elixir_reserve',2_000_000))),
+        upgrade_dark_elixir_reserve=max(0,int(upgrades.get('dark_elixir_reserve',50_000))),
+        upgrade_excluded_names=str(upgrades.get('excluded_names','')),
         farm_interval_seconds=int(farm.get("interval_seconds", 3600)),
         farm_interval_variance_seconds=max(0, int(farm.get("interval_variance_seconds", 300))),
         farm_deploy_side=deploy_side,

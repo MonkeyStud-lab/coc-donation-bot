@@ -196,7 +196,7 @@ function App(){
     value={password} onChange={e=>setPassword(e.target.value)} required/></label>
     <button className="primary" disabled={busy}>Sign in</button><p role="alert">{notice}</p></form></main>;
   const fields=settings?.fields.filter(f=>(!f.advanced||values.gui_dev_options)&&
-    (advanced||BASIC_SETTINGS.has(f.key))&&
+    (advanced||BASIC_SETTINGS.has(f.key)||f.key.startsWith('upgrade_'))&&
     (f.label+' '+f.description).toLowerCase().includes(search.toLowerCase()))||[];
   return <div className="app"><aside><a className="brand" href="#" onClick={e=>e.preventDefault()}>CoC Bot</a>
     <nav>{['Dashboard','Settings','Setup','Library','Diagnostics'].map(p=><button key={p}
@@ -294,6 +294,25 @@ function App(){
         {delta<0?'Previous':'Next'}</button>)}</div>}
     </>}
     {page==='Diagnostics'&&<>
+      {(['buildings','research'] as const).map(kind=>{
+        const report=status?.result?.upgrade_report&&status.result.kind===kind?status.result:null;
+        return <section key={kind}>
+          <div className="toolbar"><span>{kind==='buildings'?'Building upgrades':'Army research'}</span>
+            <button disabled={locked} onClick={()=>command('upgrades/preview',{kind})}>Check upgrades</button>
+            <button disabled={locked||report?.status!=='ready'||!report?.token} onClick={()=>{
+              const item=report.selected;
+              if(confirm(`Start ${item.name} for ${item.cost.toLocaleString()} ${item.currency.replaceAll('_',' ')}?`))
+                command('upgrades/start',{kind,token:report.token});
+            }}>Start recommended upgrade</button></div>
+          {report&&<div role="status">
+            {report.message&&<p>{report.message}</p>}
+            {report.availability&&<p>{report.availability[0]} / {report.availability[1]} {kind==='buildings'?'builders':'research slots'} free</p>}
+            {report.recommendations?.map((item:any,index:number)=><div className="setting" key={index}>
+              <span>{item.name}</span><span>{item.cost.toLocaleString()} {item.currency.replaceAll('_',' ')} · {item.skip||'Eligible'}</span>
+            </div>)}
+          </div>}
+        </section>;
+      })}
       {status?.platform&&<div className="toolbar">
         <button disabled={locked} onClick={()=>command('runtime/update-game')}>Update Clash</button>
         {status.platform.game_update&&<span role="status">{status.platform.game_update}</span>}
@@ -318,7 +337,7 @@ function App(){
         <div className="setting" key={id}><span>{label}</span><button disabled={locked}
           onClick={()=>{if(id==='farm_clear_deploy'&&!confirm('Remove your saved farm deploy sequence?'))return;
             attempt(()=>api('diagnostics/'+id,'POST'));}}>Run</button></div>)}</section>
-      {status?.result&&!status.result?.id&&<pre className="result">{typeof status.result==='string'?status.result:JSON.stringify(status.result,null,2)}</pre>}
+      {status?.result&&!status.result?.id&&!status.result?.upgrade_report&&<pre className="result">{typeof status.result==='string'?status.result:JSON.stringify(status.result,null,2)}</pre>}
     </>}
     </main>
     {viewer&&<GameViewer close={()=>setViewer(false)}/>}

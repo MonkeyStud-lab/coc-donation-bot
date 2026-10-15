@@ -33,4 +33,5 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "coc_bot.vision" = ["assets/*.png"]
+"coc_bot.upgrades" = ["assets/*.npz"]
 "coc_bot.web" = ["static/*", "static/assets/*"]

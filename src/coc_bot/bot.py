@@ -98,6 +98,7 @@ class DonationBot:
         self._stop_requested = False
         self._farm_requested = False
         self._farm_fail_cooldown_until = 0.0
+        self._next_upgrade_check = 0.0
         self.last_screen: str = "unknown"
         self.mode = BotMode.DONATE
         self._unknown_streak = 0
@@ -348,6 +349,10 @@ class DonationBot:
         if self._stop_requested:
             return
 
+        if self._maybe_run_upgrades():
+            self.tracker.tick()
+            return
+
         if self._state == "scan_chat":
             self._do_scan_chat()
         elif self._state == "scroll_chat":
@@ -365,6 +370,40 @@ class DonationBot:
         self.tracker.tick()
         lo, hi = self.config.scan_interval_ms
         interrupted_sleep(random.uniform(lo, hi) / 1000.0, self.should_stop)
+
+    def _maybe_run_upgrades(self) -> bool:
+        if self._state not in ('scan_chat','scroll_chat') or self._stop_requested or self.config.dry_run:
+            return False
+        kinds=[kind for kind,enabled in (
+            ('buildings',self.config.upgrade_buildings_enabled),
+            ('research',self.config.upgrade_research_enabled)) if enabled]
+        if not kinds or time.monotonic()<self._next_upgrade_check:
+            return False
+        frame=self.capture.screenshot()
+        if self._has_donate_request(frame):
+            return False
+        self._next_upgrade_check=time.monotonic()+self.config.upgrade_interval_seconds
+        from coc_bot.upgrades.runner import UpgradeRunner
+        try:
+            self.set_mode(BotMode.HOME)
+            self.game_state.transition(GameState.HOME,reason='leave chat for upgrade check')
+            self.game_state.transition(GameState.UPGRADING,reason='Suggested upgrades')
+            runner=UpgradeRunner(self.config,self.capture,self.nav_input,self.navigator,self.should_stop)
+            for kind in kinds:
+                if self._stop_requested: break
+                result=runner.run(kind,execute=True)
+                logger.info('Upgrade check ({}): {} — {}',kind,result.get('status'),
+                            result.get('message','No resource spending requested'))
+                if result.get('status')=='needs_review': break
+        finally:
+            self._state_entered=time.monotonic()
+            self.set_mode(BotMode.DONATE)
+            if not self._stop_requested:
+                frame=self.capture.screenshot()
+                verified=self.navigator.classifier._clan_chat_anchor_visible(frame)
+                self.game_state.transition(GameState.CLAN_CHAT if verified else GameState.RECOVERING,
+                                           reason='upgrade check finished')
+        return True
 
     def _farm_due(self) -> bool:
         if self._farm_requested:
@@ -702,7 +741,7 @@ class DonationBot:
                 self.farmer.attack_nav.return_home_from_attack()
             except Exception:  # noqa: BLE001
                 logger.exception("return_home during recovery failed")
-        elif screen in (ScreenType.SHOP, ScreenType.CLASH_PASS):
+        elif screen in (ScreenType.SHOP, ScreenType.CLASH_PASS, ScreenType.BUILD_MENU):
             # ensure_clan_chat closes these using a verified X and fresh frames.
             # Do not send a generic BACK or assume the village is already ready.
             pass

@@ -11,6 +11,7 @@ Clash of Clans through ADB. Built for Ubuntu and Waydroid.
 
 - Clan donations with elixir verification, including open and specific requests.
 - Optional unranked attacks using a deployment sequence you program.
+- Optional Suggested building upgrades and laboratory research, with resource reserves.
 - Guided calibration, saved profiles, activity logs, and screenshot collection.
 
 ## Install
@@ -130,6 +131,15 @@ For changed game buttons, see [game UI compatibility and recalibration](docs/UI_
 
 Battle results are checked using consecutive screenshots. The timer remains
 as a fallback. See [battle completion](docs/BATTLE_COMPLETION.md) for details.
+
+### Optional upgrades
+
+In the browser dashboard, stop the bot and open **Diagnostics → Building upgrades**
+or **Army research**. **Check upgrades** previews the game's Suggested entries
+without spending. **Start recommended** starts the displayed eligible upgrade after
+fresh checks. Automatic checks are off by default; enable them and adjust resource
+reserves in **Settings → Upgrades**. See [upgrade setup and safeguards](docs/UPGRADES.md)
+for exclusions, availability rules, and handling an uncertain result.
 
 ## Update
 

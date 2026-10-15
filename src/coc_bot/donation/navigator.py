@@ -86,7 +86,7 @@ class Navigator:
                 screen = self.classify(frame, mode=BotMode.ANY)
                 logger.debug("ensure_clan_chat: detected screen={}", screen.value)
 
-                if screen in (ScreenType.SHOP, ScreenType.CLASH_PASS):
+                if screen in (ScreenType.SHOP, ScreenType.CLASH_PASS, ScreenType.BUILD_MENU):
                     if not auxiliary_recovery.close(frame) or self._sleep(0.6):
                         return False
                     # A new screenshot must prove we left the page before

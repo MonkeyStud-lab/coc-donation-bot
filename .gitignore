@@ -9,6 +9,7 @@ build/
 # Bot runtime data
 data/calibrated.yaml
 data/runtime_state.json
+data/upgrades/
 data/debug/
 data/calibration_backups/
 data/templates/

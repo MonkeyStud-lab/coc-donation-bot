@@ -26,6 +26,7 @@ class ScreenType(str, Enum):
     LIVE_REPLAY = "live_replay"
     SHOP = "shop"
     CLASH_PASS = "clash_pass"
+    BUILD_MENU = "build_menu"
     UNKNOWN = "unknown"
 
 
@@ -59,6 +60,7 @@ SCREEN_LABELS: dict[str, str] = {
     ScreenType.LIVE_REPLAY.value: "Live replay (defense)",
     ScreenType.SHOP.value: "Shop",
     ScreenType.CLASH_PASS.value: "Clash Pass",
+    ScreenType.BUILD_MENU.value: "Build / upgrades menu",
     ScreenType.UNKNOWN.value: "Unknown",
 }
 

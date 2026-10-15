@@ -53,6 +53,16 @@ farm:
   battle_timeout_seconds: 210     # max wait from first deploy; confirmed results can return earlier
   retry_cooldown_seconds: 300     # only when farm fails before deploy (menu/matchmaking)
 
+upgrades:
+  buildings_enabled: false
+  research_enabled: false
+  interval_seconds: 900
+  builders_reserved: 1
+  gold_reserve: 1000000
+  elixir_reserve: 2000000
+  dark_elixir_reserve: 50000
+  excluded_names: ""
+
 # Control window (GUI)
 gui:
   show_debug_activity: false      # DEBUG lines in Home activity log (noisy; leave off normally)

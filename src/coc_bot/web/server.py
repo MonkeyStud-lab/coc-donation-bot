@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from urllib.parse import urlparse
+from typing import Literal
 from coc_bot.control.service import ControlService, BusyError
 from coc_bot.control.settings import settings_snapshot, RevisionConflict
 from coc_bot.control.calibration import Captures, checklist
@@ -31,6 +32,11 @@ class Login(Payload):
 
 class Start(Payload):
     practice: StrictBool = False
+
+
+class UpgradeRequest(Payload):
+    kind: Literal['buildings','research']
+    token: str | None = Field(default=None,max_length=64)
 
 
 class Settings(Payload):
@@ -202,6 +208,16 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
     @app.post("/api/farm")
     def farm():
         return {"message": service.farm()}
+
+    @app.post('/api/upgrades/preview')
+    def preview_upgrades(body: UpgradeRequest):
+        service.upgrade(body.kind)
+        return service.snapshot()
+
+    @app.post('/api/upgrades/start')
+    def start_upgrade(body: UpgradeRequest):
+        service.upgrade(body.kind,execute=True,token=body.token)
+        return service.snapshot()
 
     @app.post("/api/runtime/retry")
     def retry_runtime():

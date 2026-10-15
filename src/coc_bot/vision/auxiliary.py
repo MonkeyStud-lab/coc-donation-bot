@@ -84,6 +84,9 @@ class AuxiliaryPageDetector:
             and self._find(gray, "pass_bank", (775, 5, 895, 65)) is not None
         )
         if not shop and not season:
+            from coc_bot.upgrades.vision import UpgradeReader
+            if UpgradeReader().menu_kind(frame) is not None:
+                return AuxiliaryPage('build_menu',(round(w*.984),round(h*.032)))
             return None
         screen = "shop" if shop else "clash_pass"
         button = self._find(gray, f"{'shop' if shop else 'pass'}_close", (890, 5, 960, 83))

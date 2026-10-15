@@ -207,6 +207,21 @@ class ControlService:
             self.job("farm", lambda cancel: self.session(cancel).farm_one_shot(cancel.is_set))
             return "Farm started"
 
+    def upgrade(self, kind, *, execute=False, token=None):
+        if kind not in ('buildings','research'):
+            raise ValueError('Unknown upgrade category')
+        if execute and (not isinstance(token,str) or len(token)!=64):
+            raise ValueError('Check upgrades first, then start the displayed recommendation')
+        def perform(cancel):
+            from coc_bot.upgrades.runner import UpgradeRunner
+            from coc_bot.runtime.device_lease import DeviceLease
+            session=self.session(cancel)
+            with DeviceLease(session.config.adb_device):
+                result=UpgradeRunner(session.config,session.capture,session.input,
+                                     session.navigator,cancel.is_set).run(kind,execute=execute,expected=token)
+                return result|{'upgrade_report':True}
+        self.job('start_upgrade' if execute else 'preview_upgrades',perform)
+
     def diagnostic(self, action):
         # Explicit allowlist: never accept module names, paths or shell commands.
         actions = {

@@ -258,6 +258,22 @@ Prefer fixing vision with **mode-scoped rules** and strong UI anchors (Attack!, 
 - [RUNNING.md](RUNNING.md) — updates, terminal operation, backups and troubleshooting
 - [BATTLE_COMPLETION.md](BATTLE_COMPLETION.md) — results detection and timer fallback
 - [SMART_COLLECTION.md](SMART_COLLECTION.md) — collect and review useful screenshots
+- [UPGRADES.md](UPGRADES.md) — Suggested upgrades, reserves, spending verification, and recovery
+
+## Suggested upgrades
+
+Optional upgrade checks run between donation rounds, after farm scheduling. They
+share the same device owner and Stop flag as the running bot. Manual previews and
+starts use exclusive browser jobs. Both building and research automation default
+to off.
+
+The reader verifies the Build tab and Suggested section, reads prices with strict
+font references, and passes candidates to a separate eligibility policy. Before
+spending, the runner checks fresh balances and availability and verifies the
+resource confirmation twice. It records intent before tapping, then requires a
+new matching progress row and fewer free slots to confirm success. Uncertain
+outcomes block repeat spending. Only a verified close control dismisses an
+Upgrading details window; Finish Now controls are never used.
 
 ## Reliability and interface profiles
 

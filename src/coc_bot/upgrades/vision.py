@@ -53,6 +53,21 @@ def amount(image, stop=None):
     return value if 0 <= value <= 500_000_000 else None
 
 
+def resource_amount(image, stop=None):
+    """Separate bright resource text from scenery in a partly empty bar."""
+    original=amount(image,stop)
+    if image is None or not image.size:
+        return None
+    hsv=cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
+    bright=cv2.inRange(hsv,(0,0,230),(180,75,255))
+    isolated=amount(cv2.cvtColor(bright,cv2.COLOR_GRAY2BGR),stop)
+    # Both reads retain the strict glyph threshold. Conflicting numbers block
+    # spending; uncertain labels are never replaced with a guessed OCR result.
+    if original is not None and isolated is not None and original != isolated:
+        return None
+    return original if original is not None else isolated
+
+
 def currency(image):
     if not image.size:
         return None
@@ -135,7 +150,7 @@ class UpgradeReader:
         return (free,total) if 0 <= free <= total <= 6 else None
 
     def balances(self, frame):
-        return {key:amount(crop(frame,box),self.stop) for key,box in {
+        return {key:resource_amount(crop(frame,box),self.stop) for key,box in {
             'gold':(.56,.033,.679,.073),
             'elixir':(.56,.104,.679,.143),
             'dark_elixir':(.59,.17,.685,.217),
@@ -220,7 +235,9 @@ class UpgradeReader:
                 continue
             cell=button[y:y+bh,x:x+bw]
             label=text(cell[round(bh*.10):round(bh*.40),round(bw*.15):round(bw*.85)],stop=self.stop)
-            price=amount(cell[round(bh*.48):round(bh*.91),round(bw*.10):round(bw*.80)],self.stop)
+            # Eight-digit prices begin close to the left edge. Keep the whole
+            # number while excluding the resource icon on the right.
+            price=amount(cell[round(bh*.48):round(bh*.91),round(bw*.03):round(bw*.80)],self.stop)
             resource=currency(cell[round(bh*.35):round(bh*.95),round(bw*.79):round(bw*.99)])
             normalized=compact(label).replace('contirm','confirm')
             if not re.fullmatch(r'(?:ge)?(?:confirm|upgrade)',normalized):

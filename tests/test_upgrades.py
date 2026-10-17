@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import cv2
 import numpy as np
 from coc_bot.upgrades.policy import reason
-from coc_bot.upgrades.vision import Candidate
+from coc_bot.upgrades.vision import Candidate, UpgradeReader, resource_amount
 from coc_bot.upgrades.runner import UpgradeRunner
 from coc_bot.upgrades.digits import read_digits,bank
 
@@ -45,6 +45,45 @@ class UpgradePolicyTests(unittest.TestCase):
         self.assertIsNone(read_digits(frame))
         cv2.rectangle(frame,(10,10),(80,40),(255,255,255),-1)
         self.assertIsNone(read_digits(frame))
+
+
+class UpgradeImageTests(unittest.TestCase):
+    """Only isolated game controls are stored, with no account or village data."""
+    fixtures=Path(__file__).with_name('fixtures')/'upgrades'
+
+    def test_small_free_builder_counter(self):
+        counter=cv2.imread(str(self.fixtures/'builder-four-counter.png'))
+        self.assertEqual(read_digits(counter,fraction=True),'4/5')
+        frame=np.zeros((1048,1853,3),np.uint8)
+        frame[990:1029,1369:1460]=counter
+        self.assertEqual(UpgradeReader().availability(frame,'buildings'),(4,5))
+
+    def test_small_three_digit(self):
+        image=cv2.imread(str(self.fixtures/'builder-three-digit.png'))
+        self.assertEqual(read_digits(image),'3')
+        counter=cv2.imread(str(self.fixtures/'builder-three-counter.png'))
+        self.assertEqual(read_digits(counter,fraction=True),'3/5')
+
+    def test_full_and_partly_empty_resource_bars(self):
+        for name,expected in (('before-elixir',31_000_000),('partial-elixir',13_000_000),
+                              ('research-dark_elixir',450_790)):
+            with self.subTest(name=name):
+                image=cv2.imread(str(self.fixtures/(name+'.png')))
+                self.assertEqual(resource_amount(image),expected)
+        with patch('coc_bot.upgrades.vision.amount',side_effect=[31_000_000,3_000_000]):
+            self.assertIsNone(resource_amount(image))
+
+    def test_eight_digit_confirmation_keeps_leading_digit(self):
+        frame=cv2.imread(str(self.fixtures/'blacksmith-confirmation.png'))
+        reader=UpgradeReader()
+        candidate=Candidate('Blacksmith',18_000_000,'elixir',(1,1))
+        result=reader.confirmation(frame,candidate)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['cost'],18_000_000)
+        self.assertEqual(result['point'],(1301,916))
+        # A truncated price or different resource must never authorize a tap.
+        self.assertIsNone(reader.confirmation(frame,Candidate('Blacksmith',8_000_000,'elixir',(1,1))))
+        self.assertIsNone(reader.confirmation(frame,Candidate('Blacksmith',18_000_000,'gold',(1,1))))
 
 
 class UpgradeRunnerTests(unittest.TestCase):

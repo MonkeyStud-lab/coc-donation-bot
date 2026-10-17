@@ -7,6 +7,7 @@ from coc_bot.control.settings_fields import (
     SETTINGS, current_setting_values, save_settings_from_gui, parse_int_pair,
     is_raw_timing_field,
     build_user_settings_payload,
+    UPGRADE_INTEGER_LIMITS,
 )
 from coc_bot.control.themes import THEMES
 from coc_bot.calibration.transactions import calibration_locked
@@ -47,8 +48,11 @@ def validate_settings(values, expected_revision):
             if type(raw) not in (int, float, str):
                 raise ValueError(f"{f.label} must be a number")
             number = float(raw)
-            if not math.isfinite(number) or number < 0 or number > 10000000:
+            lower, upper = UPGRADE_INTEGER_LIMITS.get(key, (0, 10_000_000))
+            if not math.isfinite(number):
                 raise ValueError(f"{f.label} must be a finite, non-negative number")
+            if not lower <= number <= upper:
+                raise ValueError(f"{f.label} must be between {lower} and {upper}")
             if f.kind == "int" and not number.is_integer():
                 raise ValueError(f"{f.label} must be a whole number")
         if f.kind == "int_pair":

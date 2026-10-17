@@ -35,6 +35,16 @@ def _pair(lo_hi: tuple[int, int]) -> str:
     return f"{lo_hi[0]}, {lo_hi[1]}"
 
 
+# Shared by browser validation and desktop settings persistence.
+UPGRADE_INTEGER_LIMITS = {
+    'upgrade_interval_seconds': (60, 86400),
+    'upgrade_builders_reserved': (0, 6),
+    'upgrade_gold_reserve': (0, 100_000_000),
+    'upgrade_elixir_reserve': (0, 100_000_000),
+    'upgrade_dark_elixir_reserve': (0, 100_000_000),
+}
+
+
 SETTINGS: list[SettingField] = [
     SettingField('upgrade_buildings_enabled','Automatic building upgrades','Follow Suggested upgrades using spare builders. Town Hall, heroes, walls, new buildings and purchases are excluded.','bool',lambda c:c.upgrade_buildings_enabled,'Upgrades',('upgrades','buildings_enabled')),
     SettingField('upgrade_research_enabled','Automatic army research','Start the first eligible Suggested troop or spell research when the laboratory is free. Never spend gems or items.','bool',lambda c:c.upgrade_research_enabled,'Upgrades',('upgrades','research_enabled')),
@@ -415,8 +425,8 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
             parsed: Any = bool(raw)
         elif field.kind == "int":
             parsed = int(str(raw).strip())
-            if field.key.startswith('upgrade_'):
-                lower,upper=(60,86400) if field.key=='upgrade_interval_seconds' else ((0,6) if field.key=='upgrade_builders_reserved' else (0,100_000_000))
+            if field.key in UPGRADE_INTEGER_LIMITS:
+                lower,upper=UPGRADE_INTEGER_LIMITS[field.key]
                 if not lower <= parsed <= upper:
                     raise ValueError(f'{field.label} must be between {lower} and {upper}')
             if field.key in (

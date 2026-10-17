@@ -41,6 +41,10 @@ have to pass before an upgrade starts. A busy laboratory is skipped. A building
 needs more free builders than the number reserved. The app skips excluded or
 unaffordable Suggested entries; it does not choose from **Other upgrades**.
 
+Each resource reserve accepts values from 0 to 100,000,000 in both the browser
+and desktop settings. Builder reservations range from 0 to 6, and the check
+interval ranges from 60 to 86,400 seconds.
+
 ## What is excluded
 
 The first version does not buy new buildings, upgrade the Town Hall, upgrade heroes
@@ -67,7 +71,11 @@ and a decrease in free builder/research slots confirm that it started.
 
 If verification fails or the app restarts after the press, it retains that pending
 intent and blocks another spending attempt. It can reconcile the pending entry
-when the corresponding running upgrade and slot usage become visible. It never
+when the corresponding running upgrade and slot usage become visible. It checks
+the pending entry's building or research tab first, even when the next requested
+check is for the other category or the pending category's automation is off.
+This recovery check only verifies the earlier attempt; it does not repeat its
+purchase or enable that category's automation. It never
 silently resets a damaged journal. If the upgrade finishes before reconciliation,
 manual inspection may be needed; there is deliberately no automatic retry or
 "clear and buy again" button.

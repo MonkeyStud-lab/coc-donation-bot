@@ -125,10 +125,53 @@ class WebTests(TestCase):
         self.assertFalse(config.upgrade_buildings_enabled)
         self.assertFalse(config.upgrade_research_enabled)
         for values in ({'upgrade_gold_reserve':-1}, {'upgrade_builders_reserved':7},
-                       {'upgrade_interval_seconds':0}, {'upgrade_research_enabled':'true'}):
+                       {'upgrade_interval_seconds':0}, {'upgrade_research_enabled':'true'},
+                       {'upgrade_elixir_reserve':'nan'}, {'upgrade_elixir_reserve':'inf'},
+                       {'upgrade_elixir_reserve':True}, {'upgrade_elixir_reserve':1.5}):
             response=self.client.put('/api/settings',headers=self.headers,
                                      json={'revision':revision(),'values':values})
             self.assertEqual(response.status_code,400,response.text)
+
+    def test_upgrade_reserves_above_ten_million_round_trip(self):
+        keys=('upgrade_gold_reserve','upgrade_elixir_reserve','upgrade_dark_elixir_reserve')
+        for amount in (0,10_000_001,20_000_000,100_000_000):
+            with self.subTest(amount=amount):
+                values={key:amount for key in keys}
+                response=self.client.put('/api/settings',headers=self.headers,
+                                         json={'revision':revision(),'values':values})
+                self.assertEqual(response.status_code,200,response.text)
+                for key in keys:
+                    self.assertEqual(response.json()['values'][key],amount)
+                    self.assertEqual(getattr(load_config(),key),amount)
+        # A stored large reserve must not block saving an unrelated setting.
+        response=self.client.put('/api/settings',headers=self.headers,
+                                 json={'revision':revision(),'values':{'donate_open_requests':False}})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertFalse(load_config().upgrade_buildings_enabled)
+        self.assertFalse(load_config().upgrade_research_enabled)
+        self.assertFalse(self.service.controller.snapshot().active)
+
+    def test_upgrade_limits_match_browser_and_desktop_validation(self):
+        from coc_bot.control.settings_fields import build_user_settings_payload,current_setting_values
+        limits={'upgrade_gold_reserve':(0,100_000_000),'upgrade_elixir_reserve':(0,100_000_000),
+                'upgrade_dark_elixir_reserve':(0,100_000_000),'upgrade_builders_reserved':(0,6),
+                'upgrade_interval_seconds':(60,86400)}
+        for key,(lower,upper) in limits.items():
+            for value in (lower,upper):
+                with self.subTest(key=key,value=value):
+                    build_user_settings_payload(current_setting_values()|{key:value})
+                    response=self.client.put('/api/settings',headers=self.headers,
+                                             json={'revision':revision(),'values':{key:value}})
+                    self.assertEqual(response.status_code,200,response.text)
+            for value in (lower-1,upper+1):
+                with self.subTest(key=key,value=value):
+                    with self.assertRaises(ValueError):
+                        build_user_settings_payload(current_setting_values()|{key:value})
+                    before=revision()
+                    response=self.client.put('/api/settings',headers=self.headers,
+                                             json={'revision':before,'values':{key:value}})
+                    self.assertEqual(response.status_code,400,response.text)
+                    self.assertEqual(revision(),before)
 
     def test_managed_runtime_import_is_optional_guarded_and_preserves_calibration(self):
         from types import SimpleNamespace

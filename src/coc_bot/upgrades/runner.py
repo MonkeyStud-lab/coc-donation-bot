@@ -133,14 +133,27 @@ class UpgradeRunner:
         if kind not in ('buildings','research'): raise ValueError('Unknown upgrade category')
         if self.stopped(): return {'status':'stopped'}
         state=self.state()
+        recovery_kind=kind
+        if 'pending' in state:
+            pending=state['pending']
+            if not isinstance(pending,dict) or pending.get('kind') not in ('buildings','research'):
+                return {'status':'needs_review','message':'Previous upgrade category is unknown; manual review is required',
+                        'pending':pending}
+            recovery_kind=pending['kind']
         report={'kind':kind,'status':'skipped'}
         detail_open=False
         try:
-            frame=self.open_menu(kind)
+            # Reconcile on the pending operation's tab before considering any
+            # new spending, even if that category's automation is now disabled.
+            frame=self.open_menu(recovery_kind)
             if frame is None: return {'status':'stopped'}
-            if not self._verify_pending(state,kind,frame):
+            if not self._verify_pending(state,recovery_kind,frame):
                 return {'status':'needs_review','message':'Previous upgrade outcome is uncertain; no retry will be sent',
                         'pending':state.get('pending')}
+            if recovery_kind != kind:
+                if self.stopped(): return {'status':'stopped'}
+                frame=self.open_menu(kind)
+                if frame is None: return {'status':'stopped'}
             report=self.inspect(kind,frame)
             # Bounded list exploration. Only a verified Suggested section qualifies.
             seen=set();all_choices=[]

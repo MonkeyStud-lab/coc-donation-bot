@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, call
 from types import SimpleNamespace
 
 import cv2
@@ -104,6 +104,64 @@ class UpgradeRunnerTests(unittest.TestCase):
                      'recommendations':[self.item],'section_complete':True}
         self.runner.inspect=MagicMock(side_effect=lambda *args:dict(self.report))
 
+    def save_pending(self, kind, name, free_before):
+        pending={'kind':kind,'name':name,'free_before':free_before,
+                 'active_before':0,'phase':'confirming'}
+        self.runner.path.parent.mkdir(parents=True,exist_ok=True)
+        self.runner.path.write_text(json.dumps({'pending':pending}))
+        return pending
+
+    def test_pending_research_is_reconciled_before_building_preview(self):
+        self.save_pending('research','Bowler',1)
+        self.runner.reader.active_names.return_value=['bowler']
+        self.runner.reader.availability.return_value=(0,1)
+        self.report.update(kind='buildings',recommendations=[])
+        result=self.runner.run('buildings')
+        self.assertEqual(result['status'],'nothing_eligible')
+        self.assertEqual(self.runner.open_menu.call_args_list,[call('research'),call('buildings')])
+        self.assertNotIn('pending',self.runner.state())
+        self.assertEqual(self.runner.state()['last_completed']['name'],'Bowler')
+        self.runner.input.tap.assert_not_called()
+
+    def test_pending_building_is_reconciled_before_research_preview(self):
+        self.save_pending('buildings','Blacksmith',4)
+        self.runner.reader.active_names.return_value=['blacksmith']
+        self.runner.reader.availability.return_value=(3,5)
+        result=self.runner.run('research')
+        self.assertEqual(result['status'],'ready')
+        self.assertEqual(self.runner.open_menu.call_args_list,[call('buildings'),call('research')])
+        self.assertNotIn('pending',self.runner.state())
+        self.runner.input.tap.assert_not_called()
+
+    def test_unresolved_other_category_blocks_spending_and_retains_intent(self):
+        pending=self.save_pending('research','Bowler',1)
+        self.runner.reader.active_names.return_value=[]
+        self.runner.reader.availability.return_value=(0,1)
+        result=self.runner.run('buildings',execute=True)
+        self.assertEqual(result['status'],'needs_review')
+        self.runner.open_menu.assert_called_once_with('research')
+        self.runner.inspect.assert_not_called()
+        self.runner.input.tap.assert_not_called()
+        self.assertEqual(self.runner.state()['pending'],pending)
+
+    def test_stop_after_reconciliation_does_not_start_a_new_upgrade(self):
+        self.save_pending('research','Bowler',1)
+        self.runner.reader.active_names.return_value=['bowler']
+        self.runner.reader.availability.return_value=(0,1)
+        self.runner.open_menu.side_effect=['frame',None]
+        result=self.runner.run('buildings',execute=True)
+        self.assertEqual(result['status'],'stopped')
+        self.runner.inspect.assert_not_called()
+        self.runner.input.tap.assert_not_called()
+
+    def test_invalid_pending_category_blocks_without_navigation(self):
+        pending=self.save_pending('unknown','Bowler',1)
+        result=self.runner.run('buildings',execute=True)
+        self.assertEqual(result['status'],'needs_review')
+        self.runner.open_menu.assert_not_called()
+        self.runner.input.tap.assert_not_called()
+        self.assertEqual(self.runner.state()['pending'],pending)
+
     def test_preview_never_sends_spending_taps(self):
         report=self.runner.run('research')
         self.assertEqual(report['status'],'ready')
@@ -203,3 +261,30 @@ class UpgradeSchedulingTests(unittest.TestCase):
             runner.return_value.run.assert_called_once_with('research',execute=True)
             self.assertFalse(bot._maybe_run_upgrades())
             runner.assert_called_once()
+
+    def test_scheduler_recovers_research_before_buildings_even_if_research_disabled(self):
+        for research_enabled in (True,False):
+            with self.subTest(research_enabled=research_enabled), tempfile.TemporaryDirectory() as folder:
+                bot=self.make_bot()
+                bot.config.data_dir=Path(folder)
+                bot.config.upgrade_buildings_enabled=True
+                bot.config.upgrade_research_enabled=research_enabled
+                runner=UpgradeRunner(bot.config,bot.capture,bot.nav_input,bot.navigator,bot.should_stop)
+                runner.open_menu=MagicMock(return_value='frame')
+                runner.close=MagicMock()
+                runner.reader=MagicMock()
+                runner.reader.active_names.return_value=['bowler']
+                runner.reader.availability.return_value=(0,1)
+                runner.inspect=MagicMock(side_effect=lambda kind,frame:{
+                    'kind':kind,'recommendations':[],'section_complete':True})
+                runner.path.parent.mkdir(parents=True)
+                runner.path.write_text(json.dumps({'pending':{'kind':'research','name':'Bowler',
+                    'free_before':1,'active_before':0,'phase':'confirming'}}))
+                with patch('coc_bot.upgrades.runner.UpgradeRunner',return_value=runner):
+                    self.assertTrue(bot._maybe_run_upgrades())
+                expected=[call('research'),call('buildings')]
+                if research_enabled: expected.append(call('research'))
+                self.assertEqual(runner.open_menu.call_args_list,expected)
+                self.assertNotIn('pending',runner.state())
+                self.assertEqual(runner.state()['last_completed']['name'],'Bowler')
+                bot.nav_input.tap.assert_not_called()

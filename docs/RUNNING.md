@@ -1,166 +1,196 @@
-# Running and advanced setup
+# Running, updating, and moving the app
 
-Start with the [README](../README.md) for installation and guided calibration.
-These instructions use the current app’s Dashboard, Settings, Setup, Library, and Diagnostics pages.
+Start with the [README](../README.md) for installation. The browser dashboard is
+the main interface; desktop/terminal remain available. Use [CasaOS setup](CASAOS_PACKAGE.md)
+for the managed installation and [browser controls](WEB_UI.md) for page behavior.
 
-## Installation options
+## Source installation
 
-If you downloaded a ZIP, extract it and open Terminal in the extracted folder.
-Run `bash scripts/get_started.sh`. Git update commands only work with a Git clone.
-
-To install without opening the app:
+From a Git clone or extracted source folder:
 
 ```bash
-bash scripts/setup_linux.sh
-```
-
-To reinstall dependencies and refresh downloaded assets:
-
-```bash
-bash scripts/setup_linux.sh --force
-```
-
-On Python 3.14, you can request the direct dependency versions tested on Linux:
-
-```bash
-bash scripts/setup_linux.sh --tested-deps
-bash scripts/run_bot.sh
-```
-
-Other Python versions should use normal setup. The tested-dependency mode is
-opt-in; the normal get-started launcher uses the normal setup mode.
-
-The installer configures this source checkout. Keep the project folder:
-installing a standalone Python wheel does not include all scripts and defaults.
-
-## Terminal operation
-
-For the opt-in browser interface, use [browser setup](WEB_UI.md). It covers
-password setup, localhost/LAN access, browser calibration, and returning to the
-desktop app. The web server still needs the same running Waydroid session.
-
-From the project folder, activate the installed environment:
-
-```bash
+bash scripts/setup_linux.sh --web
 source .venv/bin/activate
+python -m pip install -e '.[web,web-live]'
+python scripts/setup_live_view.py
+python -m coc_bot.web
 ```
 
-Open the GUI:
+Open localhost port 8765. Waydroid and Clash must already work and be opened
+manually for this route. The source installer does not install Android.
+Git update commands require a clone, not an extracted ZIP.
+
+Later, `bash scripts/run_web.sh` launches the installed server. LAN access needs
+an explicit private `--host` and matching `--origin`; no password is required by
+default. Anyone who can reach it can control the app. See [network access](WEB_UI.md#open-from-another-device).
+
+`bash scripts/setup_linux.sh --force --web` refreshes dependencies/assets.
+Python 3.14 installations can opt into tested direct dependency versions with
+`bash scripts/setup_linux.sh --tested-deps --web`. Other Python versions use
+normal setup. Keep the checkout: standalone wheels omit some defaults/scripts.
+
+## Desktop and terminal alternatives
+
+Activate `.venv`, then choose one controller:
 
 ```bash
 python -m coc_bot.main
 ```
 
-Run without the bot control window:
+This opens the retained Tkinter GUI. `bash scripts/get_started.sh` performs its
+setup check and opens that GUI too; it does not select the browser interface.
 
 ```bash
 python -m coc_bot.main --no-gui
 ```
 
-This hides only the bot’s GUI. Waydroid, Android, and the game still need to be
-running. Press Ctrl+C to stop terminal operation.
-
-Practice mode skips donation taps but still performs navigation. It does not
-make live use permitted, and should not be treated as a blanket block on all
-other game actions:
+This starts normal automation directly in Terminal. Android/the game still need
+to be running. Ctrl+C stops it. Do not run this alongside a CasaOS/browser bot.
 
 ```bash
 python -m coc_bot.main --dry-run --debug-save-frames
 ```
 
-For testing recognition without controlling a device:
+Practice/dry-run skips donation taps, not every game input. Navigation, farm,
+and separate tools can still act. For offline recognition or UI work instead:
 
 ```bash
 python scripts/replay_frame.py path/to/screenshot.png --annotate
+PYTHONPATH=src python scripts/preview_web_offline.py
 ```
 
-The classic calibration wizard remains available:
+The classic local calibrator is `python scripts/calibrate.py`; it shares the
+calibration schema with browser Setup. Refresh downloaded unit data/icons with
+`python scripts/sync_game_data.py --force` when needed.
 
-```bash
-python scripts/calibrate.py
-```
+## Profile roots and environment
 
-Refresh game data and icons with `python scripts/sync_game_data.py --force`.
+A source run uses the checkout's configuration/data by default. CasaOS uses
+`/DATA/AppData/coc-bot/profile` on the host, mounted as `/profile` inside its bot
+container. The profile contains:
 
-## Settings and local files
-
-- `config/default.yaml`: defaults shipped with the project. Prefer the GUI for
-  personal changes, so updates do not conflict with edited defaults.
-- `data/user_settings.yaml`: settings saved by the GUI.
+- `config/default.yaml`: shipped base configuration.
+- `data/user_settings.yaml`: personal overrides saved through Settings.
 - `data/calibrated.yaml` and `data/templates/`: calibration and reference images.
-- `data/calibration_backups/`: stored calibration snapshots and interface profiles.
-- `data/runtime_state.json`: saved session and farm scheduling state.
-- `data/collection/`: screenshots saved by smart collection.
-- `data/debug/`: debug exports and diagnostic images.
+- `data/calibration_backups/`: saved calibrations and named interface profiles.
+- `data/attack-planner/`: routines, reviewed unit artwork, and attack/camera recovery.
+- `data/upgrades/`: spending intent/history.
+- `data/runtime_state.json`: farm/session clocks and completed attack identity.
+- `data/collection/`: optional selected screenshot dataset.
+- `data/debug/`: generated diagnostic evidence.
+- `data/live/`: pinned video/gesture server; reproducible with its installer.
 
-`ADB_DEVICE` overrides the configured device address for the current process.
-For example, `export ADB_DEVICE=YOUR_IP:5555` before launching.
-`COC_BOT_CONFIG` selects an alternate calibrated YAML file; it is not a shortcut
-for moving every other data file to a different folder.
+Prefer Settings over editing tracked defaults. `ADB_DEVICE` overrides the selected
+device in a source process. `COC_BOT_HOME` or the web launcher's `--home` selects
+a complete profile root; populate its `config/` and writable `data/` first.
+`COC_BOT_CONFIG` selects an alternate calibration YAML only, not every data path.
+First-launch testing uses its own context-scoped profile and shared device lease.
 
-## Backups and another computer
+## Stop, settings, and recovery
 
-Use **Library → Saved calibrations → Save calibration backup** before recalibration. Restore, rename, or delete
-snapshots from the same section. Backups include calibration and template images;
-they do not replace a separate backup of your user settings.
+Stop interrupts normal and one-shot operations, leaving Clash open. Wait for
+Stopped before transferring ownership or updating. Closing a browser tab does
+not stop automation. Closing the game/Waydroid is an explicit Diagnostics action.
 
-**Library → Saved calibrations → Save interface profile** creates
-a named calibration snapshot for a particular interface. Stop the bot before
-switching profiles. After a game update, save the previous profile, recalibrate
-changed parts, then save a new profile.
+Browser settings are always editable. Save while stopped applies without starting;
+Save & restart while running validates, waits for the current action, and restarts.
+Stop cancels the queued save/restart. Conflicting browser revisions require Reload.
+Farm/session countdowns pause while stopped; an already-started break expires in
+real time. Saving settings is not a way to reset an uncertain attack or purchase.
 
-To move to another computer, install the project there and transfer your
-calibration YAML and template images together, plus user settings if wanted.
-Update the device address. A matching resolution alone does not guarantee a
-matching game layout; check calibration and verify it before operation. Do not
-copy the old `.venv` folder—run setup on the new machine.
+After a crash or interrupted attack, Start reconciles pending work before normal
+operation. It never replays deployments or purchases just because the process
+restarted. If it cannot verify home/results/camera or a purchase outcome, inspect
+the game and logs. Keep pending journals intact. See [attack recovery](ATTACK_REBUILD.md#interrupted-attacks-and-diagnostic-storage)
+and [upgrade recovery](UPGRADES.md#stops-interruptions-and-uncertain-results).
 
-## Screenshot collection
+## Backups and migration
 
-Enable **Settings → Screenshot collection**, choose daily and storage limits,
-and Save, then Stop/Start. **Library → Screenshots** shows
-collection status and opens the local review gallery. Collection does not
-upload screenshots or automatically delete them. Images can contain player
-names and chat; review them before sharing.
+Stop the bot and release manual control before taking a consistent backup.
 
-See [SMART_COLLECTION.md](SMART_COLLECTION.md) for selection rules and
-[RELIABILITY.md](RELIABILITY.md) for calibration checks and verification.
+**Library → Back up calibration** saves YAML and template images. Export downloads
+a portable ZIP; Import calibration stores an archive, and Restore applies it with
+a safety backup. Save profile creates a named calibration snapshot. Rename/Delete
+apply to stored backups, not Android account data.
 
-## Background service
+These Library archives do not include personal settings, planner routines/learned
+artwork, upgrade journals, or the game account. For migration, separately copy the
+full `config/` and `data/` profile while idle, including pending recovery markers.
+Keep sensitive copies private and preserve permissions. Use a separate destination;
+do not merge a live profile with another running controller.
 
-This is an advanced option. First confirm terminal operation with `--no-gui`
-works. Starting the service does not start a Waydroid user session or open the
-game. Avoid running the GUI bot and service simultaneously.
+On the new host, install dependencies rather than copying `.venv`. Update the ADB
+address, check resolution/layout/language, and test calibration. Planner approval
+is device-specific; a saved routine may need another supervised run. Transferring
+a profile does not transfer Waydroid's Android app data or sign-in.
 
-The supplied service needs editing before use: its current command opens the
-GUI and its sample device address may not match your setup.
+CasaOS host installation snapshots include configuration, calibration/templates,
+user settings, and runtime state with checksum verification. They still do not
+include the entire planner or Android account. See [backup scope](CASAOS_PACKAGE.md#data-protection).
 
-1. Copy `systemd/coc-donation-bot.service` to
-   `~/.config/systemd/user/coc-donation-bot.service` (create that folder if needed).
-2. Open your copied file in a text editor. Keep `WorkingDirectory` pointed at
-   your checkout. Set the launch command to:
+## Updates
 
-   ```ini
-   ExecStart=%h/Projects/coc-donation-bot/.venv/bin/python -m coc_bot.main --no-gui
-   ```
-
-3. Replace the `ADB_DEVICE` value with your actual address. If the checkout is
-   elsewhere, also adjust the command and `COC_BOT_CONFIG` path.
-4. Enable the edited service:
-
-   ```bash
-   systemctl --user daemon-reload
-   systemctl --user enable --now coc-donation-bot.service
-   journalctl --user -u coc-donation-bot.service -f
-   ```
-
-Ctrl+C stops watching the log, not the service. Stop the service with:
+For source installation, Stop, close manual control, stop the server, then:
 
 ```bash
-systemctl --user stop coc-donation-bot.service
+git pull --ff-only
+bash scripts/setup_linux.sh --web
+source .venv/bin/activate
+python -m pip install -e '.[web,web-live]'
+python scripts/setup_live_view.py
+python -m coc_bot.web
 ```
 
-Disable automatic starts with `systemctl --user disable coc-donation-bot.service`.
-Keeping user services running after logout can be enabled with
-`sudo loginctl enable-linger "$USER"`; this does not ensure the Android session
-or game will remain available.
+Reuse your host/origin arguments for LAN access. Refresh the browser. Preserve
+local edits if Git reports a conflict; do not reset private calibration/defaults.
+
+For CasaOS, pull and build the image, then recreate the bot service using the
+installed Compose configuration, environment, and mounts. A checkout update alone
+does not replace container code. Keep the old image and a consistent profile
+backup for rollback. Host-helper updates are separate; routine code updates do
+not require rerunning privileged setup. Follow [CasaOS updates](CASAOS_PACKAGE.md#updating-the-bot-and-helper).
+
+After a Clash update, APK installation and calibration compatibility are separate
+checks. Inspect changed menus and test affected operations before enabling them.
+
+## Screenshot and log storage
+
+Enable Screenshot collection in Settings and Save / Save & restart. Browser
+Library shows the paged gallery and status. The full review HTML can be opened
+on the host or copied batch; see [collection](SMART_COLLECTION.md).
+
+Collection pauses at its configured storage cap and does not prune reviewed data.
+Generated attack diagnostics have a separate bounded cleanup policy. Logs rotate
+at 10 MB with seven-day retention. See [storage safeguards](RELIABILITY.md#storage-and-private-data).
+
+## Optional user service
+
+CasaOS already manages its web container; do not also enable a competing user
+service. For a source installation, copy `systemd/coc-donation-bot.service` into
+`~/.config/systemd/user/`, create the directory if necessary, and edit the copy.
+The supplied template still launches the desktop GUI. For a browser service use:
+
+```ini
+WorkingDirectory=%h/Projects/coc-donation-bot
+ExecStart=%h/Projects/coc-donation-bot/.venv/bin/python -m coc_bot.web
+```
+
+Adjust paths and `ADB_DEVICE`; remove or update `COC_BOT_CONFIG` if needed. Add
+explicit private `--host` / `--origin` arguments for LAN access. To run automation
+directly instead, use `python -m coc_bot.main --no-gui` in ExecStart. The web server
+starts stopped; the terminal command starts automation.
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now coc-donation-bot.service
+journalctl --user -u coc-donation-bot.service -f
+```
+
+Ctrl+C stops log watching, not the service. Stop it with
+`systemctl --user stop coc-donation-bot.service`; disable future starts with
+`systemctl --user disable coc-donation-bot.service`.
+
+A user service does not create a Waydroid display/session or guarantee Android
+availability before login. `sudo loginctl enable-linger "$USER"` keeps user
+services alive after logout but does not solve display prerequisites. Managed
+CasaOS startup is a separate route with explicit host setup.

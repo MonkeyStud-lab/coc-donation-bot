@@ -1,7 +1,15 @@
-# Web interface migration plan
+# Web interface migration plan (historical)
 
-Status: foundation work started; see [migration status](WEB_UI_MIGRATION_STATUS.md)
-for completed work, inventory, and remaining acceptance gates.
+This preserves the original design/implementation plan, rather than serving as
+current installation instructions or an uncompleted task list. The browser and
+CasaOS work described here has since been implemented and deployed on an existing
+host. See [current status](WEB_UI_MIGRATION_STATUS.md), [browser usage](WEB_UI.md),
+and [CasaOS setup](CASAOS_PACKAGE.md) for present behavior and remaining limits.
+
+Notable later decisions: six pages including Attacks; password-free trusted-LAN
+access by default; real scrcpy/WebRTC video and exclusive manual controls; managed
+CasaOS runtime startup; automatic/planned attacks and upgrades. Original phase
+requirements below describe the proposal at the time, not these later defaults.
 
 ## Intended result
 

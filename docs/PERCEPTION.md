@@ -1,8 +1,9 @@
 # Screen recognition and recovery
 
-The existing bot still decides what to click. The first perception prototype
-only reports what screen it thinks it sees, so we can measure mistakes before
-giving a learned model any control.
+Current game actions use the bot's rule/template/OCR and action-specific
+verification paths. The learned whole-screen classifier remains an optional
+observer: it reports predictions without changing navigation, input, purchases,
+or deployment decisions. Browser/CasaOS migration did not give it action authority.
 
 ## Shop and Clash Pass recovery
 
@@ -37,7 +38,8 @@ an attack and confirming that clan chat can open.
 This is a focused template-based fix, not a learned button detector. It has been
 checked on the reviewed seed at the original size, 1280×720, and 1920×1080. A
 future game redesign, different language, or rearranged header may require new
-reference crops. There is only one reviewed Clash Pass example so far.
+reference crops. The initial seed had only one reviewed Clash Pass example;
+that historical coverage is not a count of the current private collection.
 
 ## Inactivity dialog recovery
 
@@ -129,7 +131,13 @@ not establish reliability for controlling the game. The separate, fixed-header
 Shop / Clash Pass recovery passed all 56 seed frames at three resolutions,
 including refusal to tap the dimmed Shop X beneath a connection-loss dialog.
 
-To compare the model while using the normal control window:
+To compare a model in a source-launched browser server:
+
+```bash
+python -m coc_bot.web --screen-model data/models/screens.npz
+```
+
+Add the normal host/origin arguments for LAN use. To use the retained desktop:
 
 ```bash
 python -m coc_bot.main --screen-model data/models/screens.npz

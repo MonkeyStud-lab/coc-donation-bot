@@ -1,155 +1,165 @@
-# Contributing / extending the bot
+# Contributing to CoC Bot
 
-This guide is for developers who want to change or build on the project. Read [HOW_IT_WORKS.md](HOW_IT_WORKS.md) first for the architecture.
+Start with the [architecture](HOW_IT_WORKS.md), [README](../README.md), and
+[reliability safeguards](RELIABILITY.md). The current interface is browser-based,
+with CasaOS host integration and retained desktop/terminal entry points.
 
----
+## Project policy
 
-## Out of scope — we will not help with
+Maintainers do not provide implementation help for detection evasion, paid or
+commercial botting, bot-as-a-service, or account farming/selling. Issues/PRs in
+those areas are out of scope. Reliability, calibration usability, documentation,
+and computer-vision research contributions are welcome.
 
-Issues, PRs, and discussions in these areas will be closed without implementation help:
+Live gameplay automation can permanently ban accounts. Practice mode does not
+remove that risk or prevent every game action. See the README warning and
+[MIT License](../LICENSE).
 
-- **Detection evasion** — hiding, randomizing, or otherwise trying to avoid Supercell’s bot / fair-play enforcement
-- **Paid or commercial botting** — selling access, running bot-as-a-service, or scaling farms for profit
-- **Account farming / selling** — bulk accounts, trophy or resource farms for trade, or similar
+## Development setup
 
-Welcome contributions improve reliability, calibration UX, docs, and learning value for people running their **own** Waydroid setup. Using this software on live Clash of Clans can get accounts **permanently banned**; that risk is yours. See the README warning and [LICENSE](../LICENSE).
-
----
-
-## Setup for development
-
-```bash
-cd ~/Projects/coc-donation-bot   # or your clone
-source .venv/bin/activate        # after ./scripts/setup_linux.sh
-python -m pip install -e .
-```
-
-Run without GUI for quick terminal tests:
+Install from a checkout, activate `.venv`, then:
 
 ```bash
-python -m coc_bot.main --no-gui --dry-run
+python -m pip install -e '.[web,web-test,web-live]'
+python scripts/setup_live_view.py
+python -m coc_bot.web
 ```
 
-This still sends live navigation input. Practice / dry-run skips donation taps;
-use the offline checks below when no game interaction is wanted.
-
-Useful one-shots:
+For browser work without Android, run:
 
 ```bash
-python scripts/calibrate.py --step farm
-python scripts/verify_farm_offline.py
-python scripts/save_screenshot.py
+PYTHONPATH=src python scripts/preview_web_offline.py
 ```
 
-Prefer small, focused changes. Match existing naming and logging style (`loguru`). Do not commit secrets, account files, or huge binary dumps under `data/` unless they are intended templates.
+Use a disposable profile. `--home` selects a separate prepared root; the browser's
+Simulate first launch isolates files but still permits real game input. A fresh
+clone does not include private screenshots, models, account data, or calibration.
+Do not run unit tests against a production profile or device.
 
----
+Frontend dependencies/build use the committed pnpm lockfile:
 
-## Extension recipes
+```bash
+cd web
+corepack pnpm install --frozen-lockfile
+corepack pnpm run build
+cd ..
+```
 
-### 1. Add or refine a screen type
+Commit rebuilt `src/coc_bot/web/static` assets alongside frontend source changes.
+Normal users should not need Node.js or a separate Vite server.
 
-1. Add a value to `ScreenType` in [`src/coc_bot/vision/screens.py`](../src/coc_bot/vision/screens.py) (if needed).
-2. Implement a heuristic and/or template check.
-3. Wire it into the right `_classify_*` method(s) for `BotMode` (`HOME` / `DONATE` / `ATTACK` / `ANY`).
-4. Update navigators that branch on that screen (`donation/navigator.py`, `attack/navigator.py`, `bot.py` recovery).
-5. Optionally add a calibration step / template key in [`calibration/wizard.py`](../src/coc_bot/calibration/wizard.py).
+## Preserve these contracts
 
-**Rule of thumb:** if two screens look alike, disambiguate with **BotMode** or **flow phase** (what the bot was doing), not only with stricter colors.
+- One operation owns Android. Use `ControlService`, `BotController`, the shared
+  capture coordinator, and `DeviceLease`; do not add an independent ADB loop.
+- Stop reaches active commands/waits immediately. Pass cancellation through
+  subprocesses and check it before input. Do not send cleanup taps after Stop.
+- Recognize, act, then verify. Generic screen labels, issued-input logs, or
+  learned-model guesses alone must not authorize game input or confirm success.
+- Persist required spending/deployment intent before input. Never retry an
+  uncertain map tap, ability, or purchase, or silently clear recovery markers.
+- Preserve calibration/profile formats and transactional restores. Saving a
+  setting is not permission to rewrite calibration or trained artwork.
+- Browser writes require normal sessions/origins/CSRF, revisions, payload/file
+  boundaries, and server-side ownership checks. Password-free LAN mode does not
+  justify exposing arbitrary commands, host paths, ADB, or the Docker socket.
+- Keep screenshot/model/account data private. Review screenshots for player/chat
+  details before contributing evidence. Never commit credentials or game APKs.
 
-### 2. Change farm combat (deploy recipe)
+## Where to make changes
 
-| Goal | File |
-|------|------|
-| Order of actions / success criteria | `attack/farmer.py` |
-| Matchmaking, results, Return Home | `attack/navigator.py` |
-| Pan + replay programmed deploy sequence | `attack/deployer.py` |
-| Programmable tap editor | `calibration/sequence_picker.py` + Diagnostics actions in `gui/debug_actions.py` |
-| Tunables | `config/default.yaml` → `farm:` + `BotConfig` in `config.py` + GUI field in `gui/settings_fields.py` |
-| New tap targets | Wizard step `"farm"` |
+### Screens and recovery
 
-Farm deploy requires `farm_deploy_sequence.taps` (no built-in recipe).
-Keep both completion paths in `wait_for_battle_end`: two consecutive observations
-must verify the Return Home and Troops expended labels before an early leave;
-otherwise the deadline force-taps calibrated `return_home` coordinates. Generic
-screen classifications must not end a battle early. After a leave tap, confirmation
-looks for home village / clan chat rather than reusing results/battle heuristics.
-See [BATTLE_COMPLETION.md](BATTLE_COMPLETION.md) for the exact checks and limitations.
+Broad screen classes/modes live in `vision/screens.py`. Current Multiplayer/army,
+combat, and reward checks are in `vision/battle_menu.py`; result-label checks are
+in `battle_completion.py`; auxiliary and inactivity dialogs have dedicated readers.
+Annotation labels in `data/labels.yaml` are not automatically runtime ScreenTypes.
 
-### 3. Change donation behavior
+Add action-specific evidence to the appropriate navigator/runner. If screens
+share colors, prefer flow context and independent anchors to a broader threshold.
+A covering dialog invalidates background targets. Add representative positive,
+negative, dimmed, and changed-layout regression cases. Keep observer predictions
+diagnostic unless a separate action-authority design is explicitly reviewed.
 
-| Goal | File |
-|------|------|
-| When a request is eligible | `DonationBot._should_handle_request` in `bot.py` |
-| Specific vs open vs hybrid | `donation/request_parser.py` |
-| How slots are filled | `donation/executor.py` |
-| Finding Donate in chat | `donation/chat_monitor.py` |
-| Chat open/close / panels | `donation/navigator.py` |
+### Donations
 
-There is experimental budget-aware code (`fill_planner.py`, `inventory.py`, `icon_matcher.py`). The **live** path today is colored-slot filling. Wire planner carefully if you revive it.
+`donation/chat_monitor.py` finds and verifies Donate rather than Trade;
+`request_parser.py` handles request kind; `navigator.py` owns chat/panel/global-chat
+recovery; `executor.py` fills colored slots. `resource_mode.py` guards elixir.
 
-Preserve selected-elixir verification in `donation/resource_mode.py`. Missing or
-ambiguous evidence must refuse donations; do not bypass it to improve speed.
-Green chat buttons also need verified Donate text, not just a color match.
+Preserve the visible troop-and-spell first pass before scrolling, supported
+low-capacity layouts, fresh panel checks, and selected-elixir verification.
+Capacity/budget/inventory modules are optional/experimental, not the default live
+fill method. Do not replace resource checks with guessed capacity or slot order.
 
-### 4. Add a Settings UI field
+### Attacks
 
-1. Add a default in `config/default.yaml` (and `BotConfig` + `load_config` mapping).
-2. Append a `SettingField` in [`src/coc_bot/gui/settings_fields.py`](../src/coc_bot/gui/settings_fields.py) with the correct `yaml_path`.
-3. Save from the GUI writes `data/user_settings.yaml`. Running bot loops usually need Stop → Start to pick up timing/farm changes; GUI-only filters (e.g. activity DEBUG) may apply immediately.
+- `attack/navigator.py`: current menu/army confirmation, battle gate integration,
+  results observation, and home/chat navigation.
+- `deployer.py`: legacy programmed pixel sequence only.
+- `plans.py`, `automatic.py`: validated custom plans and the built-in supported
+  Electro Dragon pattern, respectively.
+- `army.py`, `battle_gate.py`: current card identity/counts and fresh combat evidence.
+- `camera.py`, `survey.py`, `mapping.py`, `projection.py`: gestures, registration,
+  deployment-boundary evidence, and map coordinates.
+- `executor.py`: selection observations, durable map intents, per-action verification.
+- `planned_farmer.py`, `recovery.py`: scheduling integration, camera restoration,
+  interruption reconciliation, and completed attack identity.
+- `control/attack_planner.py` and `web/src/AttackPlanner.tsx`: supervised editing,
+  inventory review, approval, and browser controls.
 
-### 5. Add a Diagnostics (debug) action
+Only sequence mode requires `farm_deploy_sequence.taps`. Automatic builds a fresh
+supported routine; custom planner scheduling requires supervised approval of the
+saved routine/device. Never silently fall back from a failed map to old pixel taps.
+Ordinary waits keep visual results plus a configured timer fallback; interrupted
+recovery has no timer-based leave. See [attack guide](ATTACK_REBUILD.md).
 
-Register in `DEBUG_ACTIONS` and wire the action through `run_debug_action` in [`src/coc_bot/gui/debug_actions.py`](../src/coc_bot/gui/debug_actions.py), using `DebugSession` where appropriate.
+### Upgrades
 
-### 6. Cooperative Stop
+`upgrades/vision.py` and `digits.py` read the menu/amounts, `policy.py` decides
+eligibility without input, and `runner.py` executes/reconciles. Preserve reserve,
+slot, name/price/currency, pending-intent, and no-gem/magic-item boundaries.
+An upgrade preview must not spend. Pending-category reconciliation must work even
+when that category's automation is off, without enabling a new purchase.
 
-Any new long wait must honor `stop_check` / `interrupted_sleep` so the GUI **Stop** button stays responsive (including farm one-shot).
+### Settings, calibration, and tools
 
-Pass cancellation through ADB commands and check Stop before sending input. Use
-the shared capture coordinator instead of starting a competing capture loop.
-Preserve device leases, capture budgets and transactional calibration restores.
-Learned screen predictions and collection hints are diagnostic evidence, not
-authorization to send input.
+1. Add compatible defaults and load/validation mapping in `config.py` and
+   `config/default.yaml`.
+2. Add a typed field with description/range/choices in `control/settings_fields.py`.
+   Desktop compatibility modules re-export shared definitions.
+3. Preserve browser common/Advanced/Dev visibility and settings revision checks.
+   Running Save & restart uses `ControlService.apply_settings`, not a competing
+   worker restart. Stop must cancel it.
+4. Add calibration parts/directions in the shared `calibration/schema.py` and
+   `instructions.py`; keep terminal, desktop, and browser paths consistent.
+5. Register diagnostics through shared `control/diagnostics.py`. Browser exposure
+   needs an explicit allowlisted route/action and proper ownership. Local Tk-only
+   editor/shortcut behavior belongs in desktop adapters.
 
----
+Do not bake private device IPs, account details, game screenshots, or absolute
+operator paths into code, examples, or default configuration.
 
-## Testing
+## Verification and PRs
 
-Start with the offline regression checks in [RELIABILITY.md](RELIABILITY.md).
-They run without a game connection, and GitHub runs the same core suite. Add
-focused regression coverage for behavioral fixes. For recognition/model work,
-also use the checks in [PERCEPTION.md](PERCEPTION.md).
+Run the affected focused tests, then required checks in [RELIABILITY](RELIABILITY.md#reproduce-offline-checks).
+Do not add tests that merely duplicate implementation or issue real ADB input.
+For UI work, check narrow/desktop sizes and rebuild production assets. For host
+packaging, test profile preservation and privilege boundaries without modifying
+a user's Android installation as an offline fixture.
 
-Then verify the affected flow on Waydroid; offline tests cannot establish that
-a new game layout works:
+Recognition changes need inspected positive/negative evidence. Model evaluation
+must split by recording session/similarity and report unvalidated classes, not
+only aggregate accuracy. Partial object annotations are not exhaustive detector
+training labels. See [annotation workflow](ANNOTATION_WORKFLOW.md).
 
-1. **Donation:** open request + specific request; panel opens and closes cleanly.
-2. **Farm:** Attack → Battle → deploy → confirmed results or timer fallback → Return Home → clan chat opens.
-3. **False leave:** mid-fight green scenery should not eject you (End Battle still visible).
-4. **Stop:** during matchmaking wait and during donation scroll.
-5. **Break (optional):** shorten `session_limit_seconds` in settings for a dry test, then restore.
+When authorized to test live, back up the profile, exclude competing controllers,
+and compare actual outcomes: request capacity, deployed-card counts, visual
+results/home/chat, or progress rows after an upgrade. Include Stop/interruption
+and failure cases. Restore settings after temporary experiments. A safely aborted
+attack is not a complete successful deployment.
 
-Record the checks actually performed and any live verification still needed.
-Review screenshots for player names, chat and other private content before
-sharing. Local datasets and trained models are not part of a normal checkout.
-
----
-
-## Code style expectations
-
-- Prefer clarity over clever abstractions.
-- Log **why** a decision was made (`logger.info` for flow; `logger.debug` for noise).
-- Avoid editing the plan files under `.cursor/plans/` in PRs.
-- Do not force-push `main` or commit `.env` / credentials.
-
----
-
-## Suggested first contributions
-
-- Improve a single flaky heuristic with before/after screenshots in `data/debug/`
-- Add a GUI setting you personally need
-- Document a failure mode you hit on Ubuntu in this `docs/` folder
-- Add a Diagnostics action that reproduces a bug in one click
-
-PRs that include a short “how I tested on Waydroid” note are much easier to review.
+PR descriptions should explain the concrete trigger, resulting behavior, relevant
+checks, and remaining limits. Do not claim live or clean-host tests that were not
+performed. Keep changes focused, update affected docs, preserve historical test
+records/plans as dated evidence, and do not force-push main.

@@ -1,16 +1,38 @@
 # ReDroid evaluation for the CasaOS package
 
-Tested October 11, 2026. **Recommendation: retain Waydroid. Do not migrate to the tested ReDroid images.** Android 13 booted with AMD graphics and working ADB, but Clash crashed on both launches and browser video failed acceptance. Android 16 failed to complete boot. Lower passive resource use does not establish a useful replacement for the working game installation.
+Historical evaluation, tested October 11, 2026. **Recommendation: retain Waydroid.
+Do not migrate to the tested ReDroid images.** Android 13 booted with AMD graphics
+and working ADB, but Clash crashed on both launches and browser video failed
+acceptance. Android 16 failed to complete boot. Lower passive resource use does
+not establish a useful replacement for the working game installation.
+
+The app now has a deployed existing-host CasaOS/Waydroid route; this report is
+not its current setup/status guide. See [CasaOS](CASAOS_PACKAGE.md) and
+[current status](WEB_UI_MIGRATION_STATUS.md). The measured results below are
+preserved for the tested images and host, not generalized to later ReDroid builds.
 
 ## Host and isolation
 
-Ubuntu host: Ryzen 5 5500GT, 12 logical CPUs, approximately 30.2 GiB RAM, AMD Renoir graphics / amdgpu, kernel 7.0.0-31-generic. SSH: 100.121.41.45; LAN: 192.168.4.64. The user enabled Docker group access for the SSH account after the initial inspection was blocked.
+Test hardware: Ryzen 5 5500GT, 12 logical CPUs, approximately 30.2 GiB RAM, AMD
+Renoir graphics / amdgpu, Ubuntu kernel 7.0.0-31-generic. Hardware details are
+retained to interpret the measurements; private host addresses are omitted.
+The test operator had Docker access during the trials.
 
-Trials used `/home/server/Projects/coc-redroid-evaluation`, separate containers and named data volumes, localhost-only ADB port 5556 and no automatic restart. Waydroid images, Android data and production bot profiles were not mounted into either container. Only the five installed game APK files were copied; no account data or credentials were copied. No kernel modules, Binder mounts, firewall rules or Docker daemon settings changed.
+Trials used a separate evaluation checkout, containers, and named data volumes,
+localhost-only ADB port 5556, and no automatic restart. Waydroid images, Android
+data, and production bot profiles were not mounted into either container. Only
+the five installed game APK files were copied; no account data or credentials
+were copied. No kernel modules, Binder mounts, firewall rules, or Docker daemon
+settings changed.
 
-Both trial containers and the copied-profile browser server were stopped after testing. Evidence, APK copies, images and trial volumes remain available for review. Production servers on ports 8765 and 8772 were left running.
+Both trial containers and the copied-profile browser server were stopped after
+testing. Evidence, APK copies, images, and trial volumes were retained privately
+for review. The existing production controllers were not replaced by this trial.
 
-This was a runtime evaluation for a prospective package, **not CasaOS installation acceptance**. No active CasaOS service or deployed package was found in checked locations. `/var/lib/casaos` exists, but `/etc/casaos` was absent. CasaOS installation, launcher and restart behavior remain untested.
+This was a runtime evaluation for a prospective package, **not CasaOS installation
+acceptance**. At that time no active CasaOS service or deployed package was found
+in checked locations. CasaOS installation, launcher, and restart behavior were
+not tested by this evaluation; later Waydroid package checks are recorded separately.
 
 ## Exact images and configuration
 
@@ -41,7 +63,10 @@ The project's real pinned scrcpy 3.3.3 transport produced eleven decodable H.264
 
 The bounded transport probe ended after about 6.4 seconds when a static launcher stopped producing packets and its five-second packet deadline expired. This is not a sustained FPS benchmark. Evidence: `scrcpy-13.json` and `probe_scrcpy.py`.
 
-The [official ReDroid documentation](https://github.com/remote-android/redroid-doc) documents software rendering as the default and explicit host rendering; its own WebRTC integration is described as planned. Browser delivery needs separate verification.
+The [official ReDroid documentation](https://github.com/remote-android/redroid-doc)
+used for the trial described software rendering by default, explicit host rendering,
+and planned WebRTC integration. Those references describe the evaluation context;
+browser delivery still needed separate verification for the tested images.
 
 ## ADB control: passed on Android 13
 

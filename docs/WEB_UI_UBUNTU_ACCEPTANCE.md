@@ -1,4 +1,11 @@
-# Ubuntu and LAN acceptance
+# Ubuntu and LAN pilot: October 10, 2026
+
+Historical test report. The results and remaining work below describe the pilot
+on that date, including its then-required password and legacy farm sequence.
+They do not describe the current CasaOS deployment or current setup requirements.
+See [current status](WEB_UI_MIGRATION_STATUS.md), [browser controls](WEB_UI.md),
+and [CasaOS](CASAOS_PACKAGE.md). Later results are recorded there; this report
+does not retroactively claim those later tests.
 
 Tested October 10, 2026, from a Windows computer on the same LAN as Ubuntu.
 The migration was copied into a separate pilot directory. The existing desktop
@@ -25,7 +32,7 @@ bot, checkout, Python environment, and Android game were not replaced or stopped
 
 Browser evidence: [Ubuntu LAN dashboard](design/web-ui/ubuntu-lan-dashboard.jpg).
 
-## Still pending
+## Pending after the initial offline pass
 
 The existing desktop automation was running. Permission to pause it was requested
 before live interaction tests; no live game commands were issued in this pass.
@@ -66,17 +73,18 @@ Passed against the real device:
 - Original calibration/settings/templates were compared byte-for-byte with the
   restored copied profile and remained unchanged.
 
-No Donate request was visible before or after the attack, so actual donation and
-elixir-mode selection remain unverified. Long-duration operation, real device
-failures, mid-battle cancellation and video transport are still acceptance gates.
+No Donate request was visible before or after the attack, so that pilot did not
+verify donation or elixir-mode selection. Long-duration operation, real device
+failures, mid-battle cancellation and video remained acceptance gates for that
+pilot snapshot, rather than statements about all later versions.
 
 A minor Diagnostics presentation issue exposed raw screenshot metadata; the
 frontend now suppresses that output. TypeScript and the production build passed.
 
-The live server was shut down and the original desktop GUI reopened using its
-existing display authorization. Automation is stopped by default after reopening;
-press Start in the desktop GUI to resume it. No production update, commit or push
-was performed. Test screenshots/logs are kept outside the documentation assets.
+At the end of that pilot, the live server was shut down and the original desktop
+GUI reopened with its existing display authorization and automation stopped.
+No production update, commit or push was performed as part of that pilot.
+Test screenshots/logs were kept outside the documentation assets.
 
 The temporary LAN preview was shut down after the checks. Its known test password
 must never be used for a live deployment. No firewall or router rules changed.

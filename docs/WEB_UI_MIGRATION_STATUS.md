@@ -1,82 +1,103 @@
-# Web interface migration status
+# Current interface and deployment status
 
-Updated: October 10, 2026. The opt-in browser implementation is available locally.
-The live Ubuntu deployment has not been changed. A separate Ubuntu/LAN pilot was
-tested without interrupting it. No commit, push, or production deployment was performed.
+Updated **October 18, 2026**. This is the current status summary; the
+[original migration plan](WEB_UI_MIGRATION_PLAN.md) and
+[October 10 pilot report](WEB_UI_UBUNTU_ACCEPTANCE.md) are historical records.
+Their old passwords, rollout gates, and default-interface statements are not
+current operating instructions. Start with the [README](../README.md).
 
-## Implemented
+## Available now
 
-- Shared services/controller for normal, queued and one-shot farming, priority
-  cancellation, diagnostics, captures, settings, bounded events and timer reads.
-  Desktop normal operation and one-shot farming use the lifecycle controller.
-- Local-first FastAPI server, salted password verifier, expiring sessions,
-  login throttling, CSRF/origin/host checks, authenticated WebSockets, payload
-  limits and cross-process device ownership.
-- Responsive React interface following the approved minimal layout: Dashboard,
-  Settings, Setup, Library, Diagnostics. Seven themes, common/advanced settings,
-  timing presets, raw developer timings, dirty guards and revision conflicts.
-- All 32 calibration parts: direct selection, missing/all flow, instructions,
-  immutable captures, original-pixel selections, templates/colors/grids, ordered
-  farm taps, farm-only jitter, skip/cancel, stale capture guards and journaled
-  calibration/template restore transactions.
-- Backup, safety restore, rename/delete, validated ZIP sharing, profile saves,
-  paged collection gallery/status and diagnostic/report downloads.
-- First-launch test profile with isolated data and inherited worker context.
-  Normal/test profiles cannot simultaneously control Android.
-- Optional one-frame-per-second viewer: taps/swipes, explicit Back/Home,
-  exclusive control, cancellation/disconnect cleanup and no auto-resume.
-- Installer web option, launcher, compiled package assets and installation/
-  developer instructions in WEB_UI.md. Desktop launch remains the default.
+The browser dashboard is deployed through CasaOS on an existing Ubuntu/Waydroid
+installation. The default CasaOS port is 8767; source launches use localhost 8765.
+No dashboard password is required by default. Explicit LAN binding, host/origin,
+session/CSRF, WebSocket, and ownership protections remain in place.
 
-## Retained locally
+The six current pages are Dashboard, Attacks, Settings, Setup, Library, and
+Diagnostics. They include:
 
-- Classic terminal calibrator stays local rather than exposing a remote shell.
-- Desktop shortcut installation stays in the desktop app; its shortcut still
-  launches that app. Browser users use the documented web command.
-- Collection labeling/review decisions remain in the local review tool. The
-  browser gallery currently displays images and collection status.
-- Waydroid startup remains manual. Browser tools can close the current user's
-  session, but do not install/start Android or alter host privileges.
+- Shared Start/Stop, queued and standalone farming, status/events, paused
+  farm/session countdowns, practice mode, and runtime readiness/errors.
+- Always-editable settings with validation, revision conflicts, safe Save &
+  restart, common/advanced/developer controls, themes, and timing presets.
+- Direct/guided calibration with original-pixel screenshot editors, ordered
+  legacy deploy taps, skip/cancel, backups/profiles, and transactional restores.
+- Calibration ZIP import/export, rename/delete, collection gallery/status,
+  diagnostic actions, screenshots, activity and report downloads.
+- Real WebRTC Live view with optional exclusive taps/swipes and Android controls;
+  the separate slower screenshot viewer remains available.
+- Automatic supported-army Electro Dragon attacks, custom map-based routines,
+  and the original programmed sequence. Scheduled farming defaults off and
+  sequence remains the default method for a new profile.
+- Optional Suggested upgrades/research, availability and resource-reserve checks,
+  non-spending previews, and durable uncertain-spending reconciliation.
+- Interrupted-attack recovery without deployment replay and bounded generated
+  attack diagnostic retention.
+- CasaOS managed Android/game startup, trusted initial APK import, and verified
+  in-place game updates. Host preparation/helper installation is separate from
+  normal bot-container privileges.
 
-## Verification
+Desktop/terminal entry points and the classic local calibrator remain. The
+browser has newer planner/upgrade controls; the interfaces share engine/profile
+formats but must not compete for Android ownership. Screenshot labeling/training
+is a separate workflow, not automatic online learning or action authority.
 
-- 42 offline tests passed: lifecycle races/errors, engine reliability, auth/CSRF/
-  origins, settings conflicts, all calibration parts, stale capture protection,
-  archive boundaries, viewer ownership, test-profile isolation/reset/context and
-  frozen stopped clocks.
-- Desktop smoke checks passed across five pages and seven themes with isolated
-  data and live ADB forbidden. TypeScript checks and production build passed.
-- Linux launcher syntax checks and inclusion of compiled browser assets in a
-  locally built wheel passed. A clean Linux package installation is still pending.
-- Browser checks used a disposable fake device: authentication, Start/Stop,
-  pan/capture/sequence saving, phone-width settings, viewer open/close, and
-  first-launch setup/capture/save/exit. Preview images are in `design/web-ui/`.
+## Recent verified evidence
 
-## Remaining acceptance gates
+These are dated completed checks, not promises for every installation and not
+checks rerun by a documentation edit:
 
-The isolated Ubuntu/LAN checks are recorded in
-[Ubuntu acceptance](WEB_UI_UBUNTU_ACCEPTANCE.md): 42 tests, Linux package/assets,
-cross-computer browser operation, request protections, conflicts, reconnects and
-existing-profile compatibility passed.
-The follow-up live pilot also passed capture/viewer input, practice Stop,
-standalone-farm cancellation, copied-profile calibration save/cancel/restore,
-and one full farm returning to confirmed clan chat via the timer fallback.
-Actual donation was not tested because no request was available. Production
-was not updated; the original desktop GUI was reopened with automation stopped.
+- The October 10 Ubuntu/LAN pilot exercised browser transport, session/origin
+  protections, copied-profile calibration, Start/Stop, and a complete legacy farm.
+- Subsequent existing-host CasaOS integration exercised managed session
+  close/reopen, app management, profile preservation, APK import/update, LAN
+  video, and manual browser controls. Clean-host/headless acceptance remains
+  separate; see [CasaOS status](CASAOS_PACKAGE.md#verification-and-remaining-limits).
+- The October 14 game-UI pass verified the new army confirmation/battle gate,
+  recovered a reward overlay, and completed a real specific donation including
+  troops and a Recall spell. See [UI evidence](UI_COMPATIBILITY.md#live-validation-october-14-2026).
+- The October 17 reviewed current-UI screen model remained observation-only;
+  its held-out coverage/weak classes are in [PERCEPTION](PERCEPTION.md).
+- October 18 crash testing interrupted an attack after eleven verified dragons.
+  Recovery sent no further deployment inputs, returned through visual results,
+  reconciled the interval once, and reopened chat with protected profile data
+  intact. See [attack recovery evidence](ATTACK_REBUILD.md#interrupted-attacks-and-diagnostic-storage).
+- Source snapshot `7d01eba` completed 302 Linux tests with one skipped before
+  deployment. Its installed package matched the source snapshot.
+- The October 18 deployment of `7d01eba` completed a fresh automatic attack:
+  eleven dragons, five Rage spells, one siege, and two available heroes were
+  verified, with both hero ability taps sent. Two fresh results frames triggered
+  Return Home before the fallback. Home/chat were confirmed, recovery markers
+  cleared, and the bot resumed checking requests. All 37 protected files and
+  settings matched the pre-deploy checks. No active donation request was available
+  in that deployment check, so it did not re-verify donation fulfillment.
 
-These need the real Ubuntu/Waydroid deployment; offline tests do not replace them:
+Test counts describe those exact runs. Follow [RELIABILITY](RELIABILITY.md) for
+reproducible current checks, rather than treating old counts as new results.
 
-1. Record live startup, screenshot and Stop timing baselines; validate existing
-   calibration/settings without rewriting them.
-2. Supervised donation/farm/calibration/restart checks; long-running cancellation,
-   device failures, multiple tabs, second LAN device, network loss and sustained run.
-3. Validate source and packaged installs in a clean Linux environment. Optional
-   user-service startup requires confirming the Waydroid desktop/session environment.
-4. Evaluate the planned scrcpy browser bridge on actual Waydroid. The current
-   screenshot viewer is a preparation prototype, not the planned video transport.
-   Measure rotation/input mapping, bandwidth, latency and game/Stop load; consider
-   noVNC only if necessary. Concurrent read-only viewers remain deferred.
+## Remaining limits
 
-Keep the desktop fallback and do not declare full acceptance or cut over before
-these gates pass. The approved plan is preserved in WEB_UI_MIGRATION_PLAN.md.
+- Fresh host installation from no Waydroid/calibration, unattended headless reboot,
+  and broader kernel/GPU/CPU combinations need dedicated acceptance.
+- Live video depends on Android encoding, browser/network paths, and permitted
+  UDP traffic. One stream/controller is supported; multi-viewer service is not.
+- Recognition targets the inspected English landscape layouts. New UI versions,
+  small displays, unfamiliar skins/sceneries, and ambiguous OCR can block actions.
+- Automatic attacks support a fixed army/strategy family, not arbitrary strategies.
+  Some opponents/maps or card readings can conservatively stop deployment.
+- Recovery can require manual inspection. Restarting a container does not mean
+  the app will automatically press Start or replay unfinished actions.
+- Source-wheel-only installation is incomplete without profile defaults/scripts;
+  normal installation uses the checkout or the built CasaOS image.
+- UI screenshots/mockups and one successful live run do not establish universal
+  phone/browser accessibility, soak performance, power-loss recovery, or upgrade
+  compatibility. Keep measuring these against the affected release.
 
+## Before another release
+
+Use the installed configuration and a verified private profile backup. Build/test
+an exact source snapshot; preserve the prior image. Deploy the bot without
+rerunning privileged setup for code-only updates. Check installed assets/imports,
+runtime readiness, actual affected game outcomes, Stop, and home/chat recovery.
+Compare protected data/settings and leave only the intended controller active.
+Record skipped checks and remaining risks explicitly.

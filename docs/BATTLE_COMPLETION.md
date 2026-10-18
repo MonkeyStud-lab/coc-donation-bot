@@ -3,6 +3,10 @@
 After deployment, the programmed, planner and automatic attack methods watch
 for the results screen rather than always waiting for the entire timer.
 
+This is the normal attack-completion path. Interrupted-attack recovery uses the
+same visual anchors but deliberately has no timer-based Return Home tap. A broad
+screen label or white transition clouds do not confirm completion in either path.
+
 It checks two fixed labels together: **Return Home** near the bottom centre,
 and **Troops expended** above it. Both labels must match the bundled reference
 images, have the expected relative positions, and the Return Home text must be
@@ -62,7 +66,7 @@ test does not depend on the Victory banner. The current lettering fix also cover
 the real defeats described below. Different languages, UI scaling or a game UI update
 may prevent a match. In those cases the timer fallback remains available.
 
-To validate live, watch one manual farm attack in the GUI. Confirm the new log
+To validate live, watch one manual farm attack through browser Live view. Confirm the log
 appears only after the actual results screen, and that home/clan chat are reached.
 Keep examples of both wins and losses for future offline checks. The lettering
 fix passes recent real victory/defeat examples at three resolutions and rejects

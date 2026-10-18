@@ -1,5 +1,10 @@
 # Screenshot annotation
 
+Browser Library displays collection images/status; it is not a full bounding-box
+labeling or training app. Collection, fixed-batch review, explicit label approval,
+and training/observation are separate steps. See [collection](SMART_COLLECTION.md)
+and [perception](PERCEPTION.md). The model never authorizes game input.
+
 Work on a fixed, copied batch rather than editing the live collector catalog.
 Keep the original path, recording session and SHA-256 for every image. Screenshots
 and exports remain private under `data/labelstudio/`; do not commit player names

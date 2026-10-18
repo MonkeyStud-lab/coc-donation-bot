@@ -1,244 +1,247 @@
 # CasaOS package
 
-This package is under development. The bot image and existing-session pilot have
-passed testing; installation on a clean host and unattended reboot are not yet
-accepted. Do not replace a working installation until those checks pass.
+CasaOS runs the browser dashboard in a container while Waydroid remains on the
+Linux host. The package is in use on an existing Ubuntu/Waydroid installation.
+Clean-host/headless installation and unattended reboot still need dedicated
+acceptance; this is not a universally tested one-click appliance.
 
-## What the package does
+See the [README](../README.md) for the quick start and
+[verification and limits](#verification-and-remaining-limits) before migrating.
 
-CasaOS starts two services. The one-time setup service prepares the Linux host:
-Waydroid, Android images, graphics/display prerequisites, a headless Wayland
-session, and a small host helper. The ordinary bot service runs the dashboard,
-ADB controls, and live video in a container. It does not get the Docker socket,
-host filesystem, host D-Bus socket, or graphics devices.
+## What runs where
 
-The setup service explicitly requires host installation privileges. It mounts the
-host root at `/host` and installs into it, then exits. The host helper exposes only
-status/start/resume/stop and device ownership over a local Unix socket. Requests
-cannot supply shell commands, package names, services, or file paths. The helper
-must remain installed because Waydroid is a host runtime.
+The Compose file has two services:
 
-Initial target: x86-64 Ubuntu/Debian with systemd and working hardware graphics.
-AMD/Intel graphics are the intended first target. Other GPUs, virtual machines,
-ARM hosts, and alternative kernels require separate acceptance. Installation
-stops on missing prerequisites; it never silently replaces the kernel.
+- **setup:** one-time administrator-level host preparation. It mounts the host
+  root and installs supported Waydroid/Android images, display prerequisites,
+  headless session units when applicable, and a small runtime helper, then exits.
+- **bot:** the ordinary browser/ADB/video app, running as user 1000:1000 with a
+  read-only root filesystem, temporary `/tmp`, dropped capabilities, and private
+  profile storage. It has no Docker socket, host root, host D-Bus, or graphics
+  device mounts.
+
+The system helper exposes allowlisted status/start/resume/stop/device-ownership
+operations over a local Unix socket. Requests cannot supply shell commands,
+package names, host paths, or arbitrary service actions. A code-only bot update
+does not replace that separately installed helper.
+
+The initial target is x86-64 Ubuntu/Debian with systemd, compatible binder support,
+and working hardware graphics, initially AMD/Intel. CasaOS and Docker are
+prerequisites. Other GPUs, VMs, ARM, and alternative kernels need separate
+validation. The installer checks compatibility and does not silently replace
+the kernel. ARM-only game packages may require translation not supplied here.
 
 ## Data protection
 
-- Host setup makes a dated ZIP backup before changes. It includes calibration,
-  reference images, settings, runtime history, and default configuration, plus a
-  SHA-256 manifest. Archives are verified and private.
-- The package profile is separate from a previous checkout. Existing calibration
-  is imported only into empty storage; it is never overwritten during seeding.
-- Persistent profile: `/DATA/AppData/coc-bot/profile`.
-- Installer backups: `/DATA/AppData/coc-bot/backups`.
-- Waydroid's Android/account data remains on the host. Bot backups do not include
-  the game account, Android private data, or account credentials.
-- Image builds exclude live data, APK files, screenshots, and calibration. APKs
-  are imported into private storage; they are not published in the image or repo.
-- The bridge uses the same host `flock` as desktop/terminal bot runs. A second
-  controller is rejected. Lease release is acknowledged before a restart.
-- Calibration edits in the container and installer snapshots share a lock in the
-  profile's data directory, even though their filesystem paths differ.
+Persistent locations:
 
-Keep an independent calibration backup on another device before migrating. Use
-Library → import/restore to restore a portable calibration backup. Installer ZIPs
-also include settings and use `data/` paths; they are full profile snapshots,
-not the narrower Library calibration archive format.
+- `/DATA/AppData/coc-bot/profile`: the bot profile, mounted as `/profile`.
+- `/DATA/AppData/coc-bot/backups`: verified host-installation snapshots.
+- `/run/coc-waydroid`: runtime socket/device metadata exposed to the bot.
+- Host Waydroid storage: Android installation and game/account data, separate
+  from bot-profile backups.
+
+Setup snapshots calibration YAML, templates, user settings, runtime state, and
+base configuration with a SHA-256 manifest before changes. It verifies the archive
+and keeps it private. These snapshots are not complete copies of every profile
+file: custom planner routines/artwork, collection, and Android account data need
+separate backups. Library calibration ZIPs are narrower still: calibration and
+templates, not settings or account data.
+
+Before migration, Stop/release manual control and keep an independent full-profile
+backup on another device. Import copies the supported old profile files into empty
+storage only; it does not merge over a live setup or promise to migrate every new
+feature directory. Preserve planner state separately and inspect the imported
+profile before starting. Do not copy `.venv` between hosts.
+
+Image builds exclude private calibration, datasets, APKs, and account files.
+Entrypoint seeds missing defaults/game data/gesture assets without overwriting
+existing user files. Shared calibration locks protect installer snapshots from
+concurrent edits even when host/container profile paths differ. Device leases
+exclude the original controller and package controller in both directions.
 
 ## Build and install
 
-Until a registry image is published, build from a checkout on Linux:
+From a checkout on the CasaOS Linux host:
 
 ```bash
 bash packaging/casaos/build.sh
 ```
 
-In CasaOS, install a custom app and import `packaging/casaos/compose.yaml`.
-The image name defaults to `coc-bot-casaos:local`. The dashboard uses port 8767
-and discovers the host's LAN address. An address/origin override is available
-for hosts with multiple network interfaces. Host networking also carries local
-WebRTC video without a separate UDP port mapping.
+In CasaOS, install a custom app by importing
+[`packaging/casaos/compose.yaml`](../packaging/casaos/compose.yaml). The local image
+is `coc-bot-casaos:local`; a registry release is not assumed. Review setup's
+administrator host access before running it. The setup package does not install
+CasaOS itself.
 
-The dashboard icon is the clan castle drawn in Microsoft Paint, stored in
-`web/public/casaos-icon.png`, also included in the web app at
-`/casaos-icon.png`. `COC_ICON_URL` can override its URL when importing Compose;
-for a locally built or private repository, use the dashboard address followed by
-`/casaos-icon.png` so CasaOS can load it without GitHub access.
+The dashboard defaults to `http://YOUR_LINUX_IP:8767`. Host networking carries the
+HTTP/WebSocket API and local WebRTC traffic. Set `COC_WEB_HOST` and
+`COC_WEB_ORIGIN` when automatic address selection chooses the wrong interface;
+an origin includes scheme, address, and port. Default access is password-free,
+so restrict it to a trusted LAN. A TCP web-port mapping/tunnel alone does not
+establish the WebRTC UDP path.
 
-CasaOS installation itself is a prerequisite for a CasaOS app; this package does
-not install or replace CasaOS. The setup container installs Waydroid automatically
-on supported hosts. Its administrator-level access is visible in the Compose
-definition and should be reviewed before installing.
+The included castle icon is served at `/casaos-icon.png`. `COC_ICON_URL` can point
+the CasaOS tile to that dashboard URL for a private/local installation. The image
+also includes the compiled frontend; users do not need Node.js.
 
-For an existing Waydroid desktop session, set `COC_ADOPT_USER` and optionally
-`COC_WAYLAND_DISPLAY` on the setup service. That mode retains the existing desktop
-display and Android installation. It does not promise startup before that
-desktop user's Wayland session is available. It can reopen a closed Android
-session once that display is available. New installations use the dedicated
-headless display instead. Neither mode changes an existing Android resolution.
+### Existing Waydroid and profiles
 
-An operator can also run the same host installer explicitly:
+For an existing desktop session, set `COC_ADOPT_USER` on setup and, if different,
+`COC_WAYLAND_DISPLAY`. `COC_IMPORT_PROFILE` can name the old profile for supported
+empty-storage import. Adoption retains the Android installation and requires that
+user's Wayland display; it does not guarantee startup before desktop login.
+New installations use the dedicated headless display path instead. Neither mode
+changes an existing Android resolution.
+
+An administrator can perform host setup explicitly:
 
 ```bash
-sudo python3 packaging/casaos/install_host.py
+python3 packaging/casaos/install_host.py --dry-run
+sudo python3 packaging/casaos/install_host.py --adopt-user YOUR_USER --import-from /path/to/old/bot
 ```
 
-Use `--dry-run` for a read-only compatibility report. `--import-from /path/to/old/bot`
-backs up and copies a previous profile into empty package storage. `--adopt-user`
-retains an existing session. After host setup, `COC_SKIP_HOST_SETUP=1` skips the
-setup container when testing or when setup was already performed separately.
+Replace the placeholders. Omit `--adopt-user` for the new headless-session route;
+omit `--import-from` without an old profile. Do not execute a fresh install just
+to update application code. `COC_SKIP_HOST_SETUP=1` skips bootstrap when the host
+was already prepared. An installed bot-only Compose configuration is also used
+for existing-host deployments; preserve its settings rather than replacing it
+with the two-service fresh-install configuration.
 
-The manually triggered GitHub workflow `CasaOS container image` builds Linux
-amd64 images and publishes versioned and `casaos` tags to GHCR. Publishing and
-registry installation have not yet been verified. Public images contain no game
-APKs, account information, or user calibration.
+A manually triggered image-publishing workflow exists under
+`.github/workflows/casaos-image.yml`. Its GHCR publication/installation is a
+separate release path, not proof of a tested public app-store installation.
 
 ## Install Clash without Google sign-in
 
-Export APK files from an Android instance where Clash is already installed:
+The first installation needs your own trusted APK files. On a computer with Python
+3, ADB, and an already-installed compatible Clash instance:
 
 ```bash
 python3 scripts/export_clash_apks.py --device ANDROID_IP:5555 --output clash-apks.zip
 ```
 
-This copies installation files only, including split APKs. It does not copy the
-account. Open the package dashboard and use **Import Clash APK archive** when
-prompted. The app validates every APK's package name before installation. Then
-open **Live view → Take control** and sign into the game yourself. Never send
-account passwords or login codes to the bot or the host helper.
+Replace the device address. This exports installation files, including split APKs,
+not account data. Use **Import Clash APK archive** when the package requests it.
+The importer validates package identity and archive contents before installation.
+Then open **Live view → Take control** and sign into the game yourself. Do not
+supply account passwords/codes to the bot or helper.
 
-Clash must be compatible with the selected Android/CPU. An ARM-only APK set may
-need translation components not supplied by this initial package; a failed
-compatibility check is not an invitation to alter game integrity protections.
-Updated APKs may need to be imported when the game requires an update.
-
-Fresh accounts/screens still need the existing guided Setup calibration before
-automation can start. Universal automatic calibration is not implemented by this
-package. Imported calibrations need matching screenshot dimensions and layout.
-Farming also requires the user's army-specific deploy sequence. Installation and
-runtime startup are automated; these gameplay assumptions must not be guessed.
+Fresh profiles still require guided calibration. Imported calibration needs
+matching dimensions and layout. Sequence mode needs recorded army taps; automatic
+Electro Dragon mode does not. Automatic/planner modes still require navigation
+calibration, supported army readings, pinned gesture assets, and verified maps.
+See [attacks](ATTACK_REBUILD.md).
 
 ## Startup and controls
 
-The dashboard starts independently of Android readiness. It displays startup
-progress or a specific error, with Retry. The runtime helper starts/reuses the
-session; ADB connects; Clash is installed if absent and APK files are available;
-the game launches; screenshot health is checked. Automation remains stopped.
+The dashboard remains available while Android prepares or fails. Runtime status
+shows a stage/message/error and Retry. The helper starts/reuses the session,
+connects and refreshes only the selected ADB transport, checks/installs the game,
+launches it, and verifies screenshot health. Automation remains stopped.
 
-**Stop** cancels bot/tool actions and leaves the game open. **Close Waydroid and
-Clash** explicitly closes the session. Stopping the CasaOS bot container does not
-delete Android data or uninstall Waydroid. Closing a browser tab does not stop
-automation. Live view wake/recovery uses the helper through narrow command shims.
+**Start** begins automation; **Stop** cancels bot/tool actions and leaves the game
+open. **Close Waydroid and Clash** explicitly closes the session. Closing a browser
+tab leaves automation running. Stopping the bot container does not uninstall
+Waydroid or delete Android data. On restart, pending attack/purchase work is
+reconciled when its owning operation starts; no deploy/purchase recipe is replayed.
+The container restart policy is not automatic gameplay Start.
 
-Do not run the previous bot service and package concurrently. Locks prevent
-simultaneous control, but a paused desktop bot should be disabled deliberately
-at final migration. Do not uninstall the fallback until migration acceptance.
+Do not run an old service/controller alongside CasaOS. Keep a stopped rollback
+installation and backups until the migration has been verified.
 
-## Acceptance still required
+## Updating the bot and helper
 
-1. Clean supported host: setup from no Waydroid installation and no calibration.
-2. GPU-backed headless Android surface, Clash installation and account sign-in.
-3. Reboot with no desktop login; CasaOS starts the dashboard and Android.
-4. Game update/import, network loss, frozen payload, repeated Stop/Retry.
-5. CasaOS GUI import, health status, update and rollback.
-6. Calibration/template checksum preservation and restore to the fallback.
-7. A supervised donation and farm using an explicitly prepared test profile.
+1. Stop automation, release manual control, and back up the complete private
+   profile as well as exporting calibration. Preserve the current image/tag.
+2. Update the source with `git pull --ff-only` and build the new image with
+   `bash packaging/casaos/build.sh` (or the intentionally selected image tag).
+3. Recreate only **bot** using the installed Compose file, image, environment,
+   and mounts. A checkout pull or browser refresh cannot replace code in an
+   existing container. Do not rerun privileged setup for a code-only update.
+4. Check container health, runtime readiness, assets, device/screenshots, and
+   affected live actions. Verify protected profile data/settings. Press Start
+   deliberately; refresh the browser for updated assets.
 
-Existing-session testing alone does not prove clean-host or headless compatibility.
-The production host cannot finish administrator installation unattended while
-sudo requires interactive authentication.
+Helper changes require a separate administrator command while the device is idle:
 
-## Current verification
+```bash
+sudo python3 packaging/casaos/install_host.py --refresh-helper
+```
 
-The development image built on Ubuntu and passed 84 offline regression tests
-inside its own container. An existing-session pilot launched Clash at the
-original screen dimensions, produced decoded browser video, and validated all
-five APK splits from the installed game. The full large archive upload endpoint
-also passed; it did not replace the already-installed game or start automation.
+It takes a verified snapshot, checks device ownership, refreshes the helper,
+reloads systemd, and restarts `coc-waydroid-host.service`. It does not reinstall
+Android or reset calibration. Runtime directory preservation avoids stale socket
+mounts. Administrator authentication is a host requirement, not a dashboard field.
 
-The administrator-installed helper passed ownership tests against the original
-desktop controller in both directions. The Linux root/user `/tmp` lock protection
-case is covered by a container regression test. The original bot service is
-retained as a fallback; evaluation profiles and imported APKs are separate.
-
-The closed-session acceptance test exposed stale `Session: RUNNING` metadata
-after Android shutdown. The helper now treats a stopped payload with an
-unresponsive Android check as needing startup, rather than failing status on a
-timeout. The package regression suite passed after this correction. Installing
-this correction succeeded. The adopted host also had stale container-manager
-tracking and a stale ADB transport. Restarting its container manager and cleanly
-stopping the retained Android session cleared the host condition. Package
-startup now refreshes only its own ADB transport while holding the device lease.
-The deployed package subsequently passed a complete close/reopen cycle:
-Waydroid stopped, automatically reopened, launched Clash, and captured a frame
-at the original resolution. Automation remained stopped throughout.
-
-CasaOS app management subsequently accepted the existing-host configuration and
-listed the app as running with its dashboard URL. That registration includes
-only the bot service: host installation was already completed, so its privileged
-setup service was removed. The local development image uses `pull_policy: never`
-because it has not been published to a registry. A calibration backup was taken
-before registration, and both original and imported calibration hashes remained
-unchanged afterward. The CasaOS dashboard tile itself still requires a signed-in
-visual check; app-management registration does not verify a fresh installation.
-
-After a helper code update, stop automation and release manual control, then run
-`sudo python3 packaging/casaos/install_host.py --refresh-helper`. This takes a
-backup, checks that the Android device is unowned, and refreshes only the helper.
-It does not reinstall packages, reset Android, or change calibration. Directory
-preservation prevents container socket mounts becoming stale during restart.
-
-These checks do not satisfy the clean-host, headless reboot, or CasaOS GUI gates
-listed above. Do not describe this as a universally compatible one-click release.
+If reverting an image, keep the same compatible profile and installed environment.
+A profile restore must be deliberate; do not discard unfinished attack/upgrade
+journals to make rollback start. Verify migration compatibility before using an
+older controller against newer data.
 
 ## Updating Clash
 
-Once a trusted copy of Clash is installed, CasaOS checks for updates each time
-its managed runtime starts. To check immediately, stop the bot and close manual
-control, then choose **Diagnostics → Update Clash**. Download progress appears
-in the dashboard. Automation stays stopped; start it again after checking the
-updated game's layout.
+After a trusted initial installation, managed runtime startup checks for a newer
+Clash APK. To request a check immediately, Stop/release manual control and choose
+**Diagnostics → Update Clash**. Progress appears in runtime status; automation
+stays stopped. Set `COC_AUTO_UPDATE_GAME=0` to disable startup checks; the explicit
+button remains available.
 
-The source is APKPure's direct HTTPS endpoint:
-`https://d.apkpure.net/b/APK/com.supercell.clashofclans?version=latest`.
-APKPure is a third-party distributor, not Supercell. Supercell's official Android
-download links use Google Play. APKMirror also publishes releases and describes
-its signature checks, but its multi-page download flow is not the integration
-used here. No Google login is added.
+The current implementation uses APKPure's direct HTTPS endpoint and an allowlisted
+CDN. This is a third-party source, not a Supercell distribution service. The
+updater verifies a standalone package/version with `aapt`, its actual signature
+with `apksigner`, and the signing-certificate identity against the installed trusted
+base APK. Version must be newer. Unexpected redirects, changed certificates,
+split-only packages, and invalid signatures are rejected. A new signing identity
+needs manual review; the endpoint cannot bootstrap trust for a fresh account/device.
 
-Before installation the updater verifies the actual APK signature with
-`apksigner`, compares its SHA-256 certificate identity with the installed base
-APK, checks the package name and a strictly newer version code, and refuses
-split-only downloads. Android additionally verifies the in-place update.
-Signature rotation to a different certificate is deliberately rejected and
-requires manual review. A fresh installation still requires a trusted APK
-archive; this download endpoint cannot establish the initial trusted signer.
+Before installation, calibration is backed up and the previous installed APK set
+is retained under `data/game-update-backup` (one previous version). It never clears
+account data or uninstalls the game. APK copies are not Android account backups;
+automatic downgrade is not attempted. Downloads have cancellation/timeouts, a
+2 GB cap, and require 6 GB free staging space.
 
-Calibration is backed up before an update. The previous installed APK set is
-retained in `data/game-update-backup` (one previous version); account data is
-never cleared and the game is never uninstalled. These APK copies are not a
-backup of Android account data and automatic downgrade/rollback is not attempted.
-Downloads are capped at 2 GB and require 6 GB free staging space. Downloads have
-timeouts and cancellation checks. Only the HTTPS source host and its observed
-`data.winudf.com` CDN are allowed; unexpected redirects fail closed. An unavailable
-source leaves startup usable with the existing game and reports the failed check.
-An explicit update failure is shown as a runtime error; Retry startup can reopen
-the existing game. Updates never run periodically during gameplay.
+If the provider fails during startup, the existing installation remains usable
+and the failed check is reported. An explicit update error is shown as runtime
+failure; Retry startup can reopen the existing game. Use trusted archive import
+if the provider no longer supplies a compatible standalone APK. Updates do not
+run periodically during gameplay.
 
-Set container environment `COC_AUTO_UPDATE_GAME=0` to disable startup checks;
-the Diagnostics button still works. Existing CasaOS installations need the new
-container image to gain this feature. ZIP import remains the fallback if the
-provider changes its endpoint or stops publishing compatible standalone APKs.
+Waydroid can temporarily freeze a package during install; the updater uses
+non-streamed ADB installation and checks the committed version when the final
+response is lost. If Waydroid shows a running session but a stopped/unresponsive
+container, a host administrator may need:
 
-Waydroid may keep an APK temporarily frozen during installation. The updater
-uses non-streamed ADB installation and checks the committed version even when
-ADB loses its final response. Runtime readiness still requires Clash to stay
-running. If Waydroid reports `Session: RUNNING` with `Container: STOPPED`, a host
-administrator may need to run `sudo systemctl restart waydroid-container.service`,
-then choose Retry startup in the dashboard. Do not uninstall Clash or reset
-Android to resolve this condition; both would risk losing account data.
+```bash
+sudo systemctl restart waydroid-container.service
+```
 
-Sources: [Supercell](https://supercell.com/en/games/clashofclans/),
-[APKPure](https://apkpure.net/p/com.supercell.clashofclans),
-[APKMirror FAQ](https://www.apkmirror.com/faq/).
+Then Retry startup. Do not reset Android or uninstall Clash for this condition.
+After any game update, check layout/calibration and preview affected operations;
+a successful APK update does not establish recognition compatibility.
+
+## Verification and remaining limits
+
+Existing-host checks have covered image build/imports, CasaOS app management,
+original/package ownership exclusion, verified profile backups, closed-session
+reopen, stale-session/ADB recovery, trusted APK import/update, and decoded LAN
+video/manual controls. Supervised donation and automatic farm checks have also
+run on the current game; see [current evidence](WEB_UI_MIGRATION_STATUS.md).
+
+The October 18 deployment of exact source `7d01eba` passed health/readiness and
+installed-source checks, completed nineteen verified map deployments, recognized
+results before the fallback, returned to home/chat, and cleared recovery markers.
+Thirty-seven protected files and settings remained unchanged. A donation request
+was not available in that particular deployment check, so fulfillment was not
+retested there.
+
+Still separate acceptance work:
+
+- A clean supported host from no Waydroid/profile through APK import and sign-in.
+- Dedicated headless GPU/display startup and reboot without desktop login.
+- Broader GPU/kernel/CPU/Android/browser combinations and sustained failure/soak tests.
+- Published image/app-store fresh installation, release updates, and rollback.
+- All new game layouts/languages, sceneries, capacities, and unknown army artwork.
+
+Historical pilot test counts do not establish these gates. The failed
+[ReDroid evaluation](REDROID_EVALUATION.md) is not a supported runtime alternative.

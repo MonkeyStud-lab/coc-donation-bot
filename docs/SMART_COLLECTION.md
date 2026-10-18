@@ -6,9 +6,11 @@ automatically. Normal donation and farming rules still control every action.
 
 ## Start collecting
 
-In the GUI, open **Settings → Screenshot collection**, enable collection, choose
-daily and storage limits, and Save. Stop and Start the bot to apply changes.
-These settings persist across app launches.
+In the browser, open **Settings**, find Screenshot collection (use Advanced or
+search if needed), enable it, and choose daily/storage limits. **Save** applies
+while stopped; **Save & restart** while running waits for the current action and
+restarts with the new settings. These settings persist across launches. The
+desktop interface also exposes collection controls.
 
 Alternatively, activate the project's virtual environment and launch with:
 
@@ -16,10 +18,11 @@ Alternatively, activate the project's virtual environment and launch with:
 python -m coc_bot.main --collect-smart
 ```
 
-Press Start in the GUI. For terminal-only operation add `--no-gui`. To compare
+This command opens the desktop GUI; press Start there. For terminal-only operation
+add `--no-gui`. To compare
 an existing experimental model, also add `--screen-model path/to/screens.npz`.
 Model predictions are logged and attached to screenshots; they never control taps.
-CLI collection options override the saved GUI collection settings for that
+CLI collection options override the saved collection settings for that
 launch; their default limits are used unless supplied explicitly. `--collect-smart`
 takes precedence over the older `--record` mode. Legacy recording is separate
 and is not covered by smart collection's quotas.
@@ -78,10 +81,17 @@ captures; it does not run a separate ADB capture thread. Failure context is a se
 not a guaranteed number of seconds before/after an event. No active exploration
 of menus is performed.
 
+Generated attack diagnostics have a separate retention policy under `data/debug`.
+They can be pruned without removing this collection or reviewed datasets. The
+collection cap is not a cap on all profile storage. See
+[storage safeguards](RELIABILITY.md#storage-and-private-data).
+
 ## Review and use the data
 
-In **Library → Screenshots**, click **Review screenshots**, or open
-`data/collection/review.html` in a browser on the bot computer. It groups the
+Browser **Library** shows a paged gallery and collection status. The desktop
+Library also provides a local review link. For the detailed review, open
+`data/collection/review.html` on the bot host, or use a private copied batch. A
+LAN browser cannot open a Linux file path directly. The review groups the
 latest 600 saved images by new appearances, disagreements, failures and ordinary
 examples. Expand each image's details to see its action, phase and predictions.
 `status.json` gives current-session statistics, storage usage and any pause reason. `catalog.jsonl`

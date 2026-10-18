@@ -1,205 +1,216 @@
 # Browser interface
 
-The browser interface is an opt-in replacement for the control window. The bot
-and Waydroid still run on Linux. Closing a tab leaves the bot running; **Stop**
-cancels normal operation and a standalone farm attack. Offline checks have passed;
-live Ubuntu/LAN acceptance remains a rollout gate. Keep the desktop fallback.
+The browser dashboard is the main interface for the current app. It controls the
+same Python engine as the retained desktop and terminal entry points. Waydroid
+and Clash run on Linux; the browser can be on another device on the LAN.
+Closing a tab leaves automation running. Server startup leaves automation stopped.
+
+See the [README](../README.md) for installation and the
+[current status](WEB_UI_MIGRATION_STATUS.md) for verification and remaining limits.
+Historical migration reports are not current setup requirements.
 
 ## Install and open locally
 
-In the project folder, for an existing installation:
+For a new source installation, run `bash scripts/setup_linux.sh --web` first.
+From the checkout, activate the environment and install browser/video components:
 
 ```bash
 source .venv/bin/activate
-python -m pip install -e '.[web]'
+python -m pip install -e '.[web,web-live]'
+python scripts/setup_live_view.py
 python -m coc_bot.web
 ```
 
-No password or sign-in is required. For a new installation,
-run `bash scripts/setup_linux.sh --web` first.
-Normal users do not need Node.js; compiled assets are included in the checkout
-and Python package.
+Open **http://127.0.0.1:8765**. Later, `bash scripts/run_web.sh` launches the
+installed server. `python -m coc_bot.main --web` is another localhost launcher;
+`python -m coc_bot.main` still opens Tkinter rather than the browser.
+Normal users do not need Node.js: compiled assets are included.
 
-Keep the source checkout: a standalone wheel includes the browser assets but not
-all project defaults/scripts. Advanced package installations need `--home` pointing
-to a separate directory with the project's `config/` files and a writable `data/`.
+Keep the source checkout. A standalone wheel has browser assets but not every
+project default or setup script. `--home /path/to/profile` selects a separate root
+with `config/` and writable `data/`; it does not create a complete profile for you.
 
-Open **http://127.0.0.1:8765** on Linux to go directly to the dashboard. After installation,
-`bash scripts/run_web.sh` or `python -m coc_bot.main --web` also launch the local
-server. The existing `python -m coc_bot.main` still opens the desktop interface.
-
-Open Waydroid and Clash manually. In **Settings**, enable **Advanced**, enter
-the ADB device address, and save. **Diagnostics → Check device** attempts that
-connection and verifies dimensions. Run the server as the user who owns the
-Waydroid desktop session.
+For ordinary source runs, open Waydroid and Clash manually as the desktop session
+owner. In **Settings → Advanced**, set the ADB address and save, then run
+**Diagnostics → Check device**. CasaOS instead uses its managed runtime and host
+helper; its default dashboard port is **8767**. See [CasaOS](CASAOS_PACKAGE.md).
 
 ## Open from another device
 
-Find Linux's local IP in network settings. If it is `192.168.1.50`, run:
+Use the Linux host's specific private IP address and matching origin:
 
 ```bash
-python -m coc_bot.web --host 192.168.1.50 --origin http://192.168.1.50:8765
+python -m coc_bot.web --host YOUR_LINUX_IP --origin http://YOUR_LINUX_IP:8765
 ```
 
-Open **http://192.168.1.50:8765** on your other device. Substitute your address.
-Origins include scheme, host, and port, with no trailing slash. Repeat `--origin`
-for additional allowed addresses. Allow the port only from your trusted LAN.
+Replace both placeholders, then open that URL on the other device. An origin
+includes scheme, host, and port, without a trailing slash. Repeat `--origin` for
+additional allowed addresses. Password-free mode rejects public, wildcard,
+multicast, and link-local bind addresses.
 
-HTTP does not encrypt passwords, screenshots or commands. For secure access,
-use an HTTPS reverse proxy in front of the loopback server, its exact HTTPS
-origin, and `--secure-cookie`. Alternatively, leave the server on localhost and
-use an SSH tunnel from the connecting computer:
+No password or sign-in is required by default. Anyone who can reach the dashboard
+can see the game and control its configuration. Host/origin, session, CSRF, and
+WebSocket checks remain active; they are not a substitute for restricting network
+access. Keep the port on a trusted LAN. Do not forward it directly to the internet.
+
+Optional source-install password protection:
+
+```bash
+python -m coc_bot.web --set-password
+python -m coc_bot.web --require-password
+```
+
+Normal startup ignores a previously saved password unless protection is enabled.
+HTTP does not encrypt game images, commands, or passwords. For secure access,
+use an HTTPS reverse proxy with its exact `--origin` and `--secure-cookie`, or
+leave the server on localhost and connect through an SSH tunnel:
 
 ```bash
 ssh -L 8765:127.0.0.1:8765 YOUR_USER@YOUR_LINUX_ADDRESS
 ```
 
-Then open localhost on that computer. Do not forward the port from your router
-to the internet. Public hosting and automatic HTTPS installation are outside scope.
+Open localhost on the connecting computer. This tunnels the dashboard's TCP
+traffic; it does not by itself transport WebRTC's UDP video. Video may therefore
+need a different permitted network path. No external STUN/TURN service is configured.
 
-The dashboard opens directly and there is no Sign out button. Anyone who can reach this address can
-control the bot, view the game, and edit its setup. Use this only on a trusted
-LAN or localhost; this mode rejects public or wildcard bind addresses.
-Origin, host, session-cookie and CSRF checks remain enabled. Password-free
-sessions reconnect automatically after a service restart. No password file is needed,
-and previously saved passwords are ignored during normal startup.
+## Pages and ownership
 
-Password protection is optional for installations that need it: run
-`python -m coc_bot.web --set-password` once, then launch with `--require-password`.
-This is never required for normal local or LAN use.
+- **Dashboard:** Start/Stop, Farm now, practice mode, Live view, timers, and activity.
+- **Attacks:** Automatic attack, opponent preparation, army review, map editing,
+  saved routines, supervised execution, and camera restoration.
+- **Settings:** common/advanced controls, choices, timing presets, raw developer
+  values, themes, upgrades, and collection limits.
+- **Setup:** direct part selection or Calibrate missing/all. Follow instructions,
+  capture, click/draw on the image, and save. Grid parts include row/column counts.
+- **Library:** calibration backups, safety restores, named profiles, ZIP sharing,
+  rename/delete, and a paged screenshot gallery/status.
+- **Diagnostics:** device/screen checks, navigation tests, current screenshot,
+  screenshot-based manual viewer, upgrades, activity/report downloads, and
+  explicit close-game/Waydroid actions.
 
-## Use the pages
+One device operation owns Android at a time. Calibration writes, tools, normal
+operation, standalone attacks, and manual input cannot compete. Other browser
+clients see the shared state; they cannot create a second controller. The device
+lease also excludes desktop/terminal controllers targeting the same device.
 
-- **Dashboard:** Start/Stop, Farm now, practice mode, countdowns, one activity log.
-  Stopped scheduling clocks freeze. An already-started mandatory break expires
-  by real time.
-- **Settings:** common controls first; **Advanced** reveals the rest. Timing
-  presets simplify delays; **Dev options** exposes raw timings. Fields are always
-  editable. **Save** while stopped applies changes without starting the bot.
-  **Save & restart** while running validates the draft, finishes the current
-  donation or attack, and restarts with the same practice/run options. **Stop**
-  cancels the pending update and automatic restart. Release manual control before
-  saving, and finish standalone tools first. Another browser's save causes a
-  conflict: Reload before retrying. Edits made while applying remain unsaved drafts.
-- **Setup:** select a part directly or follow missing/all calibration. Prepare
-  the game as instructed, capture, click a point or draw a box, then Save. Grid
-  parts ask for rows/columns. Skip and Cancel preserve existing calibration.
-  Stale screenshots cannot overwrite newer calibration.
-- **Library:** backup, restore with safety backup, rename/delete, ZIP import/export,
-  profile saves, and a paged collection gallery/status. Import creates a stored
-  backup; Restore applies it. Label/review decisions remain in the local review tool.
-- **Diagnostics:** screenshots, navigation tests, deployment preview, game/session
-  close, readiness checks, and report/activity downloads. These tools can interact
-  with the game; practice mode only governs normal bot donation taps.
+**Stop** bypasses ordinary work and cancels active commands/waits, including a
+standalone Farm now or Automatic attack. An input already delivered to Android
+cannot be undone. Stopping remains visible until ownership is released. Clash
+stays open; closing Waydroid is a separate action.
 
-**Building upgrades** and **Army research** in Diagnostics provide a non-spending
-**Check upgrades** action and a separate **Start recommended upgrade** action.
-Stop the bot and close manual controls first. Settings includes optional automatic
-checks and resource reserves; both upgrade automation switches start off. See
-[Suggested upgrades](UPGRADES.md) for instructions and limitations.
+Practice mode skips normal donation taps. Navigation, manual tools, and attacks
+can still affect the real game. It is not the offline preview.
 
-For **Deploy tap sequence**, prepare an opponent screen and use **Pan and capture**,
-or capture an already-positioned view. Click army slots and deployment locations
-in execution order. Variation is the maximum offset on each axis, in original
-Android pixels; numbered circles enclose every possible offset, including diagonal
-ones. It affects farm taps only. Undo/Clear edit the draft; Save applies it. Browser resizing never
-changes Android resolution.
+## Settings and timers
+
+Fields remain editable during normal bot operation. **Save** while stopped applies
+without starting. **Save & restart** while running validates the draft, waits for
+the current action to finish, and restarts with the same practice/run options.
+**Stop** cancels the pending save/restart. Release manual control and finish
+standalone tools before saving. A stale revision from another browser requires
+Reload; edits made while applying remain unsaved drafts.
+
+Stopped farm and session-limit countdowns freeze and resume without consuming the
+paused duration. An already-started break expires by real time. Farm interval and
+session-limit variance are separate settings. Farm now is an explicit request,
+not a change to the saved schedule or selected attack method.
+
+## Calibration and backups
+
+Select a Setup part, prepare the game exactly as instructed, release manual
+control, then **Capture screen**. Editors use immutable screenshots and original
+Android dimensions; browser scaling/letterboxing does not change saved coordinates.
+Stale captures or changed revisions cannot overwrite newer calibration. Skip and
+Cancel preserve existing values.
+
+For **Deploy tap sequence**, prepare an opponent and use **Pan and capture**, or
+capture the already positioned view. Record army selections and map taps in order.
+Numbered circles enclose the configured farm-only per-axis variation, including
+diagonal offsets. This setting does not change donation/navigation jitter.
+Automatic attacks do not require this sequence. See [attacks](ATTACK_REBUILD.md).
+
+In Library, **Back up calibration** stores YAML and template images. **Export**
+downloads a portable ZIP; **Import calibration** creates a stored backup and
+**Restore** applies it, with a safety snapshot first. **Save profile** names an
+interface calibration snapshot. These are not full-profile/game backups: settings,
+planner artwork/routines, and Android account data need separate protection.
+Use **Diagnostics → Check calibration** to inspect required fields/bounds; also
+visually verify the actual game layout.
+
+## Upgrades and game updates
+
+**Diagnostics → Building upgrades / Army research → Check upgrades** reads
+Suggested entries without spending. **Start recommended upgrade** is separate
+and requires fresh checks. Automatic categories are disabled by default; enable
+in Settings only after reviewing reserves and exclusions. See [upgrades](UPGRADES.md).
+
+Managed CasaOS installations also expose **Update Clash**. Stop the bot and release
+manual input before using it. It is an APK update, not a calibration repair. See
+[game updates](CASAOS_PACKAGE.md#updating-clash).
 
 ## Prepare screens from the browser
 
-**Diagnostics → Open game** opens an optional screenshot viewer capped at one
-frame per second. Stop and wait until fully stopped first. Click to tap or drag
-to swipe; Android Back/Home are explicit buttons. Close before capturing calibration.
+**Diagnostics → Open game** is the slower screenshot viewer, capped at one frame
+per second. Stop fully first. Click to tap, drag to swipe, and use explicit Android
+Back/Home buttons. Close it before capturing calibration. It is distinct from video.
 
-One browser owns manual control. While open, Start, farming, other device tools
-and calibration writes are rejected. Closing, disconnecting, signing out or Stop
-releases control after any executing command returns. Automation never resumes
-automatically. This is a preparation prototype, not a scrcpy video stream. Live
-Waydroid latency, rotation and resource use still need validation.
+The viewer holds exclusive manual ownership. Closing/disconnecting/Stop releases
+it after executing input returns. Automation does not resume automatically.
 
-## Test first-time setup safely
+## Experimental live video
 
-Enable **Dev options**, Save, then **Diagnostics → Simulate first launch**.
-It opens Setup with a disposable profile containing no calibration, settings or
-runtime history. Entering from the normal interface resets this profile.
-**Exit first-launch test** returns to your saved setup. Temporary files are removed
-on clean server shutdown. Both modes share exclusive device ownership.
+**Dashboard → Live view** streams the existing Android display using scrcpy and
+WebRTC. Viewing can coexist with automation. Stop fully, then choose **Take control**
+for taps/swipes and Android Back/Home. Releasing control, closing the view,
+disconnecting, or Stop cancels manual control and queued gestures; it never
+silently restarts automation. Clicks outside the displayed picture are ignored.
 
-This isolates files, not the game: pan, capture and navigation use the real device.
-Use the offline preview below if you want no live game interaction.
+Only one live stream is supported. It does not change Android's resolution or
+open another game instance. Closing it stops the encoder and its own ADB forward.
+Audio is disabled; H.264 is passed through without host re-encoding, capped at
+1280 pixels, 20 fps, and 2 Mbps. The pinned scrcpy server is checksum-verified and
+stored privately under `data/live/`. Camera gestures use the same pinned server
+without opening a stream or requiring Android root.
 
-## Stop, update, and switch back
+Capture starts after WebRTC negotiation to avoid a backlog of old frames. The
+header reports decoded frame rate. A visible view with no newly decoded frames
+for about twelve seconds reports an error and releases manual control. Hidden
+tabs are excluded because browsers can suspend playback.
 
-Press Stop and wait for **Stopped** before updating or switching interfaces.
-**Stopping** means an executing command has not returned yet. Stop the web server
-with Ctrl+C, update the checkout, reinstall web extras if dependencies changed,
-then restart. Settings/calibration/runtime persist; browser sessions do not survive
-server restarts. To switch back, stop the server and run `python -m coc_bot.main`.
-No calibration conversion is needed.
+A working Android encoder and reachable local WebRTC UDP path are required.
+Waydroid can freeze a background payload while ADB stays connected. Live view
+can resume that existing payload when its IP matches the selected device and
+check for re-freezing while open. On ordinary source installations it does not
+start an absent session; CasaOS runtime startup is a separate managed operation.
+Use the screenshot viewer when video is unavailable. LAN playback has been tested;
+this is not a guarantee across Android encoders, firewalls, or browser versions.
 
-## Development and checks
+## First-launch testing and updates
 
-### Experimental live video
+Enable Dev options and Save, then **Diagnostics → Simulate first launch**. This
+opens Setup in a disposable profile without calibration/settings/runtime history.
+Entering from the normal interface resets that test profile. **Exit first-launch
+test** returns to normal. Temporary data is removed on clean shutdown. Both
+profiles still share exclusive ownership of the real Android device.
 
-Dashboard → **Live view** opens a WebRTC video stream. It can watch
-while automation runs. Stop the bot, then select **Take control** to click/tap
-and drag/swipe on the video. Android Back and Home controls are also available.
-Manual control holds an exclusive device lease; automation cannot start until
-you release control. **Stop**, disconnecting, or closing the view cancels control
-and discards queued gestures. Releasing control never restarts automation.
-Clicks outside the displayed picture are ignored. The stream does not change
-screen size or start another game instance. Closing the view stops its encoder
-and ADB forward. Only one live stream can run at a time. **Diagnostics → Open game**
-remains the slower screenshot viewer with manual controls while the bot is stopped.
+For no game input, use `PYTHONPATH=src python scripts/preview_web_offline.py`.
+First-launch simulation isolates files, not Android.
 
-Install optional components in the bot's virtual environment:
+Before updates or switching to desktop, Stop, wait for Stopped, and release all
+manual control. For source updates, stop the server, update dependencies/assets,
+and restart with the same host/origin arguments. CasaOS needs a rebuilt/recreated
+container. See [running and backups](RUNNING.md). Browser sessions reconnect after
+server restart; automation remains stopped until Start.
 
-```bash
-python -m pip install -e '.[web,web-live]'
-python scripts/setup_live_view.py
-```
+## Development and verification
 
-Restart the web server after installation. The installer downloads the official
-scrcpy 3.3.3 Android server and verifies its pinned SHA-256 checksum. It is stored
-under `data/live/`, not committed or included in calibration backups. No native
-scrcpy desktop window is opened. Audio is disabled. Video is capped at 1280 pixels,
-20 fps and 2 Mbps, with encoded H.264 passed through without host re-encoding.
-WebRTC uses local network candidates without external STUN or TURN servers.
-Firewalls must allow the local WebRTC UDP connection as well as the web port.
+Serve exactly one Uvicorn worker. Shared `control/` services own lifecycle and jobs;
+`web/` owns HTTP/WebSocket transport; top-level `web/` contains React/TypeScript.
+Long game work runs in cancelable workers, not the server event loop. Events and
+subscriber queues are bounded. Screenshot routes retain at most eight immutable
+capture IDs and allowlisted files; never accept arbitrary host paths or commands.
 
-Capture starts after WebRTC negotiation so old frames do not accumulate while
-the browser connects. The Live view header shows the decoded frame rate; this
-measures received video, not screenshot polling. If a visible view stops decoding
-new frames for about 12 seconds, it displays a Retry message and releases control
-instead of keeping a frozen image marked Live. Hidden browser tabs are excluded
-from this check because browsers may suspend background playback.
-
-Live video requires a working Android surface encoder. Waydroid can freeze its
-container when no window is open, which leaves ADB connected but stops video.
-Live view resumes an already-running frozen Waydroid container through its native
-D-Bus method when its IP matches the selected device. It does not open Waydroid's
-full window or start a stopped session. Closing the stream leaves the game running.
-While the view is open, it checks for re-freezing every three seconds. Closing the
-view cancels these checks, so Waydroid resumes its normal idle behavior.
-A successful browser connection alone does not mean video works; the server checks
-for a fresh video packet before sending its answer. If your Android build cannot encode
-video, use the existing screenshot viewer. Waydroid Android 13 H.264 capture and
-LAN browser playback were verified on the test host after resolving its frozen state.
-
-Shared services live in `control/` and `calibration/`; routes/authentication in
-`src/coc_bot/web/`; React/TypeScript source in top-level `web/`. Desktop compatibility
-imports preserve existing callers. Game recognition and donation/farming methods
-are retained.
-
-One cancelable worker owns each bot/tool operation. Stop bypasses queues. Existing
-process-level leases prevent desktop/terminal competition. HTTP mutations check
-session, CSRF, origin, payload size and idle ownership. Authenticated WebSockets
-carry status and bounded, numbered events. At most eight immutable screenshot IDs
-are retained. Saves validate coordinates/revisions and use journaled calibration/
-template restore transactions. First-launch paths use propagated context rather
-than changing the process-wide profile.
-
-After editing frontend source:
+After frontend edits:
 
 ```bash
 cd web
@@ -208,21 +219,14 @@ corepack pnpm run build
 cd ..
 ```
 
-Include rebuilt `src/coc_bot/web/static` files with the change. Vite development
-proxies to localhost:8765; explicitly allow `http://localhost:5173` as an API origin
-when using Vite. Run one server worker; the supplied launcher enforces this.
+Commit rebuilt `src/coc_bot/web/static` assets. Vite development proxies to port
+8765; add `http://localhost:5173` as an allowed API origin when using Vite.
 
 ```bash
 python -m pip install -e '.[web,web-test]'
-python -m unittest discover -s tests
-python scripts/verify_gui_offline.py
+python -m unittest discover -s tests -v
 PYTHONPATH=src python scripts/preview_web_offline.py
 ```
 
-The preview uses disposable data and a fake device; it opens without a password.
-Real ADB is forbidden. On headless Linux, run desktop checks through `xvfb-run -a`.
-
-Before cutover, back up settings/calibration and test on Ubuntu: capture/readiness,
-supervised Start/Stop and farming, original-pixel calibration, a second LAN device,
-multiple tabs, network/server/device loss, and a sustained run. Measure startup,
-capture and cancellation timings. See [migration status](WEB_UI_MIGRATION_STATUS.md).
+Desktop checks on headless Linux use `xvfb-run -a python scripts/verify_gui_offline.py`.
+Offline checks do not establish fresh-host support or current-game compatibility.

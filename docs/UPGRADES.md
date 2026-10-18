@@ -13,17 +13,24 @@ English, landscape game interface; an unreadable or changed screen blocks spendi
    The app opens the Build menu, reads the recommendations, and returns to chat.
    Checking does not buy or start anything.
 4. Read the displayed cost and any reasons for skipping an entry.
-5. To start the displayed recommendation, press **Start recommended** and review
+5. To start the displayed recommendation, press **Start recommended upgrade** and review
    the confirmation. The app checks the recommendation and resources again before
    pressing the game's resource confirmation button.
 
 The desktop interface does not include these new preview controls. Use the browser
 dashboard for this feature.
 
+Verified availability and spending are distinct. A Suggested row can be visible
+with no free builder/laboratory slot; it is not authorization to start. Successful
+execution requires observed progress and slot usage, not merely an issued tap.
+See [current validation status](WEB_UI_MIGRATION_STATUS.md) for dated evidence.
+
 ## Automatic checks
 
 Open **Settings → Upgrades**. Enable building upgrades, research, or both, and
-save. Start the bot normally. It checks between donation rounds, after the farming
+Save while stopped, or Save & restart during normal operation. The latter waits
+for the current action; Stop cancels the pending settings restart. Start the bot
+normally when stopped. It checks between donation rounds, after the farming
 priority check, and gives a visible donation request priority. Each check can start
 at most one upgrade per enabled category. Practice mode does not run automatic
 upgrades; the manual Diagnostics action is a separate spending action.

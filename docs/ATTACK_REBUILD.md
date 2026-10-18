@@ -1,8 +1,9 @@
 # Attack planner and verified executor
 
-The experimental planner runs a configurable mass Electro Dragon routine in
-unranked battles. It does not choose strategies, score opponents, prioritize
-elixir, or replace an existing deployment sequence automatically.
+The browser's Attacks page offers automatic mass Electro Dragon farming and
+custom map-based routines for unranked battles. These use measured opponent
+maps and per-deployment verification. The original programmed pixel sequence
+remains available; the app does not invent strategies or score opponents.
 
 The original **Programmed tap sequence** remains the default. **Automatic** and
 **Planner** are opt-in attack methods. Scheduling a saved routine requires a successful supervised
@@ -65,11 +66,14 @@ tap. Stop interrupts immediately and leaves any required camera recovery pending
    stops deployment; the bot never silently substitutes the old pixel sequence.
 
 **Stop** interrupts mapping, card selection, deployment, waits, and recovery. It
-sends no cleanup inputs afterward. If stopped in a battle, finish or wait for that
-battle manually, return home, then choose **Restore camera** before using the old
-sequence. The persisted camera marker blocks both regular bot startup and legacy
-farming until restoration has been measured successfully, including after an app
-restart.
+sends no cleanup inputs afterward and retains unfinished attack/camera state.
+On the next Start, recovery inspects that state before normal operation; it does
+not replay the plan. You can also finish/wait for the battle manually and return
+home before starting recovery. **Attacks → Restore camera** is the explicit idle
+tool for restoring the saved reference, including a preserved legacy reference.
+Unresolved recovery blocks ordinary automation; an automatic-only zoom-limit
+exception can still leave the old pixel sequence blocked. See
+[interruption recovery](#interrupted-attacks-and-diagnostic-storage).
 
 A first review may take longer than a match. Keep the saved routine and reviewed
 artwork, then prepare a fresh opponent. An expired screenshot cannot authorize a
@@ -117,14 +121,15 @@ Home retains the battle zoom. The app saves its original home image before a
 survey and restores the measured scale afterward. Restoration measures the
 actual home image; an opponent's starting zoom is not a home zoom reference.
 If no reliable match is available, one wider home overview can expose landmarks
-for a fresh measurement. Only a verified home-image comparison can clear the
-pending marker. Device or
+for a fresh measurement. Normal restoration requires a verified home-image
+comparison; the automatic-only measured zoom-limit exception is described under
+interruption recovery. Device or
 resolution changes, missing references, or failed comparisons leave it blocked.
 Restoration tolerates a measured scale difference below three percent; it does
 not rewrite calibration coordinates.
 If the restored view lands on sparse repeated decorations, a plausible existing
 translation can guide up to two bounded pans at home. Each pan requires a fresh
-image; only a subsequent verified comparison can clear the pending marker.
+image; a subsequent verified comparison is required for normal restoration.
 These probes never authorize battle coordinates or bypass camera verification.
 Home-only matching includes edge landmarks while explicitly masking fixed HUD
 controls. A small source image pyramid handles large zoom differences without
@@ -190,7 +195,8 @@ not count as a successful supervised routine.
 - `attack/army.py`, `battle_gate.py`: fresh army and battle-control evidence.
 - `attack/automatic.py`: current inventory scan and built-in Electro Dragon plan.
 - `attack/executor.py`: measured execution and per-action journal.
-- `attack/planned_farmer.py`: opt-in scheduled engine and camera restoration.
+- `attack/planned_farmer.py`: automatic/planner scheduling and camera restoration.
+- `attack/recovery.py`: durable attack checkpoints and interruption reconciliation.
 - `control/attack_planner.py`: supervised previews, private templates, and lifecycle.
 - `web/src/AttackPlanner.tsx`: map editor and numbered steps.
 
@@ -201,7 +207,11 @@ These account-specific files are ignored by Git. Saved plans are separate from
 session/origin checks, revision checks, allowlisted images, exclusive device
 lease, and Stop mechanism. No route accepts an arbitrary local image path.
 
-## Validation and release limits
+## Validation history and release limits
+
+The dated results below record particular source snapshots and inspected armies.
+They are not a test run performed by updating this document. The latest overall
+deployment status is maintained in [current status](WEB_UI_MIGRATION_STATUS.md).
 
 Live testing uses an isolated source snapshot and a verified calibration backup.
 It has exercised real pinch gestures, multiple sceneries, reviewed army artwork,
@@ -268,7 +278,9 @@ python -m unittest discover -s tests -p 'test_attack*.py'
 python -m unittest discover -s tests -p 'test_updated_battle_menu.py'
 python -m unittest discover -s tests -p 'test_web_interface.py'
 cd web
-npm run build
+corepack pnpm install --frozen-lockfile
+corepack pnpm run build
+cd ..
 ```
 
 Scenery coverage, small display sizes, unknown skins, crowded/scrolled bars,
@@ -304,7 +316,7 @@ owner checks this marker and the existing camera recovery marker. Recovery:
   old reference is preserved as `camera-legacy-before.png` and
   `camera-legacy-blocked.json` prevents running fixed pixel sequences. Automatic
   attacks must still rebuild and verify their opponent map from fresh images.
-  Tools → Restore camera can attempt the preserved legacy reference. The regular
+  Attacks → Restore camera can attempt the preserved legacy reference. The regular
   3% camera-restoration tolerance and opponent geometry thresholds are unchanged.
 - Advances the farm interval once for a potentially fought battle. Its attack ID
   is persisted so a crash between saving the interval and clearing the checkpoint

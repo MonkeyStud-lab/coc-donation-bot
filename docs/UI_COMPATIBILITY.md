@@ -39,8 +39,10 @@ older menu resets this metadata. It is calibration data, not a timing setting.
 4. Skip **Second search button (older UI)** on the current layout.
 5. Use Diagnostics to inspect request recognition, the donation panel, and
    elixir selection before enabling donations. Recalibrate only affected areas.
-6. Check the deployment sequence and Return Home in a supervised unranked
-   attack if the battlefield or results layout has changed.
+6. Test the selected attack method and Return Home in a supervised unranked
+   attack if battlefield/results layout changed. Sequence mode needs its recorded
+   taps checked; automatic/planner modes need current card and boundary evidence,
+   not a new fixed tap recipe.
 
 The existing-host compatibility pass inspected real home, clan chat, global
 chat, Multiplayer menu, and specific-request donation screenshots. It verified
@@ -77,7 +79,13 @@ The inner home-confirmation loop checks each fresh frame too, allowing successiv
 resource reveals to clear without repeatedly tapping the clan-chat coordinates.
 Unknown reward names or a different backdrop need a new inspected screenshot.
 
-## Live validation — October 14, 2026
+## Live validation October 14, 2026
+
+This section records that release's inspected game version and test outcomes.
+Subsequent results-detector and camera refinements are covered in
+[battle completion](BATTLE_COMPLETION.md), [attacks](ATTACK_REBUILD.md), and
+[current status](WEB_UI_MIGRATION_STATUS.md). The fallback used in the test below
+is not the normal completion behavior of every later attack.
 
 The supervised repeat recognized My Army, pressed its Attack button, verified
 the opponent controls, and replayed the existing 33-tap sequence. Screenshots

@@ -1,287 +1,238 @@
-# How the CoC Donation Bot works
-
-This document explains the architecture for anyone who wants to understand or extend the project. For install and day-to-day use, see the [README](../README.md). For contribution tips, see [CONTRIBUTING.md](CONTRIBUTING.md).
-
-For Shop / Clash Pass recovery and the optional learned screen observer, see
-[Screen recognition and recovery](PERCEPTION.md). The observer cannot control
-actions; the existing navigation rules remain authoritative.
-
-**Educational use only.** Supercell prohibits bots and gameplay automation. See the [README warning](../README.md) before using this project.
-
----
-
-## Big picture
-
-The bot never reads game memory or uses an official API. It:
-
-1. Takes **screenshots** of Clash of Clans inside Waydroid over **ADB**
-2. **Classifies** what is on screen (home, clan chat, battle, results, …)
-3. Issues **taps and swipes** as if a human were touching the display
-
-```text
-┌─────────────┐     screenshot      ┌──────────────────┐
-│  Waydroid   │ ──────────────────► │  ScreenCapture   │
-│  Clash of   │                     │  (adb/capture)   │
-│  Clans      │ ◄────────────────── │  InputController │
-└─────────────┘     tap / swipe     └────────┬─────────┘
-                                             │
-                                             ▼
-                                    ┌──────────────────┐
-                                    │ ScreenClassifier │
-                                    │  (vision/)       │
-                                    └────────┬─────────┘
-                                             │
-                    ┌────────────────────────┼────────────────────────┐
-                    ▼                        ▼                        ▼
-             Donation flow            Farm attack flow           Breaks / recovery
-             (donation/)              (attack/)                  (runtime/)
-```
-
-The orchestrator is `DonationBot` in [`src/coc_bot/bot.py`](../src/coc_bot/bot.py). `main.py` is the command-line entry point. By default the bot runs behind a Tkinter GUI ([`src/coc_bot/gui/app.py`](../src/coc_bot/gui/app.py)); page builders are separated into `gui/page_views.py` and collection/profile controls into `gui/data_tools.py`. The opt-in browser interface uses `control/` services and `web/` routes with the same engine and file formats. See [browser architecture and setup](WEB_UI.md).
-
----
-
-## Repository layout
-
-| Path | Purpose |
-|------|---------|
-| `src/coc_bot/` | All runtime Python code |
-| `src/coc_bot/adb/` | ADB client, screencap, taps/swipes, launch/stop CoC |
-| `src/coc_bot/vision/` | Screen classification, templates, ROIs, colors, OCR helpers |
-| `src/coc_bot/donation/` | Clan chat scan, navigation, donation executor |
-| `src/coc_bot/attack/` | Unranked farm: navigate, deploy, return home |
-| `src/coc_bot/runtime/` | Session timer, breaks, persisted state |
-| `src/coc_bot/calibration/` | Interactive setup wizard |
-| `src/coc_bot/gui/` | Control window (Dashboard / Settings / Setup / Library / Diagnostics) |
-| `config/` | Defaults (`default.yaml`), clan perk limits |
-| `data/` | Calibration, user settings, templates, collected screenshots, runtime state |
-| `scripts/` | Calibrate, verify, dry-run, desktop install helpers |
-| `docs/` | This documentation |
-
----
-
-## Config layers
-
-Loaded by [`src/coc_bot/config.py`](../src/coc_bot/config.py) → `load_config()`:
-
-1. **`config/default.yaml`** — factory defaults (timing, donation, farm, gui, ADB package name, …)
-2. **`data/user_settings.yaml`** — deep-merged overrides from the Settings UI
-3. **`data/calibrated.yaml`** — only calibration fields override settings: frame size, screen areas (ROIs), tap points, template paths, colors, grid, and the programmed farm deploy sequence
-4. **Environment** — e.g. `ADB_DEVICE` overrides the ADB address
-
-`COC_BOT_CONFIG` can select another calibration file; it does not isolate the rest of the data folder. Clan limits in `config/clan_perks.yaml` support the optional fill planner. The live donation path follows the game's colored/grey slots instead of calculating a housing budget.
-
-The GUI checks donation readiness before Start. Donations also require an elixir-button tap and a reference image of its selected state; the executor refuses donation taps if selection cannot be confirmed. Farm needs its navigation targets. The Programmed tap sequence method also needs recorded deployment taps; Automatic does not. Setup shows missing parts; [RELIABILITY.md](RELIABILITY.md) describes the independent safeguards.
-
----
-
-## Vision and modes
-
-### Why modes exist
-
-Many Clash screens share colors (green buttons, white cards, sky). A donation panel can look a bit like battle results; home can look a bit like a battlefield. To reduce mix-ups, classification is **mode-scoped**.
-
-**`BotMode`** ([`src/coc_bot/vision/screens.py`](../src/coc_bot/vision/screens.py)):
-
-| Mode | Used when | What classify may return |
-|------|-----------|---------------------------|
-| `DONATE` | Watching / filling clan chat | Chat, donation panel, drifted home, popups |
-| `ATTACK` | Farm attack pipeline | Attack menu, matchmaking, battle, results, home after leave |
-| `HOME` | Village-focused moments | Home, attack menu, popups |
-| `ANY` | Boot, recovery, leave-chat | Full unrestricted set |
-
-### Screen types
-
-`HOME`, `CLAN_CHAT`, `DONATION_PANEL`, `LOADING`, `POPUP`, `ATTACK_MENU`, `MATCHMAKING`, `BATTLE`, `BATTLE_RESULTS`, `LIVE_REPLAY`, `SHOP`, `CLASH_PASS`, `UNKNOWN`.
-
-Shop and Clash Pass recovery runs in every mode, but a separate verified close-X match is required before tapping. Mode constraints narrow the possibilities; they do not prove a screen is correct.
-
-Important heuristics (simplified):
-
-- **Live battle chrome** (red End Battle / orange Next) vetoes false “Return Home” green blobs mid-fight.
-- **Battle-results side silhouettes** (black character cutouts) mark Defeat/Victory and beat donation-panel false positives.
-- **Matchmaking** uses templates / upper sky heuristics while waiting for the battlefield; leave no longer depends on white loading clouds.
-- **Live Replay** (someone attacking *you*) is only considered when armed after a Clash relaunch.
-
-Templates and tap points from calibration back these heuristics when present.
-
----
-
-## Donation loop
-
-State machine inside `DonationBot._loop_tick()`:
-
-```text
-scan_chat ──(find Donate)──► open_donation ──► donate ──► scan_chat
-    │                              │
-    └──(none)──► scroll_chat ──────┘
-```
-
-### GameState logging (diagnostic only)
-
-[`runtime/game_state.py`](../src/coc_bot/runtime/game_state.py) tracks a high-level phase (`clan_chat`, `donating`, `in_battle`, …) in parallel with the loop strings above. Every transition is logged as:
-
-- `GameState [ok]: A → B` — allowed by the sanity graph
-- `GameState [unexpected]: A → B` — should not normally happen (still allowed; nothing is blocked)
-
-Farm expands into finer phases (`home` → `attack_menu` → `matchmaking` → `in_battle` → …). Use unexpected warnings to spot desync; they do not change taps.
-
-| Piece | Location | Role |
-|-------|----------|------|
-| Ensure chat open | `donation/navigator.py` | Open chat, dismiss popups, recover from wrong screens |
-| Find request | `donation/chat_monitor.py` | Find green candidates, then verify Donate text; reject Trade and ambiguous labels |
-| Kind (specific / open / hybrid) | `donation/request_parser.py` | Icons vs capacity bars |
-| Fill | `donation/executor.py` | Tap visible troop+spell slots first, then scroll bars |
-
-**Gating:** specific requests are always handled. Open/hybrid depend on `donate_open_requests` in settings.
-
-Before filling, `donation/resource_mode.py` verifies that elixir is selected. If needed, it taps the calibrated elixir button without jitter and checks a fresh image. Missing or mismatched references stop filling rather than permitting gem donations.
-
-**Anti-idle:** periodic tiny chat swipe so CoC does not kick for inactivity (`anti_idle_seconds`).
-
-**Watchdog:** if a donation state stalls too long, recover with a broad reclassify (`BotMode.ANY`) and reopen chat.
-
-Farm is only started when the bot is **not** mid `open_donation` / `donate`.
-
----
-
-## Farm attack loop
-
-The optional mass Electro Dragon planner, visual editor, and verified executor
-are documented in [ATTACK_REBUILD.md](ATTACK_REBUILD.md). The loop below remains
-the default Programmed tap sequence. The Automatic method reads the current army
-and generates a built-in Electro Dragon attack from a fresh opponent map, without
-a saved routine or manual map review. Custom planner scheduling requires a saved
-routine that completed a supervised live test. Neither method changes old calibration.
-
-Orchestrator: [`src/coc_bot/attack/farmer.py`](../src/coc_bot/attack/farmer.py).
-
-```text
-leave clan chat → Attack! → unranked Battle → battlefield
-    → pan + replay programmed deploy tap sequence
-    → watch for confirmed results; otherwise use the configured timer fallback
-    → confirm home (Attack! / clan chat) — no early surrender
-    → reopen clan chat
-```
-
-| Piece | Location |
-|-------|----------|
-| Navigation | `attack/navigator.py` |
-| Deploy taps | `attack/deployer.py` + `farm_deploy_sequence` in `calibrated.yaml` |
-| Triggers | GUI **Farm attack now**, or auto when `farm.enabled` + interval elapsed |
-
-### Programmed tap sequence method
-
-When **Attack method** is **sequence**, farm uses a programmed tap sequence. Without taps in `farm_deploy_sequence`, that method aborts before deployment. **automatic** and **planner** use their own army and map checks instead.
-
-Program from **Setup → Farm → Deploy tap sequence** (Recalibrate Selected), or Diagnostics: be on the battlefield first; the bot pans, shows a screenshot, and you click taps in order (numbered circles; radius = **farm deploy jitter**). The sequence stores its own **side / pan_swipes**; Settings → Farm deploy side / pan swipes are defaults for new sequences. Jitter applies only to sequence taps — donations use Timing → Tap jitter.
-
-### Leave / Return Home safeguards
-
-Battle completion uses two independent text anchors and keeps the existing timer as a fallback:
-
-1. **Timer** from the recorded deployment start, before pan/tap replay (`farm.battle_timeout_seconds`, default **210** = 3m30s). This timestamp does not prove the first troop deployed successfully
-2. During the wait, two consecutive screenshots must match both **Return Home** and **Troops expended**, with an enabled green button. When confirmed, tap the detected button. If recognition fails, the timer still **always** taps calibrated **Return Home** coordinates.
-3. Then only look for **home village** (Attack! / open chat / clan chat) and open chat. Do not re-check results/battle heuristics (they false-trigger on home)
-4. Never press Android **BACK** mid-battle (opens Surrender). On the Surrender dialog, tap **Cancel**
-
-False “battle results” during search are ignored unless real side silhouettes appear.
-
----
-
-## ADB stack
-
-| Module | Role |
-|--------|------|
-| `adb/client.py` | `adb -s <device>` shell / exec-out, reconnect |
-| `adb/capture.py` | Screencap (PNG / raw / pull fallbacks) |
-| `adb/input.py` | Tap, swipe, BACK; optional jitter and delays |
-| `adb/app.py` | Force-stop / launch CoC; wait past loading |
-
-Dry-run / Practice mode skips donation taps but still sends navigation input. It is not an offline simulator or a blanket guarantee that all game actions are disabled.
-
-Capture requests share a per-device lock and latest-frame cache. Normal captures have a 12-second total command budget; battle observations have three seconds. A device lease prevents another bot instance using the same ADB serial. See [RELIABILITY.md](RELIABILITY.md) for limits, including device aliases.
-
----
-
-## Runtime: stop, breaks, farm timing
-
-- **Stop** sets a shared flag, interrupts settling/waits, and cancels active ADB subprocesses. New actions must check the flag before input. Long sleeps use `interrupted_sleep` ([`src/coc_bot/stop.py`](../src/coc_bot/stop.py)). Clash stays open unless you use **Close Waydroid + Clash**.
-- **Breaks** ([`runtime/breaks.py`](../src/coc_bot/runtime/breaks.py)): after a rolled session limit (`session_limit_seconds` ± `session_limit_variance_seconds`), force-stop CoC, wait a random break window, relaunch, reopen chat. State lives in `data/runtime_state.json`.
-- **Farm clock:** any fought battle (deploy happened) advances `last_farm_at` for the interval (± variance), even if leave/chat confirm fails. Failures *before* deploy use the shorter retry cooldown.
-
-GUI one-shot farm (**Farm attack now** without Start) wires the same stop flag into the farmer/navigator/deployer.
-
-Farm and session clocks pause when the bot stops; resuming shifts the deadlines by the paused duration. Runtime persistence recovers from invalid saved JSON instead of preventing startup. These timers are separate from the battle's completion deadline.
-
----
-
-## GUI
-
-[`src/coc_bot/gui/app.py`](../src/coc_bot/gui/app.py):
-
-| Page | Role |
-|------|------|
-| Dashboard | Start / Stop, Connect ADB / Pick device, Get started, calibrate what’s missing, practice mode, farm readiness, status chip, activity log, copy/export debug |
-| Settings | Routine, Breaks, Appearance and Advanced tabs; contextual field help; unsaved-change guard; Apply & restart when running |
-| Setup | Full in-app pickers, selected-part instructions and terminal fallback |
-| Library | Screenshot gallery, calibration backups and interface profiles |
-| Diagnostics | Fix-it recipes + one-shot debug actions (`gui/debug_actions.py`); desktop shortcut |
-
-Window chrome (`last_page`, geometry, onboarding dismissed) lives in `data/gui_window.json`. Timing / practice / Dev options live under `gui:` in `user_settings.yaml`. Desktop toasts use `gui/notify.py` (`notify-send`). ADB auto-reconnects while the bot runs if the link drops.
-
-Activity log is a loguru sink. The Play status chip shows the current phase (watching chat / donating / farming / break). **Show DEBUG messages in activity log** controls raw DEBUG noise (default off).
-
----
-
-## Calibration
-
-[`src/coc_bot/calibration/schema.py`](../src/coc_bot/calibration/schema.py) defines shared steps (home → chat → donation → colors/grid → farm), and `calibration/instructions.py` supplies their directions. The terminal wizard imports those definitions. Desktop Setup uses in-app pickers (`gui/setup_calib.py` and `InteractivePicker`); browser Setup uses immutable captures and `control/calibration.py`. **Classic terminal calibrator** still launches `scripts/calibrate.py` locally as a fallback.
-
-Saves:
-
-- Images under `data/templates/`
-- Coordinates / ROIs in `data/calibrated.yaml`
-
-Re-run calibration when resolution or UI layout changes. Backups and interface profiles preserve both `data/calibrated.yaml` and template images. Restore stages both together and uses a recovery journal if interrupted. Matching resolution alone does not prove compatibility: verify the game layout, language and scaling after moving to another computer.
-
----
-
-## Mental model for debugging
-
-1. **Wrong taps** → usually bad calibration (tap points / templates) or resolution scale
-2. **Wrong screen label** → mode mismatch or heuristic clash; check `BotMode` and activity log screen names
-3. **Stuck in battle leave** → check the results-confirmed or timer-fallback log, the Return Home tap, then home/clan-chat confirmation. Verify the calibrated Return Home target if the tap misses
-4. **Stuck in chat** → donation panel close loop, popup, or ADB lag; Diagnostics → classify / screenshot help
-
-Prefer fixing vision with **mode-scoped rules** and strong UI anchors (Attack!, silhouettes) over more global color thresholds.
-
----
-
-## Related docs
-
-- [CONTRIBUTING.md](CONTRIBUTING.md) — how to extend screens, farm, donations, settings
-- [README.md](../README.md) — install and use on Ubuntu / Waydroid
-- [RUNNING.md](RUNNING.md) — updates, terminal operation, backups and troubleshooting
-- [BATTLE_COMPLETION.md](BATTLE_COMPLETION.md) — results detection and timer fallback
-- [SMART_COLLECTION.md](SMART_COLLECTION.md) — collect and review useful screenshots
-- [UPGRADES.md](UPGRADES.md) — Suggested upgrades, reserves, spending verification, and recovery
+# How CoC Bot works
+
+This is the architecture guide for the current browser/CasaOS app and shared
+Python engine. Use the [README](../README.md) to install it and
+[CONTRIBUTING](CONTRIBUTING.md) when changing it. Account/game risks remain as
+stated in the README.
+
+## Components and ownership
+
+The browser is a controller for a Linux process. Clash runs in Waydroid; screenshots
+and input travel through ADB. No official Clash API or game-memory access is used.
+
+- `web/src/` contains the React/TypeScript interface and editors. Built assets
+  ship under `src/coc_bot/web/static/` and are served with the API.
+- `src/coc_bot/web/` supplies FastAPI routes, sessions, WebSockets, image delivery,
+  WebRTC streaming, and manual-input endpoints.
+- `control/` provides shared lifecycle, status/events, settings, calibration,
+  backup, diagnostics, upgrade jobs, and attack-planner services.
+- `bot.py` orchestrates normal donation operation, optional farming/upgrades,
+  breaks, and recovery. `runtime/` tracks clocks, device leases, persistence,
+  diagnostic retention, and high-level transition logging.
+- `donation/`, `attack/`, `upgrades/`, and `vision/` implement game-specific reading
+  and actions. `adb/` owns command execution, capture, ordinary input, app launch,
+  and the pinned multitouch transport.
+- `calibration/` contains shared definitions, directions, profiles, and restore
+  transactions. `gui/` retains the Tkinter presentation and local pickers.
+- `packaging/casaos/` contains image/Compose setup, host installation, and the
+  narrow runtime helper. `host_bridge.py` connects the app to that helper.
+
+One controller worker owns a normal bot or standalone operation. Stop goes directly
+to its cancellation event rather than waiting behind other jobs. A process-level
+device lease also excludes other browser/desktop/terminal controllers. Manual
+control and calibration/device jobs cannot overlap normal automation. A read-only
+video stream is separate; it does not become another automation owner.
+
+The web server uses one Uvicorn worker. Multiple browser clients share that server's
+status and configuration. Request bodies, origins, sessions, CSRF, revisions,
+controlled file IDs, and device ownership are checked server-side. Default LAN
+startup is password-free; optional source-launch password protection exists.
+See [browser setup](WEB_UI.md) for the trust boundary.
+
+## Profiles and configuration
+
+`load_config()` in `config.py` merges:
+
+1. `config/default.yaml` for shipped defaults.
+2. `data/user_settings.yaml` for saved personal settings.
+3. Calibration fields from `data/calibrated.yaml`: dimensions, tap points, screen
+   areas, template paths, colors, grids, and the legacy farm sequence.
+4. Supported process overrides such as `ADB_DEVICE`.
+
+`COC_BOT_HOME` or web `--home` selects a profile root. `COC_BOT_CONFIG` selects a
+calibration file only; it does not isolate other profile data. First-launch tests
+use propagated context-scoped roots rather than changing global paths mid-job.
+
+Source runs use the checkout by default. CasaOS mounts the persistent host profile
+as `/profile`; image defaults are seeded only when absent. Container replacement
+does not overwrite existing calibration/settings. Device/runtime state is not
+part of the immutable application image.
+
+Normal Start checks required calibration. Farming needs navigation targets;
+sequence mode also needs recorded taps. Automatic mode needs its supported army,
+artwork, gesture server, and fresh map, not a saved routine. Custom planner
+scheduling additionally checks the routine's supervised approval.
+
+## Screens and action evidence
+
+`vision/screens.py` scopes broad classification with `BotMode.HOME`, `DONATE`,
+`ATTACK`, or `ANY`. Similar colors across home, donation, and results are a known
+source of ambiguity. Flow context narrows candidates but does not prove a screen.
+
+Action-specific readers provide stronger evidence:
+
+- `battle_menu.py`: Build/home controls, Multiplayer/Find a Match, My Army
+  confirmation, independent combat controls, and supported reward Continue pages.
+- `battle_completion.py`: paired Return Home/Troops expended text anchors.
+- `auxiliary.py`: Shop/Clash Pass headers plus a separate visible close X.
+- `idle_dialog.py`: Anyone there? title/message and Reload game control.
+- Donation readers: calibrated panel/grid evidence, Donate text, resource mode,
+  and global-to-clan chat recovery.
+
+A generic BATTLE label cannot authorize deployment or end a fight. A learned
+screen model is an observer only. Annotation categories such as army confirmation
+or upgrade confirmation need not be values of the broad runtime ScreenType enum;
+the specialized readers verify those pages directly.
+
+Live-defense interpretation is armed after relaunch, not considered on arbitrary
+screens. Recognized overlays are handled before background controls; obscured
+buttons must not authorize input. White transition clouds are not used to confirm
+a return home. See [UI compatibility](UI_COMPATIBILITY.md).
+
+## Donation flow
+
+`DonationBot` scans and scrolls clan chat, opens an eligible request, fills it, and
+returns to scanning. A farm or upgrade check is not inserted mid-donation.
+
+- `chat_monitor.py` finds button candidates and verifies Donate lettering,
+  rejecting Trade and ambiguous reads.
+- `request_parser.py` distinguishes specific, open, and hybrid requests. Specific
+  requests are eligible; open/hybrid depend on `donate_open_requests`.
+- `navigator.py` opens/closes chat and donation panels, recovers recognized
+  interruptions, and switches back from global chat using verified evidence.
+- `resource_mode.py` and `executor.py` verify selected elixir before donating.
+  A precise elixir tap, if needed, must be confirmed on a fresh image.
+- The executor taps colored slots across both visible troop/siege and spell grids
+  before scrolling either. It supports inspected low-capacity panel variants and
+  stops/refreshes as the panel or available slots change.
+
+The live donation path is colored-slot filling. Optional capacity OCR and older
+budget/inventory/fill-planner modules are not the default execution method.
+Periodic anti-idle nudges and a state watchdog help the loop recover, but do not
+replace screen-specific checks or prove a donation happened.
+
+## Attack methods
+
+`attack/farmer.py` selects the configured engine. Scheduled farming defaults off;
+`sequence` remains the default method. Farm now follows the selected method;
+Attacks → Automatic attack explicitly invokes automatic mode without saving it.
+
+All methods navigate home → Multiplayer unranked → My Army → verified battlefield.
+The current UI's final Attack button is a distinct step. The legacy second-search
+calibration remains for older layouts and must not cause an extra blind tap on
+the current menu.
+
+### Sequence
+
+`deployer.py` replays `farm_deploy_sequence` from calibration after its recorded
+camera pan. The sequence editor displays numbered tap/variation regions. The
+farm-only jitter setting applies here, not to navigation/donations or map-planner
+verification. This method depends on the matching army bar and camera setup.
+
+### Planner and automatic
+
+`planned_farmer.py` integrates both with normal scheduling. `camera.py` saves the
+home reference and sends bounded measured zoom gestures. `survey.py`, `mapping.py`,
+and `projection.py` combine registered views and require sufficient evidence for
+four deployment-boundary sides before producing map coordinates.
+
+`army.py` reads current card artwork/counts. `automatic.py` checks matching army
+pages and builds the supported mass Electro Dragon plan without `routine.json`.
+The pattern deploys dragons, spreads Rage, then deploys one supported siege and
+recognizable available heroes, each followed by its ability. Unsupported units,
+unknown cards, and incomplete maps stop deployment.
+
+The custom planner in `control/attack_planner.py` supports human-corrected army
+review, map/corner review, editable steps, saved routines, and supervised runs.
+An exact saved routine/device must pass before scheduling; editing invalidates
+approval. Opponent maps and screenshots cannot authorize later opponents.
+
+`executor.py` rechecks battle/camera/card state. Selection gets bounded fresh
+observations and at most one safe recognized-card retry. Before map input it
+persists intent; after input it verifies a count decrease or deployed card state.
+It never retries an uncertain map tap or whole plan. Ability logs prove a tap was
+sent, not that its gameplay effect succeeded.
+
+### Completion and interruptions
+
+Normal completion in `navigator.py` observes both results labels on two fresh
+frames, then taps the detected Return Home button. `farm.battle_timeout_seconds`
+remains a fallback. Planner/automatic anchor it to the first verified deployment
+or first uncertain attempt; the legacy sequence records its replay start.
+Home and clan chat must then be confirmed, with camera restoration for mapped
+attacks. No blind Android Back is used in a live battle.
+
+`attack/recovery.py` persists `attack-pending.json` before attack input. On Start,
+after an unexpected error, or before another farm, it inspects unfinished work
+without replaying deployment/abilities. Recovery waits through a verified battle,
+requires two visual results frames to leave, and has no timer-based Return Home
+tap. It confirms home/camera/chat and records interval completion once by attack ID.
+Corrupt/foreign state or unresolved scenes remain blocked for inspection.
+
+Home camera restoration normally requires a measured scale within 3%, with bounded
+gestures. An automatic-only near-zoom-limit recovery path can preserve the old
+reference and block legacy pixel sequences while fresh mapped automatic attacks
+remain possible. This is not a relaxed opponent/deployment check. Details and
+storage policies are in [the attack guide](ATTACK_REBUILD.md).
 
 ## Suggested upgrades
 
-Optional upgrade checks run between donation rounds, after farm scheduling. They
-share the same device owner and Stop flag as the running bot. Manual previews and
-starts use exclusive browser jobs. Both building and research automation default
-to off.
+Automatic building/research checks are off by default. They run between donation
+rounds after the farm-priority check, and a visible donation request has priority.
+Manual preview/start jobs use the same ownership and cancellation rules.
 
-The reader verifies the Build tab and Suggested section, reads prices with strict
-font references, and passes candidates to a separate eligibility policy. Before
-spending, the runner checks fresh balances and availability and verifies the
-resource confirmation twice. It records intent before tapping, then requires a
-new matching progress row and fewer free slots to confirm success. Uncertain
-outcomes block repeat spending. Only a verified close control dismisses an
-Upgrading details window; Finish Now controls are never used.
+`upgrades/vision.py` reads verified tabs, Suggested rows, availability, and
+confirmation controls. `digits.py` uses strict bundled numeric references.
+`policy.py` applies supported-name exclusions, reserves, and slot requirements.
+`runner.py` checks fresh balances and matching name/price/currency confirmations,
+persists intent, sends one resource press, then checks progress and slot changes.
 
-## Reliability and interface profiles
+Uncertain spending blocks another purchase. A restart may reconcile pending work
+in its own category even when automation for that category is disabled; it does
+not repeat or enable the purchase. Gem/Finish Now/magic-item controls are not
+spending targets. See [upgrades](UPGRADES.md).
 
-See [RELIABILITY.md](RELIABILITY.md) for selected-elixir verification, capture ownership, cooperative Stop, calibration restore recovery, interface profiles, and regression checks.
+## Scheduling and persisted state
+
+`runtime/tracker.py` tracks active session time and farm intervals, including
+separate plus/minus variance. Stop freezes scheduling; resume accounts for paused
+time. An already-started break retains its real-time end. Break handling closes
+Clash, waits, relaunches, and reopens verified chat.
+
+A fought or entered-skipped automatic match advances its interval to avoid tight
+retry loops. Failures before entering a battle use the configured retry cooldown.
+Recovery persists completed attack identity to prevent a crash rolling a second
+interval. Invalid runtime JSON can be preserved/recovered to defaults; that does
+not mean uncertain attack or spending journals may be silently discarded.
+
+`runtime/game_state.py` logs allowed/unexpected high-level transitions. It is a
+sanity checker alongside the actual engine state, not an authorization graph.
+
+## Video, data, and operations
+
+`web/live.py` passes pinned scrcpy H.264 through WebRTC without host re-encoding.
+Viewing is distinct from manual control and does not feed every video frame into
+the recognition engine. Manual taps/swipes have their own exclusive lease;
+calibration uses immutable captures, not moving video. Video startup/cleanup,
+frame-rate/freeze feedback, and LAN restrictions are documented in [WEB_UI](WEB_UI.md).
+
+Normal screenshots are transient/cached unless diagnostics or recording retain
+them. `vision/recorder.py` and `collection.py` optionally select diverse images and
+failure context without issuing extra exploratory input. Collection hints are not
+verified labels. Review/training/model observer tools remain separate, explicit
+steps. [Annotation workflow](ANNOTATION_WORKFLOW.md) preserves UI versions and
+partial-box provenance; [perception](PERCEPTION.md) explains model evaluation.
+
+Generated attack diagnostics have age/size/count cleanup with protected recent
+evidence and pending-recovery guards. Reviewed datasets, calibration, routines,
+and backups are excluded. See [reliability](RELIABILITY.md) for exact limits.
+
+Calibration/template saves and restores use shared locks, staging, revisions,
+and recovery journals. Library exports cover calibration/images, not the full
+profile or Android account. Source/CasaOS profile roots and migration steps are
+in [RUNNING](RUNNING.md).
+
+CasaOS uses `control/platform.py` for staged Android/game preparation and updates.
+Its helper accepts allowlisted runtime actions over a local Unix socket; it does
+not accept browser-supplied shell commands. App/image updates and helper/host
+updates are separate. See [CasaOS](CASAOS_PACKAGE.md).

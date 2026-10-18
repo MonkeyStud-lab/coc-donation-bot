@@ -1,26 +1,60 @@
-# CoC Donation Bot
+# CoC Bot
 
 > **THIS CAN GET YOUR ACCOUNT PERMANENTLY BANNED.**
-> Supercell’s [Safe and Fair Play policy](https://supercell.com/en/safe-and-fair-play/)
-> prohibits bots and gameplay automation and states that offending accounts face
-> permanent bans. Practice mode does not make live use permitted. This is an
-> educational project, not an endorsed or safe way to play.
+> Supercell prohibits bots and gameplay automation under its
+> [Safe and Fair Play policy](https://supercell.com/en/safe-and-fair-play/).
+> Educational intent and practice mode do not make live use permitted.
+> This project is not affiliated with or endorsed by Supercell.
 
-A Python app that uses Android screenshots to recognize screens and control
-Clash of Clans through ADB. Built for Ubuntu and Waydroid.
+CoC Bot is a self-hosted Clash of Clans automation and computer-vision project.
+It runs the game in Waydroid on Linux, reads Android screenshots, and sends
+inputs through ADB. A browser dashboard controls donations, unranked attacks,
+optional upgrades, calibration, and diagnostics.
 
-- Clan donations with elixir verification, including open and specific requests.
-- Optional unranked attacks using a deployment sequence you program.
-- Optional Suggested building upgrades and laboratory research, with resource reserves.
-- Guided calibration, saved profiles, activity logs, and screenshot collection.
+Open the dashboard from another computer or phone on the same network. The game
+and bot stay on the Linux host; ordinary use needs no remote desktop app.
+Live view streams the game into the browser and offers manual control while
+automation is stopped.
 
-## Install
+## What it does
 
-You need Ubuntu or a similar Debian-based Linux system, an internet connection,
-and permission to install packages. **Waydroid and Clash of Clans must already
-be installed and working.** The bot installer does not install either one.
+- **Donations:** finds Donate buttons in clan chat, distinguishes them from event
+  Trade buttons, and handles specific requests plus optional open/hybrid requests.
+  It verifies elixir mode before donating and supports panels with different
+  troop, spell, and siege capacities.
+- **Unranked attacks:** automatic mass Electro Dragon attacks, editable map-based
+  routines, or the original programmed tap sequence. Automatic/planner attacks
+  map the opponent and verify individual deployments.
+- **Upgrades:** follows the game's Suggested building upgrades and laboratory
+  research, subject to availability, supported names, exclusions, and resource
+  reserves. Previewing and starting an upgrade are separate actions.
+- **Browser controls:** Start/Stop, farm and break countdowns, activity logs,
+  responsive settings, themes, guided calibration, and calibration backups.
+- **Recovery:** records unfinished attack and upgrade actions so a restart can
+  inspect the game instead of blindly repeating them.
+- **Development tools:** optional screenshot collection, labeling/export tools,
+  offline checks, and an experimental screen-recognition observer.
 
-Open Terminal and paste these commands:
+This is an actively developed project, tested live on an Ubuntu/Waydroid host
+with LAN browser clients. Recognition targets the English, landscape game
+interface. Different layouts, resolutions, languages, hero skins, and sceneries
+can require calibration or cause an operation to be skipped. The experimental
+learned screen model logs predictions; it does not control taps.
+
+## Installation
+
+Use the **Linux browser installation** if Waydroid and Clash already work on
+your computer. Use the **CasaOS package** to let CasaOS manage the app and a host
+helper start Waydroid and the game. Both keep Android on the Linux host; the
+browser displays video from that instance.
+
+### Linux browser installation
+
+You need an Ubuntu/Debian-based Linux computer, working Waydroid and Clash of
+Clans, administrator access to install dependencies, and internet access for
+the initial downloads. Sign into the game yourself before calibration.
+
+Open Terminal and run:
 
 ```bash
 sudo apt update
@@ -29,173 +63,419 @@ mkdir -p ~/Projects
 cd ~/Projects
 git clone https://github.com/MonkeyStud-lab/coc-donation-bot.git
 cd coc-donation-bot
-bash scripts/get_started.sh
+bash scripts/setup_linux.sh --web
+source .venv/bin/activate
+python -m pip install -e '.[web,web-live]'
+python scripts/setup_live_view.py
+python -m coc_bot.web
 ```
 
-The installer downloads the bot’s dependencies and unit icons, creates its
-private Python environment, and opens the app. It may ask for your Linux
-password; Terminal does not show characters while you type it. The first setup
-can take several minutes.
+Setup installs system packages, creates the private `.venv` Python environment,
+and downloads recognition dependencies and unit icons. This can take several
+minutes. This script does **not** install Waydroid or Clash; managed host setup
+belongs to the CasaOS route below.
 
-Already downloaded the files? Open Terminal in the project folder and run
-`bash scripts/get_started.sh`. You do not need to change script permissions.
+The Live view installer downloads a pinned, checksum-verified scrcpy Android
+server. Automatic/planner camera gestures need that component too, even without
+Live view open. Android root is not required.
 
-## Connect and calibrate
-
-1. **Open the game.** Start Waydroid and open Clash of Clans manually.
-2. **Find your device address.** Run `waydroid status` in Terminal and look for
-   its IP address while the session is running. In the app’s **Settings**, set
-   **ADB device** to that address followed by `:5555`, then **Save Settings**.
-3. **Connect.** On **Dashboard**, press **Connect ADB**. If needed, use Terminal:
-
-   ```bash
-   adb connect YOUR_IP:5555
-   adb devices
-   ```
-
-   Replace `YOUR_IP` with the address from Waydroid. The device should appear
-   with the word `device`, rather than `offline`.
-4. **Open Setup.** Choose **Calibrate what's missing**. Follow each instruction
-   in the app: open the requested game screen, capture it, and mark the button
-   or screen area. Calibration happens in the app; no separate image editor is
-   needed. To redo one part, select it and press **Recalibrate Selected**.
-5. **Confirm elixir mode.** In **Setup → Donation panel**, calibrate both the
-   elixir button and **Selected elixir indicator**. Open a donation request,
-   select the left elixir button, and capture the entire selected button,
-   including its border and background. The bot skips donations if it cannot
-   confirm elixir is selected.
-6. **Save a backup.** Use **Library → Saved calibrations → Save calibration backup** before experimenting.
-   **Restore** brings back a saved calibration and its reference images.
-
-Keep the bot stopped while calibrating. The in-app checklist shows missing
-parts. Farming is optional and can be configured later.
-
-## Use the app
-
-A browser interface is also available as an opt-in preview. Access it from another
-device on your network while keeping the desktop interface as a fallback. See
-[browser setup and usage](docs/WEB_UI.md) for installation, direct dashboard access, network
-access, calibration, and rollout limits.
-
-To open it again:
+Open **http://127.0.0.1:8765** on the Linux computer. Leave Terminal running;
+closing the browser tab does not stop the server or bot. To reopen the dashboard
+after stopping its server:
 
 ```bash
 cd ~/Projects/coc-donation-bot
-bash scripts/get_started.sh
+bash scripts/run_web.sh
 ```
 
-- **Dashboard:** Start, Stop, Farm attack now, connection controls, and activity.
-- **Attacks (browser):** Run an automatic Electro Dragon attack, or review the army,
-  map an opponent, and edit a custom routine. Existing calibration stays separate.
-- **Settings:** Donations, timing presets, farming, breaks, themes, and collection
-  limits. Developer options expose individual timing values.
-- **Setup:** Calibrate individual parts using the in-app instructions.
-- **Library:** Review screenshots and save, restore, rename, or delete calibrations.
-- **Diagnostics:** View a current screenshot, run a selected test or recovery action,
-  create a desktop shortcut, or close the game and Waydroid.
+For this installation, start Waydroid and Clash manually before connecting the
+bot. The [browser guide](docs/WEB_UI.md) covers additional launch options.
 
-**Stop** stops bot actions and leaves Clash of Clans open. It also works for a
-standalone **Farm attack now** run. **Close Waydroid + Clash** closes the game
-and Waydroid session. Farm and break countdowns pause while the bot is stopped.
+### Access from another device
 
-After changing settings in the browser, use **Save** when stopped or
-**Save & restart** when running. The latter finishes the current donation or
-attack first. **Stop** cancels the pending update and restart. Release manual
-control before saving. In the desktop interface, use **Apply & restart**, or
-Stop and Start it yourself.
+Find the Linux computer's local IP address in its network settings. Stop the
+local server with Ctrl+C, then launch it with your address and matching URL:
 
-For a clickable launcher, use **Diagnostics → Actions → Create desktop shortcut**. Open Waydroid
-and Clash of Clans before starting the bot. If Ubuntu asks, choose **Allow Launching**
-on the shortcut.
+```bash
+source .venv/bin/activate
+python -m coc_bot.web --host YOUR_LINUX_IP --origin http://YOUR_LINUX_IP:8765
+```
 
-### CasaOS package (development)
+Replace both occurrences of `YOUR_LINUX_IP`. Open that same URL in the other
+device's browser. Use a specific private network address; password-free startup
+does not accept a wildcard bind address such as `0.0.0.0`.
 
-A CasaOS package is being tested. It includes automatic host preparation for
-Waydroid and a container for the browser dashboard. Existing-session testing has
-passed; clean installation and unattended reboot remain acceptance checks.
-Your game APKs and calibration are kept in private storage, outside the image.
-After a trusted game installation, the package checks for newer Clash APKs on
-startup and verifies their signing certificate against the installed game.
-Stop the bot and use **Diagnostics → Update Clash** to check immediately.
-See [CasaOS setup and limitations](docs/CASAOS_PACKAGE.md) before migrating.
-For changed game buttons, see [game UI compatibility and recalibration](docs/UI_COMPATIBILITY.md).
+**There is no password by default. Anyone who can reach the dashboard can control
+the game and edit its configuration.** Keep access on a trusted network; do not
+expose the port directly to the internet. Optional password protection, SSH
+tunneling, and HTTPS are covered in the
+[browser guide](docs/WEB_UI.md#open-from-another-device).
 
-### Optional farming
+### CasaOS package
 
-1. In the game, select the army you want to use for unranked attacks.
-2. In **Setup → Farm / unranked attack**, calibrate Attack!, the unranked button,
-   and Return Home. Calibrate the search button if your interface has one.
-3. Select **Deploy tap sequence** to program your army selection and deployment
-   taps in order. Follow the editor’s instructions, including positioning the
-   camera. The sequence determines which troops, heroes, and spells are used.
-4. In **Settings**, enable farming and choose an interval, then save.
-5. Use **Farm attack now** for a single run, or **Start** for scheduled operation.
+The package runs the browser app in Docker and uses a Linux host helper to manage
+Waydroid. App startup prepares Android, connects ADB, and launches Clash.
+Gameplay automation stays stopped until you press **Start**.
 
-Battle results are checked using consecutive screenshots. The timer remains
-as a fallback. See [battle completion](docs/BATTLE_COMPLETION.md) for details.
+The initial target is an x86-64 Ubuntu/Debian host with systemd, compatible binder
+support, and working graphics, initially AMD/Intel. CasaOS and Docker must already
+be installed. Clean-host installation, unattended headless reboot, and other
+hardware combinations still need acceptance testing; this is not a universally
+tested one-click package.
 
-For automatic mass Electro Dragon farming without a saved routine, choose
-**Attacks → Automatic attack**. For scheduled use, set **Settings → Attack method**
-to **automatic**. It reads current quantities, maps the village, and skips uncertain
-or unsupported armies. Normal Farm navigation calibration is still required.
+1. Download this repository on the CasaOS host using the clone commands above.
+2. In its project folder, build the local image:
 
-For a custom map-based routine, open **Attacks** and follow the
-[attack planner guide](docs/ATTACK_REBUILD.md). It reads the army, lets you correct
-it, and checks each deployment. The existing tap sequence remains the default;
-switching to **Planner** requires a successful supervised run of your saved routine.
+   ```bash
+   bash packaging/casaos/build.sh
+   ```
 
-### Optional upgrades
+3. In CasaOS, install a custom app by importing
+   [`packaging/casaos/compose.yaml`](packaging/casaos/compose.yaml).
+4. Review its setup service before installing. It has administrator-level host
+   access to install Waydroid, Android images, display prerequisites, and the
+   helper. The ordinary bot container runs without those privileges.
+5. Open the CasaOS app tile. The default dashboard address is
+   `http://YOUR_LINUX_IP:8767`. Follow its startup status and installation prompts.
+6. For a fresh game installation, import your own trusted Clash APK archive,
+   then sign in through **Live view → Take control**. Game APKs and account
+   credentials are not included in the repository or container image.
 
-In the browser dashboard, stop the bot and open **Diagnostics → Building upgrades**
-or **Army research**. **Check upgrades** previews the game's Suggested entries
-without spending. **Start recommended** starts the displayed eligible upgrade after
-fresh checks. Automatic checks are off by default; enable them and adjust resource
-reserves in **Settings → Upgrades**. See [upgrade setup and safeguards](docs/UPGRADES.md)
-for exclusions, availability rules, and handling an uncertain result.
+To create an APK archive from an Android instance where Clash is already
+installed, run this on a computer with Python 3, ADB, and access to that instance:
 
-## Update
+```bash
+python3 scripts/export_clash_apks.py --device ANDROID_IP:5555 --output clash-apks.zip
+```
 
-Stop the bot and close its control window, then run:
+Replace `ANDROID_IP` with the Android device's address. The archive contains
+installation files, including split APKs, **not** your account or game data.
+
+For an existing Waydroid installation, configure adoption/import before setup
+rather than creating a competing controller. The
+[CasaOS guide](docs/CASAOS_PACKAGE.md) explains session adoption, profile import,
+compatibility checks, privileges, and startup recovery. A local image build is
+the documented installation route; a published registry release is not assumed.
+
+## First-time setup
+
+1. **Get the game ready.** Sign in and open your home village. For manual Linux
+   installations, run `waydroid status` to find its IP address. In
+   **Settings → Advanced**, set **ADB device** to that address followed by
+   `:5555`, then save. CasaOS manages its device address during startup.
+2. **Check the connection.** Use **Diagnostics → Check device**. For a manual
+   installation, these Terminal commands also help:
+
+   ```bash
+   adb connect ANDROID_IP:5555
+   adb devices
+   ```
+
+   Replace `ANDROID_IP`. A working connection appears with the word `device`.
+3. **Calibrate the interface.** Stop automation and release manual control.
+   Choose **Setup → Calibrate missing**. Each part tells you which game screen
+   to open. Capture it, click the requested button or draw its screen area, and
+   save. Select a single part directly when needed; Skip/Cancel preserves its
+   existing calibration. No separate image editor is needed.
+4. **Verify donation resource selection.** Open a real donation request and
+   select elixir. Calibrate both the elixir button position and **Selected elixir
+   indicator**, including the selected button's border/background. Donations
+   are refused if this mode cannot be verified.
+5. **Back up calibration.** In **Library**, choose **Back up calibration**, then
+   **Export** to keep a copy on another device. Restore creates a safety backup
+   before applying a saved calibration.
+6. **Watch the first run.** Press **Start** and observe a real request. Confirm
+   it opens, donation quantities change, and the bot returns to clan chat. Check
+   attack and upgrade flows separately before enabling their schedules.
+
+Keep Android's resolution/layout consistent with calibration. Resizing the
+browser does not resize Android. After a game UI update, back up the profile and
+recalibrate changed parts.
+
+## Everyday controls
+
+- **Dashboard:** Start, Stop, Farm now, practice mode, Live view, countdowns, and
+  one activity log.
+- **Attacks:** run an automatic attack or prepare, review, and edit a custom
+  map-based routine.
+- **Settings:** donations, attack method/schedule, breaks, upgrades, themes,
+  timing presets, and collection limits. Advanced reveals less common options;
+  Dev options exposes raw timing values.
+- **Setup:** guided calibration or direct access to one calibration part.
+- **Library:** calibration backups/profiles, ZIP import/export, rename/delete,
+  and the screenshot collection gallery.
+- **Diagnostics:** device/screen checks, current screenshot, navigation tests,
+  upgrade previews, reports, and game/session controls.
+
+**Stop** interrupts normal operation, standalone attacks, and tools. It leaves
+Clash open and does not finish a battle for you. **Close Waydroid and Clash** is
+a separate Diagnostics action. Closing a browser tab leaves automation running.
+
+Settings remain editable while the bot runs. **Save & restart** validates changes,
+waits for the current donation/attack to finish, then restarts with the new settings.
+**Stop** cancels a pending restart. While stopped, **Save** applies settings without
+starting automation. Release manual control before saving.
+
+Farm and session-limit countdowns pause while stopped. A break that has already
+started expires by real time. Scheduling uses running time rather than promising
+execution at a particular wall-clock hour.
+
+**Practice mode is not a simulator.** It skips normal donation taps but still
+allows navigation, and tools or attack actions can affect the real game. Use
+the offline preview below for tests without a game connection.
+
+### Live view
+
+Dashboard's **Live view** uses WebRTC video rather than screenshot polling.
+Watch during automation; to tap or swipe, stop the bot and choose **Take control**.
+Release control before starting the bot, calibrating, or running another tool.
+Releasing control does not restart automation.
+
+Only one live stream/manual controller is supported at a time. Video requires
+a working Android encoder and a permitted local WebRTC connection.
+**Diagnostics → Current screenshot** or **Open game** provides a screenshot-based
+alternative. See [Live view setup](docs/WEB_UI.md#experimental-live-video).
+
+## Attacks
+
+Scheduled farming is **off by default**. The default attack method remains
+**Programmed tap sequence**; explicitly choose another method in Settings.
+**Farm now** uses that selection. **Attacks → Automatic attack** runs automatic
+mode directly without changing the saved method.
+
+### Automatic Electro Dragon attacks
+
+This mode needs no saved tap routine or hand-drawn map. It follows one built-in
+mass Electro Dragon pattern rather than inventing a strategy for every base:
+
+1. Return home, open unranked Battle, and pass the army confirmation.
+2. Verify independent battle controls before treating the opponent as ready.
+3. Zoom out and survey overlapping views to map the deployment boundary.
+4. Read army identities/quantities from matching fresh screenshots.
+5. Deploy Electro Dragons along a mapped edge, spread Rage spells inward, then
+   deploy the siege machine and available heroes. Each hero ability tap follows
+   its verified deployment.
+6. Verify deployments from count decreases or deployed-card states. Never blindly
+   repeat an uncertain map tap.
+7. Recognize results, return home, restore the camera, and confirm clan chat.
+
+Supported armies use Electro Dragons with optional Rage spells, one supported
+siege machine, and up to four recognizable heroes. Unknown cards, unsupported
+spells such as Recall, inconsistent counts, or an incomplete map stop deployment.
+An entered but skipped match is cleaned up and advances the farm interval to
+avoid repeatedly retrying the same unsupported army.
+
+Connection, navigation calibration, unit artwork, and the pinned gesture server
+are still required. This is not universal army/scenery support. Test one attack
+before enabling its schedule.
+
+For scheduled automatic attacks, select **automatic** under
+**Settings → Attack method**, enable scheduled farming, choose the interval,
+and save. Release manual control and press **Start**. The interval and its
+optional plus/minus variance are adjustable in Settings.
+
+### Custom routines and the original sequence
+
+**Planner** lets you review/correct the army, inspect the opponent map, and edit
+ordered deployment, spell, ability, and wait steps. A saved routine must complete
+a supervised test before it can be scheduled; editing it removes that approval.
+Preparing an opponent enters a real match, so its scouting timer keeps running
+while you edit.
+
+**Programmed tap sequence** replays army-slot and map taps recorded under
+**Setup → Farm → Deploy tap sequence**. Camera-pan and farm-only tap variation
+settings belong to that fixed sequence. It needs a matching army bar, camera
+position, and calibration.
+
+All three methods watch for **Return Home** and **Troops expended** together on
+two fresh results screenshots. Normal completion retains a calibrated timer
+fallback if recognition fails; it does not normally wait out that timer when
+results are recognized. See the [attack guide](docs/ATTACK_REBUILD.md) and
+[battle completion checks](docs/BATTLE_COMPLETION.md).
+
+## Optional upgrades
+
+Building/research automation is **off by default**. First stop the bot and use
+**Diagnostics → Building upgrades / Army research → Check upgrades**. This reads
+Suggested entries without spending. **Start recommended upgrade** is a separate
+action with confirmation and fresh checks.
+
+Enable desired categories in **Settings → Upgrades** for automatic operation.
+The bot checks builder/laboratory availability, supported recommendations, price,
+currency, and balance. Reserves are minimum balances to keep **after** paying.
+You can also reserve builders and exclude names.
+
+Walls, heroes, the Town Hall, new building purchases, equipment/pets, and several
+army-production buildings are excluded. Only supported Suggested entries are
+eligible. This path does not authorize gems, magic items, or buying missing
+resources. An uncertain spending result blocks another purchase until the
+pending action can be reconciled. See [upgrade rules and exclusions](docs/UPGRADES.md).
+
+## Recovery, backups, and storage
+
+Attack progress is recorded before game input. After an interruption, recovery
+inspects the current screen instead of replaying deployments or abilities.
+It waits through a verified battle, requires visual results to leave, and checks
+home/camera/clan chat before clearing the interrupted operation. Recovery does
+not use the ordinary timer-based Return Home fallback; it pauses if confirmation
+cannot be obtained. Upgrade spending has a separate pending-action journal.
+
+If recovery is pending, inspect the game and logs. Do not delete recovery files
+just to force another attack or purchase. **Stop** leaves unfinished recovery
+information intact. See [attack recovery](docs/ATTACK_REBUILD.md#interrupted-attacks-and-diagnostic-storage).
+
+Persistent files live in the checkout for source installations, or inside
+`/DATA/AppData/coc-bot/profile` for CasaOS:
+
+- `data/calibrated.yaml` and `data/templates/`: calibration and reference images.
+- `data/user_settings.yaml`: saved settings, separate from tracked defaults.
+- `data/attack-planner/`: saved routines, reviewed artwork, and recovery state.
+- `data/upgrades/` and `data/runtime_state.json`: upgrade and scheduling history.
+- `data/collection/`: optional development screenshot collection.
+- `data/debug/`: generated diagnostics, survey images, and execution journals.
+
+Library calibration exports are **not** complete game/account backups. Back up
+the full profile separately when migrating settings and routines. CasaOS host
+setup creates verified installation backups under `/DATA/AppData/coc-bot/backups`.
+Waydroid's Android/account data remains on the host and is not included in those
+bot backups.
+
+Logs rotate at 10 MB with seven-day retention. Generated attack diagnostics are
+pruned between operations using seven-day, 1 GiB, and 40-group limits, preserving
+the newest three groups per diagnostic family. Those protections can leave
+storage above the target. Cleanup pauses during pending attack/camera recovery
+and excludes calibration, backups, and reviewed datasets.
+
+Screenshot collection is separate and opt-in. Defaults are 200 images per UTC
+day and 5 GB; it skips duplicates and pauses at the storage cap rather than
+deleting reviewed data. Screenshots, labels, learned artwork, and account data
+are not automatically uploaded to GitHub. Review exports for player names, chat,
+and device details before sharing. See [collection](docs/SMART_COLLECTION.md) and
+[labeling](docs/ANNOTATION_WORKFLOW.md).
+
+## Updating
+
+### Bot updates
+
+Stop automation, release manual control, and export a calibration backup first.
+For the Linux source installation, stop the web server with Ctrl+C, then run:
 
 ```bash
 cd ~/Projects/coc-donation-bot
 git pull --ff-only
-bash scripts/get_started.sh
+bash scripts/setup_linux.sh --web
+source .venv/bin/activate
+python -m pip install -e '.[web,web-live]'
+python scripts/setup_live_view.py
+python -m coc_bot.web
 ```
 
-The launcher checks whether installation work is needed. Saved GUI settings and
-calibration are separate from the tracked defaults and normally survive updates.
+Use your existing `--host`/`--origin` arguments for LAN access. Refresh the browser
+after startup. Normal updates preserve private settings/calibration. If Git
+reports conflicting local edits, back those files up and resolve the conflict
+rather than resetting them.
 
-If Git says local changes would be overwritten, **do not delete or reset them**.
-Keep the error message and back up those files before resolving the conflict.
-After a game interface update, back up your calibration and redo changed parts.
+For CasaOS, Git pull alone does not update the running image. Pull the source,
+rebuild with `bash packaging/casaos/build.sh`, then recreate the **bot** service
+using the installed Compose configuration and new image. Preserve its environment,
+profile mounts, and host-session settings. Code-only updates do not require
+rerunning privileged host setup. Keep the previous image for rollback; rebuilding
+the app does not update the separately installed host helper. See the
+[CasaOS guide](docs/CASAOS_PACKAGE.md) for helper updates.
+
+### Clash of Clans updates
+
+After an initially trusted installation, CasaOS checks for newer Clash APKs when
+its managed runtime starts. You can also stop the bot and choose
+**Diagnostics → Update Clash**. The updater uses a third-party APK source and
+checks the package, newer version, and signing certificate before installing.
+It does not uninstall Clash or clear account data. Initial installation still
+requires your trusted APK archive; import remains the fallback.
+
+After a game update, inspect the interface and preview affected actions before
+restarting automation. Updating the APK does not update calibration or guarantee
+recognition compatibility. See [updater details](docs/CASAOS_PACKAGE.md#updating-clash)
+and [UI compatibility](docs/UI_COMPATIBILITY.md).
 
 ## Troubleshooting
 
-- **No connected device:** Make sure Waydroid’s session is running. Check its IP
-  address, reconnect, and confirm `adb devices` lists it as `device`.
-- **Start is blocked:** Open Setup and finish the required calibration parts.
-- **Donations are skipped:** Check the elixir button and selected-indicator
-  calibration first, then the donation grids and slot colors.
-- **Taps miss:** Recalibrate the affected part. A different resolution or game
-  layout may need a different calibration even on the same computer.
-- **Screenshot fails:** Stop the bot, check the ADB connection, and use the
-  screenshot/health tests in Diagnostics. Restart Waydroid if needed.
-- **Need help:** Use **Copy logs** or **Export debug** on Dashboard. Review exported
-  files before sharing; they may contain game screenshots and device details.
+- **No Android connection:** check `waydroid status`, reconnect the correct
+  address, and confirm `adb devices` reports `device`. Use **Check device**.
+- **CasaOS startup fails:** read runtime status and use Retry after resolving its
+  cause. Stale Waydroid container state may need a host administrator to restart
+  `waydroid-container.service`; do not reset Android or uninstall Clash.
+- **Start is blocked:** check missing calibration, manual control, another bot
+  process, or pending recovery. Only one operation can control Android at a time.
+- **Donations are skipped:** check selected-elixir verification, Donate text,
+  request eligibility, and the actual panel's grid calibration. Do not bypass
+  resource checks to make it tap.
+- **Attacks skip or stop early:** inspect the army/map report and activity.
+  Unknown cards or missing boundary evidence deliberately block deployment.
+- **Return Home misses:** recalibrate it on a real results screen. A longer timer
+  does not correct coordinates.
+- **Live view freezes:** check its frame-rate/error status and retry. A current
+  screenshot helps distinguish a video problem from a stopped game.
+- **Settings do not apply:** click Save or Save & restart. Resolve conflicts by
+  reloading before editing again, and release manual control before saving.
+- **Reporting a problem:** export activity and download the Diagnostics report.
+  Include the visible screen, intended action, and actual result. Remove private
+  account/chat details before sharing screenshots or logs.
 
-## Documentation
+## Development
 
-- [Running, backups, and advanced setup](docs/RUNNING.md)
-- [How the bot works](docs/HOW_IT_WORKS.md)
-- [Reliability safeguards and tests](docs/RELIABILITY.md)
-- [Useful screenshot collection](docs/SMART_COLLECTION.md)
-- [Screen-recognition research](docs/PERCEPTION.md)
-- [Contributing](docs/CONTRIBUTING.md)
+Python code lives under `src/coc_bot/`. Game behavior is in `donation/`, `attack/`,
+`upgrades/`, and `vision/`; `runtime/` handles scheduling, ownership, and retention.
+`control/` and `calibration/` provide shared services. FastAPI routes live in
+`src/coc_bot/web/`; React/TypeScript source lives in `web/`.
 
-## License and project policy
+Compiled browser assets are committed under `src/coc_bot/web/static/`, so normal
+installation does not require Node.js. After editing frontend source:
+
+```bash
+cd web
+corepack pnpm install --frozen-lockfile
+corepack pnpm run build
+cd ..
+```
+
+Commit rebuilt assets with the frontend change. For offline Python checks:
+
+```bash
+source .venv/bin/activate
+python -m pip install -e '.[web,web-test]'
+python -m unittest discover -s tests -v
+python scripts/verify_farm_offline.py
+python scripts/verify_smart_collection.py
+python scripts/verify_battle_completion.py
+```
+
+Use disposable profiles for tests, never live calibration. To explore the browser
+with a fake device and no real ADB input:
+
+```bash
+PYTHONPATH=src python scripts/preview_web_offline.py
+```
+
+The original Tkinter interface remains available with `python -m coc_bot.main`;
+terminal-only operation uses `python -m coc_bot.main --no-gui`. They share the
+engine/profile formats, but newer planner and upgrade-preview controls are in
+the browser. Stop the active controller before switching interfaces.
+
+Further documentation:
+
+- [Browser setup and controls](docs/WEB_UI.md)
+- [CasaOS package and host integration](docs/CASAOS_PACKAGE.md)
+- [Attack planner, automatic farming, and recovery](docs/ATTACK_REBUILD.md)
+- [Battle completion recognition](docs/BATTLE_COMPLETION.md)
+- [Suggested upgrades and safeguards](docs/UPGRADES.md)
+- [Architecture](docs/HOW_IT_WORKS.md) and [reliability checks](docs/RELIABILITY.md)
+- [Screenshot collection](docs/SMART_COLLECTION.md), [annotation workflow](docs/ANNOTATION_WORKFLOW.md),
+  and [perception research](docs/PERCEPTION.md)
+- [Advanced running options](docs/RUNNING.md) and [contributing](docs/CONTRIBUTING.md)
+
+## License and contribution policy
 
 The code uses the [MIT License](LICENSE). Maintainers do not provide help with
-detection evasion, paid botting, or account farming/selling. See the
-[contribution policy](docs/CONTRIBUTING.md). This project is not affiliated with
-Supercell.
+detection evasion, paid botting, or account farming/selling. Contributions that
+improve reliability, usability, documentation, and computer-vision research are
+welcome under the [contribution policy](docs/CONTRIBUTING.md).

@@ -10,6 +10,44 @@ from coc_bot.attack.camera import compare_camera
 from coc_bot.attack.mapping import observe_boundary
 from coc_bot.attack.projection import fit_projection
 from coc_bot.attack.battle_gate import BattleFrameGate
+from loguru import logger
+
+
+def reveal_boundary(session, frame):
+    """Confirm the outline before toggling a card; retry only card selection."""
+    from coc_bot.attack.army import card_boxes
+    stop=session.client.stop_check
+    check_stop(stop)
+    current=session.capture.screenshot()
+    observation=observe_boundary(current,frame,battle_confirmed=True,stop_check=stop)
+    if observation.stable and len(observation.segments)>=2:
+        logger.debug('Survey: deployment outline already visible; keeping selection')
+        return current
+    for attempt in range(2):
+        check_stop(stop)
+        boxes=card_boxes(current,'battle')
+        if not boxes:raise ValueError('No visible army card to reveal the boundary')
+        x,y,bw,bh=boxes[0]
+        session.input.tap(x+bw//2,y+bh//2,jitter=0)
+        for _ in range(2):
+            session._sleep(.2)
+            previous=current;current=session.capture.screenshot()
+            observation=observe_boundary(current,previous,battle_confirmed=True,stop_check=stop)
+            if observation.stable and len(observation.segments)>=2:
+                logger.debug('Survey: deployment outline confirmed after card selection {}',attempt+1)
+                return current
+    logger.debug('Survey: outline not confirmed after two card selections; continuing bounded observation')
+    return current
+
+
+def survey_pan(evidence, transform, width, height):
+    """Bring an unobserved candidate-side gap into view, never into deployment."""
+    for side in evidence.get('weak_sides',[]):
+        point=cv2.perspectiveTransform(np.float32([[side['target']]]),transform)[0,0]
+        delta=np.array([width*.50,height*.45])-point
+        delta=np.clip(delta,[-width*.22,-height*.20],[width*.22,height*.20])
+        if np.linalg.norm(delta)>=50:return delta/np.array([width,height])
+    return None
 
 
 def affine(evidence):
@@ -62,14 +100,9 @@ def survey(session, *, zoom=True, full_map=False):
                     temporary.write_text(json.dumps(state),encoding='utf-8');temporary.replace(pending)
                 if abs(measured['scale']-1)<.01: break
                 before=frame
-    # Selecting a visible troop card reveals the red outline without a map tap.
-    from coc_bot.attack.army import card_boxes
-    boxes=card_boxes(frame,'battle')
-    if not boxes: raise ValueError('No visible army card to reveal the boundary')
-    x,y,bw,bh=boxes[0]
-    session.input.tap(x+bw//2,y+bh//2,jitter=0)
-    session._sleep(.2)
-    reference=session.capture.screenshot()
+    # The game can retain an active selection. Don't toggle a visible outline
+    # off, and don't assume one click took effect while the card was moving.
+    reference=reveal_boundary(session,frame)
     evidence_dir=session.config.data_dir/'debug'/'attack-surveys'/uuid.uuid4().hex
     evidence_dir.mkdir(parents=True,exist_ok=True)
     cv2.imwrite(str(evidence_dir/'reference.png'),reference)
@@ -119,9 +152,16 @@ def survey(session, *, zoom=True, full_map=False):
         if observation.stable:
             segments.extend(registered_segments(observation,np.linalg.inv(transform),w,h))
         views.append({'frame':current,'transform':transform.tolist(),'segments':len(observation.segments)})
-        projection=fit_projection(segments,w,h)
+        evidence={}
+        projection=fit_projection(segments,w,h,survey_evidence=evidence)
         if (projection and (not full_map or index>=7)) or index==len(gestures): break
         dx,dy=gestures[index]
+        if index>=8 and projection is None:
+            targeted=survey_pan(evidence,transform,w,h)
+            if targeted is not None:
+                dx,dy=targeted
+                logger.debug('Survey: panning to gather missing boundary evidence')
+        check_stop(stop)
         session.input.swipe(round(w*.48),round(h*.46),round(w*(.48+dx)),round(h*(.46+dy)),350)
         session._sleep(.3)
         frame=current

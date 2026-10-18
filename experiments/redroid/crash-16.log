@@ -1,0 +1,529 @@
+--------- beginning of crash
+10-11 16:34:01.879   345   345 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:34:01.879   345   345 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:01.879   345   345 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:01.879   345   345 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:01.879   345   345 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:01.879   345   345 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:01.879   345   345 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:01.879   345   345 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:01.879   345   345 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:01.879   345   345 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:34:01.879   345   345 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:01.879   345   345 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:01.879   345   345 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:01.879   345   345 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:01.879   345   345 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:01.879   345   345 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:01.879   345   345 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:01.879   345   345 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:01.880   345   345 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:34:01.880   345   345 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:34:01.880   345   345 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:34:01.880   345   345 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:34:01.880   345   345 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:34:01.880   345   345 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:34:06.725   424   424 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:34:06.725   424   424 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:06.725   424   424 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:06.725   424   424 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:06.725   424   424 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:06.725   424   424 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:06.725   424   424 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:06.725   424   424 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:06.725   424   424 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:06.726   424   424 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:34:06.726   424   424 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:06.726   424   424 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:06.726   424   424 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:06.726   424   424 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:06.726   424   424 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:06.726   424   424 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:06.726   424   424 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:06.726   424   424 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:06.726   424   424 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:34:06.726   424   424 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:34:06.726   424   424 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:34:06.726   424   424 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:34:06.726   424   424 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:34:06.726   424   424 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:34:11.742   503   503 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:34:11.742   503   503 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:11.742   503   503 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:11.742   503   503 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:11.742   503   503 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:11.742   503   503 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:11.742   503   503 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:11.742   503   503 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:11.742   503   503 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:11.743   503   503 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:34:11.743   503   503 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:11.743   503   503 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:11.743   503   503 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:11.743   503   503 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:11.743   503   503 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:11.743   503   503 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:11.743   503   503 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:11.743   503   503 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:11.743   503   503 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:34:11.743   503   503 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:34:11.743   503   503 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:34:11.743   503   503 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:34:11.743   503   503 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:34:11.743   503   503 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:34:16.714   578   578 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:34:16.714   578   578 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:16.714   578   578 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:16.714   578   578 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:16.714   578   578 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:16.714   578   578 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:16.714   578   578 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:16.714   578   578 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:16.714   578   578 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:16.715   578   578 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:34:16.715   578   578 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:16.715   578   578 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:16.715   578   578 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:16.715   578   578 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:16.715   578   578 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:16.715   578   578 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:16.715   578   578 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:16.715   578   578 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:16.715   578   578 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:34:16.715   578   578 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:34:16.715   578   578 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:34:16.715   578   578 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:34:16.715   578   578 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:34:16.715   578   578 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:34:21.730   656   656 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:34:21.730   656   656 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:21.730   656   656 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:21.730   656   656 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:21.730   656   656 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:21.730   656   656 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:21.730   656   656 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:21.730   656   656 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:21.730   656   656 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:21.731   656   656 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:34:21.731   656   656 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:21.731   656   656 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:21.731   656   656 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:21.731   656   656 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:21.731   656   656 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:21.731   656   656 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:21.731   656   656 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:21.731   656   656 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:21.731   656   656 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:34:21.731   656   656 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:34:21.731   656   656 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:34:21.731   656   656 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:34:21.731   656   656 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:34:21.731   656   656 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:34:26.734   744   744 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:34:26.734   744   744 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:26.734   744   744 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:26.734   744   744 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:26.734   744   744 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:26.734   744   744 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:26.734   744   744 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:26.734   744   744 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:26.734   744   744 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:26.735   744   744 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:34:26.735   744   744 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:26.735   744   744 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:26.735   744   744 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:26.735   744   744 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:26.735   744   744 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:26.735   744   744 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:26.735   744   744 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:26.735   744   744 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:26.735   744   744 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:34:26.735   744   744 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:34:26.735   744   744 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:34:26.735   744   744 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:34:26.735   744   744 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:34:26.735   744   744 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:34:31.726   821   821 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:34:31.726   821   821 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:31.726   821   821 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:31.726   821   821 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:31.726   821   821 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:31.726   821   821 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:31.726   821   821 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:31.726   821   821 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:31.726   821   821 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:31.727   821   821 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:34:31.727   821   821 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:31.727   821   821 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:31.727   821   821 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:31.727   821   821 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:31.727   821   821 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:31.727   821   821 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:31.727   821   821 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:31.727   821   821 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:31.727   821   821 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:34:31.727   821   821 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:34:31.727   821   821 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:34:31.727   821   821 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:34:31.727   821   821 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:34:31.727   821   821 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:34:36.735   898   898 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:34:36.735   898   898 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:36.735   898   898 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:36.735   898   898 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:36.735   898   898 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:36.735   898   898 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:36.735   898   898 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:36.735   898   898 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:36.735   898   898 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:36.736   898   898 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:34:36.736   898   898 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:36.736   898   898 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:36.736   898   898 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:36.736   898   898 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:36.736   898   898 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:36.736   898   898 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:36.736   898   898 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:36.736   898   898 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:36.736   898   898 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:34:36.736   898   898 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:34:36.736   898   898 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:34:36.736   898   898 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:34:36.736   898   898 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:34:36.736   898   898 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:34:41.749   976   976 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:34:41.749   976   976 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:41.749   976   976 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:41.749   976   976 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:41.749   976   976 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:41.749   976   976 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:41.749   976   976 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:41.749   976   976 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:41.749   976   976 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:41.750   976   976 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:34:41.750   976   976 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:41.750   976   976 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:41.750   976   976 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:41.750   976   976 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:41.750   976   976 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:41.750   976   976 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:41.750   976   976 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:41.750   976   976 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:41.750   976   976 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:34:41.750   976   976 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:34:41.750   976   976 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:34:41.750   976   976 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:34:41.750   976   976 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:34:41.750   976   976 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:34:46.754  1062  1062 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:34:46.754  1062  1062 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:46.754  1062  1062 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:46.754  1062  1062 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:46.754  1062  1062 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:46.754  1062  1062 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:46.754  1062  1062 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:46.754  1062  1062 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:46.754  1062  1062 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:34:46.755  1062  1062 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:34:51.741  1149  1149 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:34:51.741  1149  1149 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:51.741  1149  1149 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:51.741  1149  1149 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:51.741  1149  1149 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:51.741  1149  1149 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:51.741  1149  1149 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:51.741  1149  1149 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:51.741  1149  1149 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:34:51.742  1149  1149 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:34:56.769  1239  1239 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:34:56.769  1239  1239 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:56.769  1239  1239 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:56.769  1239  1239 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:56.769  1239  1239 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:56.769  1239  1239 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:56.769  1239  1239 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:56.769  1239  1239 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:56.769  1239  1239 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:34:56.770  1239  1239 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:35:01.767  1326  1326 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:35:01.767  1326  1326 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:01.767  1326  1326 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:01.767  1326  1326 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:01.767  1326  1326 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:01.767  1326  1326 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:01.767  1326  1326 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:01.767  1326  1326 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:01.767  1326  1326 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:35:01.768  1326  1326 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:35:06.792  1414  1414 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:35:11.777  1500  1500 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:35:11.777  1500  1500 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:11.777  1500  1500 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:11.777  1500  1500 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:11.777  1500  1500 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:11.777  1500  1500 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:11.777  1500  1500 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:11.777  1500  1500 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:11.777  1500  1500 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:35:11.778  1500  1500 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:35:16.783  1581  1581 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:35:16.783  1581  1581 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:16.783  1581  1581 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:16.783  1581  1581 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:16.783  1581  1581 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:16.783  1581  1581 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:16.783  1581  1581 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:16.783  1581  1581 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:16.783  1581  1581 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:35:16.785  1581  1581 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:35:21.794  1659  1659 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:35:21.794  1659  1659 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:21.794  1659  1659 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:21.794  1659  1659 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:21.794  1659  1659 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:21.794  1659  1659 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:21.794  1659  1659 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:21.794  1659  1659 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:21.794  1659  1659 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:35:21.795  1659  1659 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:35:26.797  1743  1743 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:35:26.797  1743  1743 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:26.797  1743  1743 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:26.797  1743  1743 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:26.797  1743  1743 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:26.797  1743  1743 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:26.797  1743  1743 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:26.797  1743  1743 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:26.797  1743  1743 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:35:26.798  1743  1743 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:35:31.817  1820  1820 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:35:31.817  1820  1820 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:31.817  1820  1820 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:31.817  1820  1820 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:31.817  1820  1820 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:31.817  1820  1820 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:31.817  1820  1820 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:31.817  1820  1820 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:31.817  1820  1820 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:35:31.818  1820  1820 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:35:36.820  1906  1906 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:35:36.820  1906  1906 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:36.820  1906  1906 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:36.820  1906  1906 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:36.820  1906  1906 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:36.820  1906  1906 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:36.820  1906  1906 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:36.820  1906  1906 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:36.820  1906  1906 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:35:36.821  1906  1906 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:35:41.825  1983  1983 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:35:41.825  1983  1983 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:41.825  1983  1983 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:41.825  1983  1983 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:41.825  1983  1983 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:41.825  1983  1983 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:41.825  1983  1983 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:41.825  1983  1983 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:41.825  1983  1983 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:35:41.826  1983  1983 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)
+10-11 16:35:46.827  2061  2061 E AndroidRuntime: *** FATAL EXCEPTION IN SYSTEM PROCESS: main
+10-11 16:35:46.827  2061  2061 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:46.827  2061  2061 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:46.827  2061  2061 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:46.827  2061  2061 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:46.827  2061  2061 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:46.827  2061  2061 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:46.827  2061  2061 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:46.827  2061  2061 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: Couldn't report crash. Here's the crash:
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: java.lang.RuntimeException: Failed to create ashmem: No such file or directory
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.nativeCreate(Native Method)
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: 	at com.android.internal.os.ApplicationSharedMemory.create(ApplicationSharedMemory.java:92)
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: 	at com.android.server.SystemServer.run(SystemServer.java:980)
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: 	at com.android.server.SystemServer.main(SystemServer.java:689)
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:910)
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: Error reporting crash. Here's the error:
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:170)
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1071)
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1066)
+10-11 16:35:46.828  2061  2061 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2442)

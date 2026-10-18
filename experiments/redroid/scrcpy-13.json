@@ -1,0 +1,22 @@
+{
+  "device": "127.0.0.1:5556",
+  "packets": 11,
+  "decoded_frames": 11,
+  "metadata": [
+    1280,
+    720
+  ],
+  "decoded_size": [
+    1280,
+    720
+  ],
+  "first_frame_s": 0.40795063599944115,
+  "ended_with": "TimeoutError: ",
+  "duration_s": 6.39907257584855,
+  "logs": [
+    "[server] INFO: Device: [redroid] redroid redroid13_x86_64 (Android 13)",
+    "[server] DEBUG: Using video encoder: 'OMX.google.h264.encoder'",
+    "[server] DEBUG: Video codec option set: i-frame-interval (Integer) = 1",
+    "[server] DEBUG: Display: using SurfaceControl API"
+  ]
+}

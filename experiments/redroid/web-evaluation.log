@@ -1,0 +1,17 @@
+INFO:     Started server process [2165159]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8773 (Press CTRL+C to quit)
+INFO:     127.0.0.1:39436 - "WebSocket /api/events/ws" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:39474 - "WebSocket /api/live/ws" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:37678 - "WebSocket /api/events/ws" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:37734 - "WebSocket /api/live/ws" [accepted]
+INFO:     connection open
+INFO:     Shutting down
+INFO:     Waiting for background tasks to complete. (CTRL+C to force quit)
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2165159]

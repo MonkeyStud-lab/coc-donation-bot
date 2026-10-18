@@ -1,0 +1,243 @@
+{
+  "timestamp_utc": "2026-10-11T16:29:26.536459+00:00",
+  "label": "redroid-13-launcher-after-game-crash-no-viewer",
+  "device": "127.0.0.1:5556",
+  "cgroup": "/sys/fs/cgroup/system.slice/docker-3c7df0ae1aea6cac846f3590d6f1d5b30910b2a120d085460368bc77291c3ece.scope",
+  "android": "13",
+  "abis": "x86_64,arm64-v8a,x86,armeabi-v7a,armeabi",
+  "native_bridge": "libnb.so",
+  "gpu_mode": "host",
+  "renderer": [
+    "GLES: AMD, AMD Radeon Graphics (radeonsi, renoir, ACO, DRM 3.64, 7.0.0-31-generic), OpenGL ES 3.2 Mesa 24.0.8 (git-441f064c1c)"
+  ],
+  "display": "Physical size: 1853x1048",
+  "foreground": [
+    "topResumedActivity=ActivityRecord{57949ff u0 com.android.launcher3/.uioverrides.QuickstepLauncher} t7}",
+    "ResumedActivity: ActivityRecord{57949ff u0 com.android.launcher3/.uioverrides.QuickstepLauncher} t7}"
+  ],
+  "game": [
+    "primaryCpuAbi=x86_64",
+    "versionCode=180600008 minSdk=24 targetSdk=36",
+    "versionName=18.600.7"
+  ],
+  "samples": [
+    {
+      "elapsed_s": 2.000431651249528,
+      "cpu_one_core_percent": 0.04673991232922013,
+      "memory_current_mib": 1504.2578125,
+      "anon_mib": 496.69921875,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 4.000840058084577,
+      "cpu_one_core_percent": 0.5820311472506257,
+      "memory_current_mib": 1504.5234375,
+      "anon_mib": 496.69921875,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 6.001242122147232,
+      "cpu_one_core_percent": 0.04784038255071635,
+      "memory_current_mib": 1504.37109375,
+      "anon_mib": 496.72265625,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 8.001623567193747,
+      "cpu_one_core_percent": 0.054239655276085146,
+      "memory_current_mib": 1504.34375,
+      "anon_mib": 496.72265625,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 10.00199644640088,
+      "cpu_one_core_percent": 0.03809289797520278,
+      "memory_current_mib": 1504.09375,
+      "anon_mib": 496.72265625,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 12.002566752023995,
+      "cpu_one_core_percent": 0.04773638783479533,
+      "memory_current_mib": 1504.33984375,
+      "anon_mib": 496.72265625,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 14.002978725358844,
+      "cpu_one_core_percent": 0.04953979546262777,
+      "memory_current_mib": 1504.34375,
+      "anon_mib": 496.72265625,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 16.003464620094746,
+      "cpu_one_core_percent": 0.04298955580056886,
+      "memory_current_mib": 1504.1171875,
+      "anon_mib": 496.72265625,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 18.003807872068137,
+      "cpu_one_core_percent": 0.049341531710935055,
+      "memory_current_mib": 1504.1171875,
+      "anon_mib": 496.72265625,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 20.004201229196042,
+      "cpu_one_core_percent": 0.06833655966357992,
+      "memory_current_mib": 1504.3671875,
+      "anon_mib": 496.72265625,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 22.004857199266553,
+      "cpu_one_core_percent": 0.6004530603818213,
+      "memory_current_mib": 1504.61328125,
+      "anon_mib": 496.7265625,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 24.005236470140517,
+      "cpu_one_core_percent": 0.5970867711892294,
+      "memory_current_mib": 1504.86328125,
+      "anon_mib": 496.75390625,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 26.005644265096635,
+      "cpu_one_core_percent": 0.05123955238449193,
+      "memory_current_mib": 1504.37109375,
+      "anon_mib": 496.7578125,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 28.006076106335968,
+      "cpu_one_core_percent": 0.04574012376413322,
+      "memory_current_mib": 1504.37109375,
+      "anon_mib": 496.7578125,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 30.006507146172225,
+      "cpu_one_core_percent": 0.6602577013142688,
+      "memory_current_mib": 1504.1953125,
+      "anon_mib": 496.7578125,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 32.00689227832481,
+      "cpu_one_core_percent": 0.10148045830632348,
+      "memory_current_mib": 1504.15625,
+      "anon_mib": 496.7578125,
+      "file_mib": 852.4296875
+    },
+    {
+      "elapsed_s": 34.00719529436901,
+      "cpu_one_core_percent": 0.6463020800501726,
+      "memory_current_mib": 1505.38671875,
+      "anon_mib": 496.95703125,
+      "file_mib": 852.453125
+    },
+    {
+      "elapsed_s": 36.007605464197695,
+      "cpu_one_core_percent": 0.05558859961680922,
+      "memory_current_mib": 1504.64453125,
+      "anon_mib": 496.95703125,
+      "file_mib": 852.453125
+    },
+    {
+      "elapsed_s": 38.008005725219846,
+      "cpu_one_core_percent": 0.05018995545856323,
+      "memory_current_mib": 1504.39453125,
+      "anon_mib": 496.95703125,
+      "file_mib": 852.453125
+    },
+    {
+      "elapsed_s": 40.00843531219289,
+      "cpu_one_core_percent": 0.044340475954575735,
+      "memory_current_mib": 1504.37890625,
+      "anon_mib": 496.95703125,
+      "file_mib": 852.453125
+    },
+    {
+      "elapsed_s": 42.009723459370434,
+      "cpu_one_core_percent": 0.055414309107064005,
+      "memory_current_mib": 1504.62890625,
+      "anon_mib": 496.95703125,
+      "file_mib": 852.453125
+    },
+    {
+      "elapsed_s": 44.010307230986655,
+      "cpu_one_core_percent": 0.5914273707439519,
+      "memory_current_mib": 1504.62890625,
+      "anon_mib": 496.98046875,
+      "file_mib": 852.453125
+    },
+    {
+      "elapsed_s": 46.01065733702853,
+      "cpu_one_core_percent": 0.047341712690177146,
+      "memory_current_mib": 1504.37890625,
+      "anon_mib": 496.98046875,
+      "file_mib": 852.453125
+    },
+    {
+      "elapsed_s": 48.01102088810876,
+      "cpu_one_core_percent": 0.5668969520003615,
+      "memory_current_mib": 1504.62890625,
+      "anon_mib": 496.98046875,
+      "file_mib": 852.453125
+    },
+    {
+      "elapsed_s": 50.01146571431309,
+      "cpu_one_core_percent": 0.06728503492665269,
+      "memory_current_mib": 1504.6640625,
+      "anon_mib": 496.98046875,
+      "file_mib": 852.453125
+    },
+    {
+      "elapsed_s": 52.011910159140825,
+      "cpu_one_core_percent": 0.5749722282835239,
+      "memory_current_mib": 1504.91015625,
+      "anon_mib": 497.0,
+      "file_mib": 852.453125
+    },
+    {
+      "elapsed_s": 54.0122320712544,
+      "cpu_one_core_percent": 0.04854218684101817,
+      "memory_current_mib": 1504.91015625,
+      "anon_mib": 497.0,
+      "file_mib": 852.453125
+    },
+    {
+      "elapsed_s": 56.01262807426974,
+      "cpu_one_core_percent": 0.04434122037151453,
+      "memory_current_mib": 1504.66015625,
+      "anon_mib": 497.0,
+      "file_mib": 852.453125
+    },
+    {
+      "elapsed_s": 58.01297542406246,
+      "cpu_one_core_percent": 0.0434924464538697,
+      "memory_current_mib": 1504.41015625,
+      "anon_mib": 497.0,
+      "file_mib": 852.453125
+    },
+    {
+      "elapsed_s": 60.00007565924898,
+      "cpu_one_core_percent": 0.043732066687538394,
+      "memory_current_mib": 1504.66015625,
+      "anon_mib": 497.0,
+      "file_mib": 852.453125
+    }
+  ],
+  "scope": "Android payload only; excludes browser, web server, compositor and host services",
+  "duration_s": 60.00039398716763,
+  "summary": {
+    "cpu_one_core_percent_mean": 0.19876707107934727,
+    "memory_current_mib_mean": 1504.491015625,
+    "anon_mib_mean": 496.84661458333335,
+    "file_mib_mean": 852.440625
+  }
+}

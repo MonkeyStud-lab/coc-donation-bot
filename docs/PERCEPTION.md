@@ -67,8 +67,8 @@ then export tasks with `python scripts/export_collection_tasks.py`.
 For visually reviewed screen labels and bounding boxes, use the
 [annotation workflow](ANNOTATION_WORKFLOW.md). Its exports preserve source hashes
 and sessions and explicitly distinguish AI-reviewed partial boxes from training
-ground truth. Schema version 3 adds reward reveals and visited villages so those
-screens are not forced into home or battle-results categories.
+ground truth. Schema version 4 includes reward reveals, visited villages, army
+confirmation/management, and upgrade menu, confirmation and in-progress states.
 
 For an existing Label Studio installation:
 
@@ -141,6 +141,54 @@ rotating application log. The observer never changes the classifier's return
 value, clicks, state transitions, or donation/attack decisions. A missing,
 incompatible, or broken model disables observation while the normal rules
 continue. Launch without `--screen-model` to leave observation disabled.
+
+## Approved batches after a game update
+
+Use `scripts/train_reviewed_screens.py` for a reviewed batch with image hashes,
+recording sessions and a fixed UI version. First get approval of its screen labels.
+Approval of screen labels does not approve partial object boxes for detector training.
+
+```bash
+python scripts/train_reviewed_screens.py \
+  --batch data/labelstudio/review/REVIEW_current \
+  --output data/models/EXPERIMENT \
+  --ui-version YOUR_UI_VERSION \
+  --approval-note "Screen labels reviewed and approved"
+```
+
+This refuses mixed/legacy UI versions, changed images, exact duplicates and existing
+output directories. It saves a hash-linked approval record, dataset provenance,
+an observation-only model and an evaluation report. Validation holds out complete
+sessions, then removes training frames whose 63-bit perceptual hashes are within
+six bits of a test frame. Similarity filtering reduces leakage but cannot establish
+that every visual relationship has been removed. Classes absent from a fold's
+remaining training data are explicitly unvalidated. Report evaluation coverage and
+per-class results alongside overall accuracy; frequent classes can dominate accuracy.
+
+The October 17 current-UI baseline used 100 approved screenshots across 15 categories.
+It classified 84 of 91 eligible held-out examples correctly. Six categories had no
+eligible independent test examples. Loading was 0/3 and popups 3/6, so those remain
+priorities for collecting new examples. This is an experimental result from one
+device, not a guarantee for new installations or unseen screen types.
+
+For passive comparison while the bot runs, without restarting it or issuing any
+game inputs:
+
+```bash
+python scripts/watch_screen_model.py \
+  --collection data/collection \
+  --model data/models/EXPERIMENT/screens.npz \
+  --output data/models/EXPERIMENT/observer-run \
+  --duration 3600
+```
+
+The observer reads newly saved collector images, not every video frame. It ends
+after the requested duration and rotates its private comparison log. Optional
+`--backfill 5` checks five previously saved frames before watching new saves;
+these are marked as backfilled, not fresh validation data. Collector hints can be
+inherited or incorrect, so agreement is not accuracy and disagreements need review.
+Neither trainer nor observer changes calibration, settings, purchases or navigation.
+Keep all models, approvals, evaluation logs and screenshots in the ignored data folder.
 
 ## Offline checks
 

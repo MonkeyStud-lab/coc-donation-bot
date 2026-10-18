@@ -1,0 +1,14 @@
+{
+  "device": "127.0.0.1:5556",
+  "commands": [
+    "open Settings",
+    "tap Apps at 160,540",
+    "Back",
+    "swipe Settings 1500,800 to 1500,300 over 400ms",
+    "Home"
+  ],
+  "final_foreground": [
+    "topResumedActivity=ActivityRecord{b8ddc45 u0 com.android.launcher3/.uioverrides.QuickstepLauncher} t11}"
+  ],
+  "completed_swipe": "500,900 to 500,350 over 600ms; 1 second wait after Settings launch"
+}

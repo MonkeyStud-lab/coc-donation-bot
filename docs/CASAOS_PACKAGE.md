@@ -60,7 +60,7 @@ and discovers the host's LAN address. An address/origin override is available
 for hosts with multiple network interfaces. Host networking also carries local
 WebRTC video without a separate UDP port mapping.
 
-The dashboard icon is the original blue shield/robot mark in
+The dashboard icon is the clan castle drawn in Microsoft Paint, stored in
 `web/public/casaos-icon.png`, also included in the web app at
 `/casaos-icon.png`. `COC_ICON_URL` can override its URL when importing Compose;
 for a locally built or private repository, use the dashboard address followed by

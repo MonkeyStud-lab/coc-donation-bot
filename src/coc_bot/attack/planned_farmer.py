@@ -165,7 +165,7 @@ def run_planned_attack(farmer, *, automatic=False):
     try:
         observed=survey(session)
         if observed['projection'] is None:
-            raise ValueError('Four observed map edges were not found; no deployment sent')
+            raise ValueError('Deployment boundary coverage could not be verified; no deployment sent')
         if automatic:
             from coc_bot.attack.automatic import automatic_plan, scan_army
             catalog=learned_catalog(farmer.config,use_saved_routine=False)

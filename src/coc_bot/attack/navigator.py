@@ -566,6 +566,7 @@ class AttackNavigator:
         deadline = time.monotonic() + remaining
         previous = None
         previous_at = 0.0
+        last_diagnostic_reason = None
         self.last_battle_end_reason = "watching"
         while deadline - time.monotonic() > 4.0:
             if self._stopping():
@@ -581,6 +582,12 @@ class AttackNavigator:
                 self.last_battle_end_reason = "inactivity_disconnect"
                 return ScreenType.POPUP
             target = self.battle_completion.detect(frame) if frame is not None else None
+            reason = self.battle_completion.last_reason if frame is not None else "capture_unavailable"
+            logger.debug("Battle end observation: {}", reason)
+            if (target is None and frame is not None and reason != "missing_return_home"
+                    and reason != last_diagnostic_reason):
+                self._save_battle_end_frame(frame, "uncertain")
+                last_diagnostic_reason = reason
             now = time.monotonic()
             if target is not None:
                 stable = (previous is not None and now - previous_at >= 1.0
@@ -590,6 +597,7 @@ class AttackNavigator:
                     if self._stopping():
                         return ScreenType.UNKNOWN
                     self.last_battle_end_reason = "results_confirmed"
+                    self._save_battle_end_frame(frame, "confirmed")
                     logger.info("Battle results confirmed on two screenshots — Return Home at {}", target)
                     from coc_bot.vision import recorder
 
@@ -601,7 +609,10 @@ class AttackNavigator:
                 previous, previous_at = target, now
             else:
                 previous = None
-            if self._sleep(min(5.0, max(0.0, deadline - time.monotonic()))):
+            # Confirm a possible result promptly; otherwise poll at a modest
+            # rate. Neither elapsed time nor a single frame proves completion.
+            if self._sleep(min(1.0 if target is not None else 2.0,
+                               max(0.0, deadline - time.monotonic()))):
                 return ScreenType.UNKNOWN
         if self._sleep(max(0.0, deadline - time.monotonic())):
             return ScreenType.UNKNOWN
@@ -618,11 +629,21 @@ class AttackNavigator:
             self.last_battle_end_reason = "inactivity_disconnect"
             return ScreenType.POPUP
         self.last_battle_end_reason = "timer_fallback"
+        self._save_battle_end_frame(frame, "fallback")
         logger.info("Battle timer done — forcing Return Home coordinates (no vision skip)")
         self._tap_return_home_coords(frame)
         if self._sleep(1.5):
             return ScreenType.UNKNOWN
         return ScreenType.BATTLE_RESULTS
+
+    def _save_battle_end_frame(self, frame, reason):
+        """Keep one diagnostic frame per outcome, never an unbounded recording."""
+        try:
+            folder = self.config.data_dir / "debug"
+            folder.mkdir(parents=True, exist_ok=True)
+            cv2.imwrite(str(folder / ("battle-end-" + reason + ".png")), frame)
+        except (OSError, cv2.error):
+            logger.debug("Could not save battle-end diagnostic frame")
 
     def _tap_return_home_coords(self, frame: np.ndarray) -> bool:
         """Always tap calibrated return_home (or lower-center fallback). No vision."""

@@ -1,0 +1,468 @@
+--------- beginning of crash
+10-11 16:27:43.284    90    90 F libc    : Fatal signal 8 (SIGFPE), code 1 (FPE_INTDIV), fault addr 0x7620f3cde7dd in tid 90 (allocator@2.0-s), pid 90 (allocator@2.0-s)
+10-11 16:27:43.311   757   757 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-11 16:27:43.311   757   757 F DEBUG   : Build fingerprint: 'redroid/redroid_x86_64/redroid_x86_64:13/TQ3A.230805.001.S1/eng.frank.20240527.133549:userdebug/test-keys'
+10-11 16:27:43.311   757   757 F DEBUG   : Revision: '0'
+10-11 16:27:43.311   757   757 F DEBUG   : ABI: 'x86_64'
+10-11 16:27:43.311   757   757 F DEBUG   : Timestamp: 2026-10-11 16:27:43.295583822+0000
+10-11 16:27:43.311   757   757 F DEBUG   : Process uptime: 0s
+10-11 16:27:43.311   757   757 F DEBUG   : Cmdline: /vendor/bin/hw/android.hardware.graphics.allocator@2.0-service
+10-11 16:27:43.311   757   757 F DEBUG   : pid: 90, tid: 90, name: allocator@2.0-s  >>> /vendor/bin/hw/android.hardware.graphics.allocator@2.0-service <<<
+10-11 16:27:43.311   757   757 F DEBUG   : uid: 1000
+10-11 16:27:43.311   757   757 F DEBUG   : signal 8 (SIGFPE), code 1 (FPE_INTDIV), fault addr 0x00007620f3cde7dd
+10-11 16:27:43.311   757   757 F DEBUG   :     rax 0000000000000100  rbx 00007621c3e0cc70  rcx 0000000000000000  rdx 0000000000000000
+10-11 16:27:43.311   757   757 F DEBUG   :     r8  0000762193e056d0  r9  0000000000000001  r10 0000000000000000  r11 0000000000000002
+10-11 16:27:43.311   757   757 F DEBUG   :     r12 0000000000000004  r13 0000000000000004  r14 0000000000000035  r15 00007621b3e14230
+10-11 16:27:43.311   757   757 F DEBUG   :     rdi 00007ffffa4085f4  rsi 0000000000000001
+10-11 16:27:43.311   757   757 F DEBUG   :     rbp 0000762193e056c0  rsp 00007ffffa408500  rip 00007620f3cde7dd
+10-11 16:27:43.311   757   757 F DEBUG   : backtrace:
+10-11 16:27:43.311   757   757 F DEBUG   :       #00 pc 00000000000067dd  /vendor/lib64/hw/gralloc.gbm.so (gralloc_gbm_bo_create+621)
+10-11 16:27:43.311   757   757 F DEBUG   :       #01 pc 00000000000061e6  /vendor/lib64/hw/gralloc.gbm.so
+10-11 16:27:43.311   757   757 F DEBUG   :       #02 pc 0000000000004354  /vendor/lib64/hw/android.hardware.graphics.allocator@2.0-impl.so (android::hardware::graphics::allocator::V2_0::passthrough::detail::Gralloc0HalImpl<android::hardware::graphics::allocator::V2_0::hal::AllocatorHal>::allocateBuffers(android::hardware::hidl_vec<unsigned int> const&, unsigned int, unsigned int*, std::__1::vector<native_handle const*, std::__1::allocator<native_handle const*> >*)+292) (BuildId: 1a5679ebe4509a1a737939f9d3bc7eb8)
+10-11 16:27:43.311   757   757 F DEBUG   :       #03 pc 0000000000004663  /vendor/lib64/hw/android.hardware.graphics.allocator@2.0-impl.so (android::hardware::graphics::allocator::V2_0::hal::detail::AllocatorImpl<android::hardware::graphics::allocator::V2_0::IAllocator, android::hardware::graphics::allocator::V2_0::hal::AllocatorHal>::allocate(android::hardware::hidl_vec<unsigned int> const&, unsigned int, std::__1::function<void (android::hardware::graphics::mapper::V2_0::Error, unsigned int, android::hardware::hidl_vec<android::hardware::hidl_handle> const&)>)+83) (BuildId: 1a5679ebe4509a1a737939f9d3bc7eb8)
+10-11 16:27:43.311   757   757 F DEBUG   :       #04 pc 000000000000e463  /apex/com.android.vndk.v33/lib64/android.hardware.graphics.allocator@2.0.so (android::hardware::graphics::allocator::V2_0::BnHwAllocator::_hidl_allocate(android::hidl::base::V1_0::BnHwBase*, android::hardware::Parcel const&, android::hardware::Parcel*, std::__1::function<void (android::hardware::Parcel&)>)+451) (BuildId: 8cc74abbff773b4243f400de9800cb73)
+10-11 16:27:43.311   757   757 F DEBUG   :       #05 pc 000000000000e7e5  /apex/com.android.vndk.v33/lib64/android.hardware.graphics.allocator@2.0.so (android::hardware::graphics::allocator::V2_0::BnHwAllocator::onTransact(unsigned int, android::hardware::Parcel const&, android::hardware::Parcel*, unsigned int, std::__1::function<void (android::hardware::Parcel&)>)+325) (BuildId: 8cc74abbff773b4243f400de9800cb73)
+10-11 16:27:43.311   757   757 F DEBUG   :       #06 pc 000000000009ab39  /apex/com.android.vndk.v33/lib64/libhidlbase.so (android::hardware::BHwBinder::transact(unsigned int, android::hardware::Parcel const&, android::hardware::Parcel*, unsigned int, std::__1::function<void (android::hardware::Parcel&)>)+137) (BuildId: 12acd7a8d896b120f2b2ec0e5a00a104)
+10-11 16:27:43.311   757   757 F DEBUG   :       #07 pc 00000000000a014a  /apex/com.android.vndk.v33/lib64/libhidlbase.so (android::hardware::IPCThreadState::executeCommand(int)+3770) (BuildId: 12acd7a8d896b120f2b2ec0e5a00a104)
+10-11 16:27:43.311   757   757 F DEBUG   :       #08 pc 000000000009f135  /apex/com.android.vndk.v33/lib64/libhidlbase.so (android::hardware::IPCThreadState::getAndExecuteCommand()+229) (BuildId: 12acd7a8d896b120f2b2ec0e5a00a104)
+10-11 16:27:43.311   757   757 F DEBUG   :       #09 pc 00000000000a072f  /apex/com.android.vndk.v33/lib64/libhidlbase.so (android::hardware::IPCThreadState::joinThreadPool(bool)+191) (BuildId: 12acd7a8d896b120f2b2ec0e5a00a104)
+10-11 16:27:43.311   757   757 F DEBUG   :       #10 pc 0000000000001928  /vendor/bin/hw/android.hardware.graphics.allocator@2.0-service (main+120) (BuildId: f64afa93aade51f6b9a874d0dce6a85f)
+10-11 16:27:43.311   757   757 F DEBUG   :       #11 pc 0000000000050cc9  /apex/com.android.runtime/lib64/bionic/libc.so (__libc_init+89) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:43.503   838   838 E AndroidRuntime: FATAL EXCEPTION: main
+10-11 16:27:43.503   838   838 E AndroidRuntime: PID: 838
+10-11 16:27:43.503   838   838 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.attachApplication(android.app.IApplicationThread, long)' on a null object reference
+10-11 16:27:43.503   838   838 E AndroidRuntime: 	at android.app.ActivityThread.attach(ActivityThread.java:7606)
+10-11 16:27:43.503   838   838 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7905)
+10-11 16:27:43.503   838   838 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:27:43.503   838   838 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:548)
+10-11 16:27:43.503   838   838 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:936)
+10-11 16:27:43.504   838   838 E AndroidRuntime: Error reporting crash
+10-11 16:27:43.504   838   838 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke interface method 'void android.app.IActivityManager.handleApplicationCrash(android.os.IBinder, android.app.ApplicationErrorReport$ParcelableCrashInfo)' on a null object reference
+10-11 16:27:43.504   838   838 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$KillApplicationHandler.uncaughtException(RuntimeInit.java:156)
+10-11 16:27:43.504   838   838 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1073)
+10-11 16:27:43.504   838   838 E AndroidRuntime: 	at java.lang.ThreadGroup.uncaughtException(ThreadGroup.java:1068)
+10-11 16:27:43.504   838   838 E AndroidRuntime: 	at java.lang.Thread.dispatchUncaughtException(Thread.java:2306)
+10-11 16:27:48.314    87  1642 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 1642 (bluetooth@1.1-s), pid 87 (bluetooth@1.1-s)
+10-11 16:27:48.334  1659  1659 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-11 16:27:48.335  1659  1659 F DEBUG   : Build fingerprint: 'redroid/redroid_x86_64/redroid_x86_64:13/TQ3A.230805.001.S1/eng.frank.20240527.133549:userdebug/test-keys'
+10-11 16:27:48.335  1659  1659 F DEBUG   : Revision: '0'
+10-11 16:27:48.335  1659  1659 F DEBUG   : ABI: 'x86_64'
+10-11 16:27:48.335  1659  1659 F DEBUG   : Timestamp: 2026-10-11 16:27:48.323161097+0000
+10-11 16:27:48.335  1659  1659 F DEBUG   : Process uptime: 9s
+10-11 16:27:48.335  1659  1659 F DEBUG   : Cmdline: /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim
+10-11 16:27:48.335  1659  1659 F DEBUG   : pid: 87, tid: 1642, name: bluetooth@1.1-s  >>> /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim <<<
+10-11 16:27:48.335  1659  1659 F DEBUG   : uid: 1002
+10-11 16:27:48.335  1659  1659 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+10-11 16:27:48.335  1659  1659 F DEBUG   :     rax 0000000000000000  rbx 0000000000000057  rcx 00007479fca9d70f  rdx 0000000000000006
+10-11 16:27:48.335  1659  1659 F DEBUG   :     r8  0000000000000000  r9  0000000000000000  r10 00007479fd1fb590  r11 0000000000000203
+10-11 16:27:48.335  1659  1659 F DEBUG   :     r12 78e0cca4ecf40d05  r13 0000747a00ce1540  r14 00007479fd1fb588  r15 000000000000066a
+10-11 16:27:48.335  1659  1659 F DEBUG   :     rdi 0000000000000057  rsi 000000000000066a
+10-11 16:27:48.335  1659  1659 F DEBUG   :     rbp 00005b7d72a8db40  rsp 00007479fd1fb580  rip 00007479fca9d70f
+10-11 16:27:48.335  1659  1659 F DEBUG   : backtrace:
+10-11 16:27:48.335  1659  1659 F DEBUG   :       #00 pc 000000000005f70f  /apex/com.android.runtime/lib64/bionic/libc.so (abort+191) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:48.335  1659  1659 F DEBUG   :       #01 pc 00000000000fc266  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (__cfi_check_fail+22) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:48.335  1659  1659 F DEBUG   :       #02 pc 000000000010f828  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (__cfi_check+38952) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:48.335  1659  1659 F DEBUG   :       #03 pc 0000000000054339  /apex/com.android.runtime/bin/linker64 (__dl__ZN15CFIShadowWriter7CfiFailEmPvS0_S0_+121) (BuildId: ed6494b4a5f0b4d30844f4b4923e00e6)
+10-11 16:27:48.335  1659  1659 F DEBUG   :       #04 pc 0000000000044c64  /apex/com.android.runtime/bin/linker64 (__loader_cfi_fail+52) (BuildId: ed6494b4a5f0b4d30844f4b4923e00e6)
+10-11 16:27:48.335  1659  1659 F DEBUG   :       #05 pc 0000000000308db2  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::LinkLayerController::Reset()+2498) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:48.335  1659  1659 F DEBUG   :       #06 pc 0000000000266264  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::DualModeController::Reset(bluetooth::hci::CommandView)+468) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:48.335  1659  1659 F DEBUG   :       #07 pc 0000000000265fa7  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (std::__1::__function::__func<rootcanal::DualModeController::DualModeController(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const&, unsigned short)::$_1, std::__1::allocator<rootcanal::DualModeController::DualModeController(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const&, unsigned short)::$_1>, void (bluetooth::hci::CommandView)>::operator()(bluetooth::hci::CommandView&&)+567) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:48.335  1659  1659 F DEBUG   :       #08 pc 000000000026ee9f  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::DualModeController::HandleCommand(std::__1::shared_ptr<std::__1::vector<unsigned char, std::__1::allocator<unsigned char> > >)+1903) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:48.335  1659  1659 F DEBUG   :       #09 pc 00000000001059e5  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (std::__1::__function::__func<android::hardware::bluetooth::V1_1::sim::BluetoothHci::sendHciCommand(android::hardware::hidl_vec<unsigned char> const&)::$_12, std::__1::allocator<android::hardware::bluetooth::V1_1::sim::BluetoothHci::sendHciCommand(android::hardware::hidl_vec<unsigned char> const&)::$_12>, void ()>::operator()()+389) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:48.335  1659  1659 F DEBUG   :       #10 pc 000000000031dc28  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::AsyncManager::AsyncTaskManager::ThreadRoutine()+648) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:48.335  1659  1659 F DEBUG   :       #11 pc 000000000031d8f5  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (void* std::__1::__thread_proxy<std::__1::tuple<std::__1::unique_ptr<std::__1::__thread_struct, std::__1::default_delete<std::__1::__thread_struct> >, rootcanal::AsyncManager::AsyncTaskManager::tryStartThread()::'lambda'()> >(void*) (.cfi)+37) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:48.335  1659  1659 F DEBUG   :       #12 pc 00000000000ccd9a  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+58) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:48.335  1659  1659 F DEBUG   :       #13 pc 0000000000060d47  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+55) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:48.461  1412  1641 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 1641 (HwBinder:1412_1), pid 1412 (droid.bluetooth)
+10-11 16:27:48.661  1750  1750 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-11 16:27:48.661  1750  1750 F DEBUG   : Build fingerprint: 'redroid/redroid_x86_64/redroid_x86_64:13/TQ3A.230805.001.S1/eng.frank.20240527.133549:userdebug/test-keys'
+10-11 16:27:48.661  1750  1750 F DEBUG   : Revision: '0'
+10-11 16:27:48.661  1750  1750 F DEBUG   : ABI: 'x86_64'
+10-11 16:27:48.661  1750  1750 F DEBUG   : Timestamp: 2026-10-11 16:27:48.493700916+0000
+10-11 16:27:48.661  1750  1750 F DEBUG   : Process uptime: 0s
+10-11 16:27:48.661  1750  1750 F DEBUG   : Cmdline: com.android.bluetooth
+10-11 16:27:48.661  1750  1750 F DEBUG   : pid: 1412, tid: 1641, name: HwBinder:1412_1  >>> com.android.bluetooth <<<
+10-11 16:27:48.661  1750  1750 F DEBUG   : uid: 1002
+10-11 16:27:48.661  1750  1750 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+10-11 16:27:48.661  1750  1750 F DEBUG   :     rax 0000000000000000  rbx 0000000000000584  rcx 0000762e3ac6870f  rdx 0000000000000006
+10-11 16:27:48.661  1750  1750 F DEBUG   :     r8  0000000000001002  r9  0000000000001002  r10 0000762b2455b840  r11 0000000000000203
+10-11 16:27:48.661  1750  1750 F DEBUG   :     r12 0000762c74812160  r13 0000762c1483bf90  r14 0000762b2455b838  r15 0000000000000669
+10-11 16:27:48.661  1750  1750 F DEBUG   :     rdi 0000000000000584  rsi 0000000000000669
+10-11 16:27:48.661  1750  1750 F DEBUG   :     rbp 0000762c1483bf90  rsp 0000762b2455b830  rip 0000762e3ac6870f
+10-11 16:27:48.661  1750  1750 F DEBUG   : backtrace:
+10-11 16:27:48.661  1750  1750 F DEBUG   :       #00 pc 000000000005f70f  /apex/com.android.runtime/lib64/bionic/libc.so (abort+191) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:48.661  1750  1750 F DEBUG   :       #01 pc 0000000000ae1748  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::hal::(anonymous namespace)::HciDeathRecipient::serviceDied(unsigned long, android::wp<android::hidl::base::V1_0::IBase> const&)+56) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:48.661  1750  1750 F DEBUG   :       #02 pc 000000000004d9f7  /system/lib64/libhidlbase.so (android::hardware::hidl_binder_death_recipient::binderDied(android::wp<android::hardware::IBinder> const&)+103) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:48.661  1750  1750 F DEBUG   :       #03 pc 000000000009c153  /system/lib64/libhidlbase.so (android::hardware::BpHwBinder::reportOneDeath(android::hardware::BpHwBinder::Obituary const&)+131) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:48.661  1750  1750 F DEBUG   :       #04 pc 000000000009c08e  /system/lib64/libhidlbase.so (android::hardware::BpHwBinder::sendObituary()+270) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:48.661  1750  1750 F DEBUG   :       #05 pc 000000000009f8af  /system/lib64/libhidlbase.so (android::hardware::IPCThreadState::executeCommand(int)+1391) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:48.661  1750  1750 F DEBUG   :       #06 pc 000000000009f1e5  /system/lib64/libhidlbase.so (android::hardware::IPCThreadState::getAndExecuteCommand()+229) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:48.661  1750  1750 F DEBUG   :       #07 pc 00000000000a07df  /system/lib64/libhidlbase.so (android::hardware::IPCThreadState::joinThreadPool(bool)+191) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:48.661  1750  1750 F DEBUG   :       #08 pc 00000000000abf27  /system/lib64/libhidlbase.so (android::hardware::PoolThread::threadLoop()+23) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:48.661  1750  1750 F DEBUG   :       #09 pc 0000000000013e55  /system/lib64/libutils.so (android::Thread::_threadLoop(void*)+325) (BuildId: 056174139c244cde0be9a8d5970636f2)
+10-11 16:27:48.661  1750  1750 F DEBUG   :       #10 pc 00000000000ccd9a  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+58) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:48.661  1750  1750 F DEBUG   :       #11 pc 0000000000060d47  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+55) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:49.359  1746  2269 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2269 (bluetooth@1.1-s), pid 1746 (bluetooth@1.1-s)
+10-11 16:27:49.379  2273  2273 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-11 16:27:49.379  2273  2273 F DEBUG   : Build fingerprint: 'redroid/redroid_x86_64/redroid_x86_64:13/TQ3A.230805.001.S1/eng.frank.20240527.133549:userdebug/test-keys'
+10-11 16:27:49.379  2273  2273 F DEBUG   : Revision: '0'
+10-11 16:27:49.379  2273  2273 F DEBUG   : ABI: 'x86_64'
+10-11 16:27:49.379  2273  2273 F DEBUG   : Timestamp: 2026-10-11 16:27:49.367012446+0000
+10-11 16:27:49.379  2273  2273 F DEBUG   : Process uptime: 2s
+10-11 16:27:49.379  2273  2273 F DEBUG   : Cmdline: /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim
+10-11 16:27:49.379  2273  2273 F DEBUG   : pid: 1746, tid: 2269, name: bluetooth@1.1-s  >>> /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim <<<
+10-11 16:27:49.379  2273  2273 F DEBUG   : uid: 1002
+10-11 16:27:49.379  2273  2273 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+10-11 16:27:49.379  2273  2273 F DEBUG   :     rax 0000000000000000  rbx 00000000000006d2  rcx 000074d1e700a70f  rdx 0000000000000006
+10-11 16:27:49.379  2273  2273 F DEBUG   :     r8  0000000000000000  r9  0000000000000000  r10 000074cf55ffb590  r11 0000000000000203
+10-11 16:27:49.379  2273  2273 F DEBUG   :     r12 78e0cca4ecf40d05  r13 000074d1e9c3a540  r14 000074cf55ffb588  r15 00000000000008dd
+10-11 16:27:49.379  2273  2273 F DEBUG   :     rdi 00000000000006d2  rsi 00000000000008dd
+10-11 16:27:49.379  2273  2273 F DEBUG   :     rbp 0000598c07c28b40  rsp 000074cf55ffb580  rip 000074d1e700a70f
+10-11 16:27:49.379  2273  2273 F DEBUG   : backtrace:
+10-11 16:27:49.379  2273  2273 F DEBUG   :       #00 pc 000000000005f70f  /apex/com.android.runtime/lib64/bionic/libc.so (abort+191) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:49.379  2273  2273 F DEBUG   :       #01 pc 00000000000fc266  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (__cfi_check_fail+22) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:49.379  2273  2273 F DEBUG   :       #02 pc 000000000010f828  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (__cfi_check+38952) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:49.379  2273  2273 F DEBUG   :       #03 pc 0000000000054339  /apex/com.android.runtime/bin/linker64 (__dl__ZN15CFIShadowWriter7CfiFailEmPvS0_S0_+121) (BuildId: ed6494b4a5f0b4d30844f4b4923e00e6)
+10-11 16:27:49.379  2273  2273 F DEBUG   :       #04 pc 0000000000044c64  /apex/com.android.runtime/bin/linker64 (__loader_cfi_fail+52) (BuildId: ed6494b4a5f0b4d30844f4b4923e00e6)
+10-11 16:27:49.379  2273  2273 F DEBUG   :       #05 pc 0000000000308db2  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::LinkLayerController::Reset()+2498) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:49.379  2273  2273 F DEBUG   :       #06 pc 0000000000266264  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::DualModeController::Reset(bluetooth::hci::CommandView)+468) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:49.379  2273  2273 F DEBUG   :       #07 pc 0000000000265fa7  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (std::__1::__function::__func<rootcanal::DualModeController::DualModeController(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const&, unsigned short)::$_1, std::__1::allocator<rootcanal::DualModeController::DualModeController(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const&, unsigned short)::$_1>, void (bluetooth::hci::CommandView)>::operator()(bluetooth::hci::CommandView&&)+567) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:49.379  2273  2273 F DEBUG   :       #08 pc 000000000026ee9f  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::DualModeController::HandleCommand(std::__1::shared_ptr<std::__1::vector<unsigned char, std::__1::allocator<unsigned char> > >)+1903) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:49.379  2273  2273 F DEBUG   :       #09 pc 00000000001059e5  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (std::__1::__function::__func<android::hardware::bluetooth::V1_1::sim::BluetoothHci::sendHciCommand(android::hardware::hidl_vec<unsigned char> const&)::$_12, std::__1::allocator<android::hardware::bluetooth::V1_1::sim::BluetoothHci::sendHciCommand(android::hardware::hidl_vec<unsigned char> const&)::$_12>, void ()>::operator()()+389) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:49.379  2273  2273 F DEBUG   :       #10 pc 000000000031dc28  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::AsyncManager::AsyncTaskManager::ThreadRoutine()+648) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:49.379  2273  2273 F DEBUG   :       #11 pc 000000000031d8f5  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (void* std::__1::__thread_proxy<std::__1::tuple<std::__1::unique_ptr<std::__1::__thread_struct, std::__1::default_delete<std::__1::__thread_struct> >, rootcanal::AsyncManager::AsyncTaskManager::tryStartThread()::'lambda'()> >(void*) (.cfi)+37) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:49.379  2273  2273 F DEBUG   :       #12 pc 00000000000ccd9a  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+58) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:49.379  2273  2273 F DEBUG   :       #13 pc 0000000000060d47  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+55) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:49.480  2219  2268 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2268 (HwBinder:2219_1), pid 2219 (droid.bluetooth)
+10-11 16:27:49.654  2284  2284 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-11 16:27:49.654  2284  2284 F DEBUG   : Build fingerprint: 'redroid/redroid_x86_64/redroid_x86_64:13/TQ3A.230805.001.S1/eng.frank.20240527.133549:userdebug/test-keys'
+10-11 16:27:49.654  2284  2284 F DEBUG   : Revision: '0'
+10-11 16:27:49.654  2284  2284 F DEBUG   : ABI: 'x86_64'
+10-11 16:27:49.654  2284  2284 F DEBUG   : Timestamp: 2026-10-11 16:27:49.513713087+0000
+10-11 16:27:49.654  2284  2284 F DEBUG   : Process uptime: 0s
+10-11 16:27:49.654  2284  2284 F DEBUG   : Cmdline: com.android.bluetooth
+10-11 16:27:49.654  2284  2284 F DEBUG   : pid: 2219, tid: 2268, name: HwBinder:2219_1  >>> com.android.bluetooth <<<
+10-11 16:27:49.654  2284  2284 F DEBUG   : uid: 1002
+10-11 16:27:49.654  2284  2284 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+10-11 16:27:49.654  2284  2284 F DEBUG   :     rax 0000000000000000  rbx 00000000000008ab  rcx 0000762e3ac6870f  rdx 0000000000000006
+10-11 16:27:49.654  2284  2284 F DEBUG   :     r8  0000000000001002  r9  0000000000001002  r10 0000762b22bac840  r11 0000000000000203
+10-11 16:27:49.654  2284  2284 F DEBUG   :     r12 0000762c7481a530  r13 0000762c1483bcd0  r14 0000762b22bac838  r15 00000000000008dc
+10-11 16:27:49.654  2284  2284 F DEBUG   :     rdi 00000000000008ab  rsi 00000000000008dc
+10-11 16:27:49.654  2284  2284 F DEBUG   :     rbp 0000762c1483bcd0  rsp 0000762b22bac830  rip 0000762e3ac6870f
+10-11 16:27:49.654  2284  2284 F DEBUG   : backtrace:
+10-11 16:27:49.654  2284  2284 F DEBUG   :       #00 pc 000000000005f70f  /apex/com.android.runtime/lib64/bionic/libc.so (abort+191) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:49.654  2284  2284 F DEBUG   :       #01 pc 0000000000ae1748  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::hal::(anonymous namespace)::HciDeathRecipient::serviceDied(unsigned long, android::wp<android::hidl::base::V1_0::IBase> const&)+56) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:49.654  2284  2284 F DEBUG   :       #02 pc 000000000004d9f7  /system/lib64/libhidlbase.so (android::hardware::hidl_binder_death_recipient::binderDied(android::wp<android::hardware::IBinder> const&)+103) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:49.654  2284  2284 F DEBUG   :       #03 pc 000000000009c153  /system/lib64/libhidlbase.so (android::hardware::BpHwBinder::reportOneDeath(android::hardware::BpHwBinder::Obituary const&)+131) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:49.654  2284  2284 F DEBUG   :       #04 pc 000000000009c08e  /system/lib64/libhidlbase.so (android::hardware::BpHwBinder::sendObituary()+270) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:49.654  2284  2284 F DEBUG   :       #05 pc 000000000009f8af  /system/lib64/libhidlbase.so (android::hardware::IPCThreadState::executeCommand(int)+1391) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:49.654  2284  2284 F DEBUG   :       #06 pc 000000000009f1e5  /system/lib64/libhidlbase.so (android::hardware::IPCThreadState::getAndExecuteCommand()+229) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:49.654  2284  2284 F DEBUG   :       #07 pc 00000000000a07df  /system/lib64/libhidlbase.so (android::hardware::IPCThreadState::joinThreadPool(bool)+191) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:49.654  2284  2284 F DEBUG   :       #08 pc 00000000000abf27  /system/lib64/libhidlbase.so (android::hardware::PoolThread::threadLoop()+23) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:49.654  2284  2284 F DEBUG   :       #09 pc 0000000000013e55  /system/lib64/libutils.so (android::Thread::_threadLoop(void*)+325) (BuildId: 056174139c244cde0be9a8d5970636f2)
+10-11 16:27:49.654  2284  2284 F DEBUG   :       #10 pc 00000000000ccd9a  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+58) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:49.654  2284  2284 F DEBUG   :       #11 pc 0000000000060d47  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+55) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:51.157  2386  2480 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2480 (bt_stack_manage), pid 2386 (droid.bluetooth)
+10-11 16:27:51.323  2600  2600 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-11 16:27:51.323  2600  2600 F DEBUG   : Build fingerprint: 'redroid/redroid_x86_64/redroid_x86_64:13/TQ3A.230805.001.S1/eng.frank.20240527.133549:userdebug/test-keys'
+10-11 16:27:51.323  2600  2600 F DEBUG   : Revision: '0'
+10-11 16:27:51.323  2600  2600 F DEBUG   : ABI: 'x86_64'
+10-11 16:27:51.323  2600  2600 F DEBUG   : Timestamp: 2026-10-11 16:27:51.186839863+0000
+10-11 16:27:51.323  2600  2600 F DEBUG   : Process uptime: 0s
+10-11 16:27:51.323  2600  2600 F DEBUG   : Cmdline: com.android.bluetooth
+10-11 16:27:51.323  2600  2600 F DEBUG   : pid: 2386, tid: 2480, name: bt_stack_manage  >>> com.android.bluetooth <<<
+10-11 16:27:51.323  2600  2600 F DEBUG   : uid: 1002
+10-11 16:27:51.323  2600  2600 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+10-11 16:27:51.323  2600  2600 F DEBUG   : Abort message: 'Unable to get a Bluetooth service after 500ms, start the HAL before starting Bluetooth'
+10-11 16:27:51.323  2600  2600 F DEBUG   :     rax 0000000000000000  rbx 0000000000000952  rcx 0000762e3ac6870f  rdx 0000000000000006
+10-11 16:27:51.323  2600  2600 F DEBUG   :     r8  0000762b281db338  r9  0000762b281db338  r10 0000762b281db250  r11 0000000000000203
+10-11 16:27:51.323  2600  2600 F DEBUG   :     r12 0000000000000008  r13 0000762be481334c  r14 0000762b281db248  r15 00000000000009b0
+10-11 16:27:51.323  2600  2600 F DEBUG   :     rdi 0000000000000952  rsi 00000000000009b0
+10-11 16:27:51.323  2600  2600 F DEBUG   :     rbp 0000762cd480d0d0  rsp 0000762b281db240  rip 0000762e3ac6870f
+10-11 16:27:51.323  2600  2600 F DEBUG   : backtrace:
+10-11 16:27:51.323  2600  2600 F DEBUG   :       #00 pc 000000000005f70f  /apex/com.android.runtime/lib64/bionic/libc.so (abort+191) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:51.323  2600  2600 F DEBUG   :       #01 pc 00000000007ecaaf  /apex/com.android.art/lib64/libart.so (art::Runtime::Abort(char const*)+111) (BuildId: 06c16cb36276978c7a63a53ed7e8512f)
+10-11 16:27:51.323  2600  2600 F DEBUG   :       #02 pc 0000000000019cfc  /system/lib64/libbase.so (android::base::SetAborter(std::__1::function<void (char const*)>&&)::$_3::__invoke(char const*)+60) (BuildId: 9335a3052c0ad43b3680057cf90b0afe)
+10-11 16:27:51.323  2600  2600 F DEBUG   :       #03 pc 00000000000075c2  /system/lib64/liblog.so (__android_log_assert+370) (BuildId: 31ec9545051650161a78e056f9a402c7)
+10-11 16:27:51.323  2600  2600 F DEBUG   :       #04 pc 0000000000ae2897  /apex/com.android.btservices/lib64/libbluetooth_jni.so (base::internal::Invoker<base::internal::BindState<bluetooth::hal::HciHalHidl::Start()::'lambda'()>, void ()>::RunOnce(base::internal::BindStateBase*)+23) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:51.323  2600  2600 F DEBUG   :       #05 pc 0000000000acea6c  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::os::Alarm::on_fire()+108) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:51.323  2600  2600 F DEBUG   :       #06 pc 0000000000acffbd  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::os::Reactor::Run()+669) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:51.323  2600  2600 F DEBUG   :       #07 pc 0000000000ad0bdd  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::os::Thread::run(bluetooth::os::Thread::Priority)+173) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:51.323  2600  2600 F DEBUG   :       #08 pc 0000000000ad0d29  /apex/com.android.btservices/lib64/libbluetooth_jni.so (void* std::__1::__thread_proxy<std::__1::tuple<std::__1::unique_ptr<std::__1::__thread_struct, std::__1::default_delete<std::__1::__thread_struct> >, void (bluetooth::os::Thread::*)(bluetooth::os::Thread::Priority), bluetooth::os::Thread*, bluetooth::os::Thread::Priority> >(void*)+57) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:51.323  2600  2600 F DEBUG   :       #09 pc 00000000000ccd9a  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+58) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:51.323  2600  2600 F DEBUG   :       #10 pc 0000000000060d47  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+55) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:53.018  2625  2669 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2669 (bt_stack_manage), pid 2625 (droid.bluetooth)
+10-11 16:27:53.184  2677  2677 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-11 16:27:53.184  2677  2677 F DEBUG   : Build fingerprint: 'redroid/redroid_x86_64/redroid_x86_64:13/TQ3A.230805.001.S1/eng.frank.20240527.133549:userdebug/test-keys'
+10-11 16:27:53.184  2677  2677 F DEBUG   : Revision: '0'
+10-11 16:27:53.184  2677  2677 F DEBUG   : ABI: 'x86_64'
+10-11 16:27:53.184  2677  2677 F DEBUG   : Timestamp: 2026-10-11 16:27:53.048962533+0000
+10-11 16:27:53.184  2677  2677 F DEBUG   : Process uptime: 0s
+10-11 16:27:53.184  2677  2677 F DEBUG   : Cmdline: com.android.bluetooth
+10-11 16:27:53.184  2677  2677 F DEBUG   : pid: 2625, tid: 2669, name: bt_stack_manage  >>> com.android.bluetooth <<<
+10-11 16:27:53.184  2677  2677 F DEBUG   : uid: 1002
+10-11 16:27:53.184  2677  2677 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+10-11 16:27:53.184  2677  2677 F DEBUG   : Abort message: 'Unable to get a Bluetooth service after 500ms, start the HAL before starting Bluetooth'
+10-11 16:27:53.184  2677  2677 F DEBUG   :     rax 0000000000000000  rbx 0000000000000a41  rcx 0000762e3ac6870f  rdx 0000000000000006
+10-11 16:27:53.184  2677  2677 F DEBUG   :     r8  0000762b282db338  r9  0000762b282db338  r10 0000762b282db250  r11 0000000000000203
+10-11 16:27:53.184  2677  2677 F DEBUG   :     r12 0000000000000008  r13 0000762be481394c  r14 0000762b282db248  r15 0000000000000a6d
+10-11 16:27:53.184  2677  2677 F DEBUG   :     rdi 0000000000000a41  rsi 0000000000000a6d
+10-11 16:27:53.184  2677  2677 F DEBUG   :     rbp 0000762cd480d0d0  rsp 0000762b282db240  rip 0000762e3ac6870f
+10-11 16:27:53.184  2677  2677 F DEBUG   : backtrace:
+10-11 16:27:53.184  2677  2677 F DEBUG   :       #00 pc 000000000005f70f  /apex/com.android.runtime/lib64/bionic/libc.so (abort+191) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:53.184  2677  2677 F DEBUG   :       #01 pc 00000000007ecaaf  /apex/com.android.art/lib64/libart.so (art::Runtime::Abort(char const*)+111) (BuildId: 06c16cb36276978c7a63a53ed7e8512f)
+10-11 16:27:53.184  2677  2677 F DEBUG   :       #02 pc 0000000000019cfc  /system/lib64/libbase.so (android::base::SetAborter(std::__1::function<void (char const*)>&&)::$_3::__invoke(char const*)+60) (BuildId: 9335a3052c0ad43b3680057cf90b0afe)
+10-11 16:27:53.184  2677  2677 F DEBUG   :       #03 pc 00000000000075c2  /system/lib64/liblog.so (__android_log_assert+370) (BuildId: 31ec9545051650161a78e056f9a402c7)
+10-11 16:27:53.184  2677  2677 F DEBUG   :       #04 pc 0000000000ae2897  /apex/com.android.btservices/lib64/libbluetooth_jni.so (base::internal::Invoker<base::internal::BindState<bluetooth::hal::HciHalHidl::Start()::'lambda'()>, void ()>::RunOnce(base::internal::BindStateBase*)+23) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:53.184  2677  2677 F DEBUG   :       #05 pc 0000000000acea6c  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::os::Alarm::on_fire()+108) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:53.184  2677  2677 F DEBUG   :       #06 pc 0000000000acffbd  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::os::Reactor::Run()+669) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:53.184  2677  2677 F DEBUG   :       #07 pc 0000000000ad0bdd  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::os::Thread::run(bluetooth::os::Thread::Priority)+173) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:53.184  2677  2677 F DEBUG   :       #08 pc 0000000000ad0d29  /apex/com.android.btservices/lib64/libbluetooth_jni.so (void* std::__1::__thread_proxy<std::__1::tuple<std::__1::unique_ptr<std::__1::__thread_struct, std::__1::default_delete<std::__1::__thread_struct> >, void (bluetooth::os::Thread::*)(bluetooth::os::Thread::Priority), bluetooth::os::Thread*, bluetooth::os::Thread::Priority> >(void*)+57) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:53.184  2677  2677 F DEBUG   :       #09 pc 00000000000ccd9a  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+58) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:53.184  2677  2677 F DEBUG   :       #10 pc 0000000000060d47  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+55) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:55.110  2687  2742 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2742 (bluetooth@1.1-s), pid 2687 (bluetooth@1.1-s)
+10-11 16:27:55.130  2746  2746 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-11 16:27:55.130  2746  2746 F DEBUG   : Build fingerprint: 'redroid/redroid_x86_64/redroid_x86_64:13/TQ3A.230805.001.S1/eng.frank.20240527.133549:userdebug/test-keys'
+10-11 16:27:55.130  2746  2746 F DEBUG   : Revision: '0'
+10-11 16:27:55.130  2746  2746 F DEBUG   : ABI: 'x86_64'
+10-11 16:27:55.130  2746  2746 F DEBUG   : Timestamp: 2026-10-11 16:27:55.117833308+0000
+10-11 16:27:55.130  2746  2746 F DEBUG   : Process uptime: 3s
+10-11 16:27:55.130  2746  2746 F DEBUG   : Cmdline: /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim
+10-11 16:27:55.130  2746  2746 F DEBUG   : pid: 2687, tid: 2742, name: bluetooth@1.1-s  >>> /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim <<<
+10-11 16:27:55.130  2746  2746 F DEBUG   : uid: 1002
+10-11 16:27:55.130  2746  2746 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+10-11 16:27:55.130  2746  2746 F DEBUG   :     rax 0000000000000000  rbx 0000000000000a7f  rcx 000073f00329270f  rdx 0000000000000006
+10-11 16:27:55.130  2746  2746 F DEBUG   :     r8  0000000000000000  r9  0000000000000000  r10 000073ed72ffb590  r11 0000000000000203
+10-11 16:27:55.130  2746  2746 F DEBUG   :     r12 78e0cca4ecf40d05  r13 000073f00799b540  r14 000073ed72ffb588  r15 0000000000000ab6
+10-11 16:27:55.130  2746  2746 F DEBUG   :     rdi 0000000000000a7f  rsi 0000000000000ab6
+10-11 16:27:55.130  2746  2746 F DEBUG   :     rbp 0000573da820eb40  rsp 000073ed72ffb580  rip 000073f00329270f
+10-11 16:27:55.130  2746  2746 F DEBUG   : backtrace:
+10-11 16:27:55.130  2746  2746 F DEBUG   :       #00 pc 000000000005f70f  /apex/com.android.runtime/lib64/bionic/libc.so (abort+191) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:55.130  2746  2746 F DEBUG   :       #01 pc 00000000000fc266  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (__cfi_check_fail+22) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:55.130  2746  2746 F DEBUG   :       #02 pc 000000000010f828  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (__cfi_check+38952) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:55.130  2746  2746 F DEBUG   :       #03 pc 0000000000054339  /apex/com.android.runtime/bin/linker64 (__dl__ZN15CFIShadowWriter7CfiFailEmPvS0_S0_+121) (BuildId: ed6494b4a5f0b4d30844f4b4923e00e6)
+10-11 16:27:55.130  2746  2746 F DEBUG   :       #04 pc 0000000000044c64  /apex/com.android.runtime/bin/linker64 (__loader_cfi_fail+52) (BuildId: ed6494b4a5f0b4d30844f4b4923e00e6)
+10-11 16:27:55.130  2746  2746 F DEBUG   :       #05 pc 0000000000308db2  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::LinkLayerController::Reset()+2498) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:55.130  2746  2746 F DEBUG   :       #06 pc 0000000000266264  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::DualModeController::Reset(bluetooth::hci::CommandView)+468) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:55.130  2746  2746 F DEBUG   :       #07 pc 0000000000265fa7  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (std::__1::__function::__func<rootcanal::DualModeController::DualModeController(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const&, unsigned short)::$_1, std::__1::allocator<rootcanal::DualModeController::DualModeController(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const&, unsigned short)::$_1>, void (bluetooth::hci::CommandView)>::operator()(bluetooth::hci::CommandView&&)+567) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:55.130  2746  2746 F DEBUG   :       #08 pc 000000000026ee9f  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::DualModeController::HandleCommand(std::__1::shared_ptr<std::__1::vector<unsigned char, std::__1::allocator<unsigned char> > >)+1903) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:55.130  2746  2746 F DEBUG   :       #09 pc 00000000001059e5  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (std::__1::__function::__func<android::hardware::bluetooth::V1_1::sim::BluetoothHci::sendHciCommand(android::hardware::hidl_vec<unsigned char> const&)::$_12, std::__1::allocator<android::hardware::bluetooth::V1_1::sim::BluetoothHci::sendHciCommand(android::hardware::hidl_vec<unsigned char> const&)::$_12>, void ()>::operator()()+389) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:55.130  2746  2746 F DEBUG   :       #10 pc 000000000031dc28  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::AsyncManager::AsyncTaskManager::ThreadRoutine()+648) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:55.130  2746  2746 F DEBUG   :       #11 pc 000000000031d8f5  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (void* std::__1::__thread_proxy<std::__1::tuple<std::__1::unique_ptr<std::__1::__thread_struct, std::__1::default_delete<std::__1::__thread_struct> >, rootcanal::AsyncManager::AsyncTaskManager::tryStartThread()::'lambda'()> >(void*) (.cfi)+37) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:55.131  2746  2746 F DEBUG   :       #12 pc 00000000000ccd9a  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+58) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:55.131  2746  2746 F DEBUG   :       #13 pc 0000000000060d47  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+55) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:55.233  2695  2741 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2741 (HwBinder:2695_1), pid 2695 (droid.bluetooth)
+10-11 16:27:55.400  2754  2754 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-11 16:27:55.400  2754  2754 F DEBUG   : Build fingerprint: 'redroid/redroid_x86_64/redroid_x86_64:13/TQ3A.230805.001.S1/eng.frank.20240527.133549:userdebug/test-keys'
+10-11 16:27:55.400  2754  2754 F DEBUG   : Revision: '0'
+10-11 16:27:55.400  2754  2754 F DEBUG   : ABI: 'x86_64'
+10-11 16:27:55.400  2754  2754 F DEBUG   : Timestamp: 2026-10-11 16:27:55.264952658+0000
+10-11 16:27:55.400  2754  2754 F DEBUG   : Process uptime: 0s
+10-11 16:27:55.400  2754  2754 F DEBUG   : Cmdline: com.android.bluetooth
+10-11 16:27:55.400  2754  2754 F DEBUG   : pid: 2695, tid: 2741, name: HwBinder:2695_1  >>> com.android.bluetooth <<<
+10-11 16:27:55.400  2754  2754 F DEBUG   : uid: 1002
+10-11 16:27:55.400  2754  2754 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+10-11 16:27:55.400  2754  2754 F DEBUG   :     rax 0000000000000000  rbx 0000000000000a87  rcx 0000762e3ac6870f  rdx 0000000000000006
+10-11 16:27:55.400  2754  2754 F DEBUG   :     r8  0000000000001002  r9  0000000000001002  r10 0000762b2592c840  r11 0000000000000203
+10-11 16:27:55.400  2754  2754 F DEBUG   :     r12 0000762c7481e5f0  r13 0000762c1483cca0  r14 0000762b2592c838  r15 0000000000000ab5
+10-11 16:27:55.400  2754  2754 F DEBUG   :     rdi 0000000000000a87  rsi 0000000000000ab5
+10-11 16:27:55.400  2754  2754 F DEBUG   :     rbp 0000762c1483cca0  rsp 0000762b2592c830  rip 0000762e3ac6870f
+10-11 16:27:55.400  2754  2754 F DEBUG   : backtrace:
+10-11 16:27:55.400  2754  2754 F DEBUG   :       #00 pc 000000000005f70f  /apex/com.android.runtime/lib64/bionic/libc.so (abort+191) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:55.400  2754  2754 F DEBUG   :       #01 pc 0000000000ae1748  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::hal::(anonymous namespace)::HciDeathRecipient::serviceDied(unsigned long, android::wp<android::hidl::base::V1_0::IBase> const&)+56) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:55.400  2754  2754 F DEBUG   :       #02 pc 000000000004d9f7  /system/lib64/libhidlbase.so (android::hardware::hidl_binder_death_recipient::binderDied(android::wp<android::hardware::IBinder> const&)+103) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:55.400  2754  2754 F DEBUG   :       #03 pc 000000000009c153  /system/lib64/libhidlbase.so (android::hardware::BpHwBinder::reportOneDeath(android::hardware::BpHwBinder::Obituary const&)+131) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:55.400  2754  2754 F DEBUG   :       #04 pc 000000000009c08e  /system/lib64/libhidlbase.so (android::hardware::BpHwBinder::sendObituary()+270) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:55.400  2754  2754 F DEBUG   :       #05 pc 000000000009f8af  /system/lib64/libhidlbase.so (android::hardware::IPCThreadState::executeCommand(int)+1391) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:55.400  2754  2754 F DEBUG   :       #06 pc 000000000009f1e5  /system/lib64/libhidlbase.so (android::hardware::IPCThreadState::getAndExecuteCommand()+229) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:55.400  2754  2754 F DEBUG   :       #07 pc 00000000000a07df  /system/lib64/libhidlbase.so (android::hardware::IPCThreadState::joinThreadPool(bool)+191) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:55.400  2754  2754 F DEBUG   :       #08 pc 00000000000abf27  /system/lib64/libhidlbase.so (android::hardware::PoolThread::threadLoop()+23) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:55.400  2754  2754 F DEBUG   :       #09 pc 0000000000013e55  /system/lib64/libutils.so (android::Thread::_threadLoop(void*)+325) (BuildId: 056174139c244cde0be9a8d5970636f2)
+10-11 16:27:55.400  2754  2754 F DEBUG   :       #10 pc 00000000000ccd9a  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+58) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:55.400  2754  2754 F DEBUG   :       #11 pc 0000000000060d47  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+55) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:57.091  2764  2808 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2808 (bt_stack_manage), pid 2764 (droid.bluetooth)
+10-11 16:27:57.255  2816  2816 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-11 16:27:57.255  2816  2816 F DEBUG   : Build fingerprint: 'redroid/redroid_x86_64/redroid_x86_64:13/TQ3A.230805.001.S1/eng.frank.20240527.133549:userdebug/test-keys'
+10-11 16:27:57.255  2816  2816 F DEBUG   : Revision: '0'
+10-11 16:27:57.256  2816  2816 F DEBUG   : ABI: 'x86_64'
+10-11 16:27:57.256  2816  2816 F DEBUG   : Timestamp: 2026-10-11 16:27:57.123173224+0000
+10-11 16:27:57.256  2816  2816 F DEBUG   : Process uptime: 0s
+10-11 16:27:57.256  2816  2816 F DEBUG   : Cmdline: com.android.bluetooth
+10-11 16:27:57.256  2816  2816 F DEBUG   : pid: 2764, tid: 2808, name: bt_stack_manage  >>> com.android.bluetooth <<<
+10-11 16:27:57.256  2816  2816 F DEBUG   : uid: 1002
+10-11 16:27:57.256  2816  2816 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+10-11 16:27:57.256  2816  2816 F DEBUG   : Abort message: 'Unable to get a Bluetooth service after 500ms, start the HAL before starting Bluetooth'
+10-11 16:27:57.256  2816  2816 F DEBUG   :     rax 0000000000000000  rbx 0000000000000acc  rcx 0000762e3ac6870f  rdx 0000000000000006
+10-11 16:27:57.256  2816  2816 F DEBUG   :     r8  0000762b23d5b338  r9  0000762b23d5b338  r10 0000762b23d5b250  r11 0000000000000203
+10-11 16:27:57.256  2816  2816 F DEBUG   :     r12 0000000000000008  r13 0000762be481334c  r14 0000762b23d5b248  r15 0000000000000af8
+10-11 16:27:57.256  2816  2816 F DEBUG   :     rdi 0000000000000acc  rsi 0000000000000af8
+10-11 16:27:57.256  2816  2816 F DEBUG   :     rbp 0000762cd480d0d0  rsp 0000762b23d5b240  rip 0000762e3ac6870f
+10-11 16:27:57.256  2816  2816 F DEBUG   : backtrace:
+10-11 16:27:57.256  2816  2816 F DEBUG   :       #00 pc 000000000005f70f  /apex/com.android.runtime/lib64/bionic/libc.so (abort+191) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:57.256  2816  2816 F DEBUG   :       #01 pc 00000000007ecaaf  /apex/com.android.art/lib64/libart.so (art::Runtime::Abort(char const*)+111) (BuildId: 06c16cb36276978c7a63a53ed7e8512f)
+10-11 16:27:57.256  2816  2816 F DEBUG   :       #02 pc 0000000000019cfc  /system/lib64/libbase.so (android::base::SetAborter(std::__1::function<void (char const*)>&&)::$_3::__invoke(char const*)+60) (BuildId: 9335a3052c0ad43b3680057cf90b0afe)
+10-11 16:27:57.256  2816  2816 F DEBUG   :       #03 pc 00000000000075c2  /system/lib64/liblog.so (__android_log_assert+370) (BuildId: 31ec9545051650161a78e056f9a402c7)
+10-11 16:27:57.256  2816  2816 F DEBUG   :       #04 pc 0000000000ae2897  /apex/com.android.btservices/lib64/libbluetooth_jni.so (base::internal::Invoker<base::internal::BindState<bluetooth::hal::HciHalHidl::Start()::'lambda'()>, void ()>::RunOnce(base::internal::BindStateBase*)+23) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:57.256  2816  2816 F DEBUG   :       #05 pc 0000000000acea6c  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::os::Alarm::on_fire()+108) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:57.256  2816  2816 F DEBUG   :       #06 pc 0000000000acffbd  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::os::Reactor::Run()+669) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:57.256  2816  2816 F DEBUG   :       #07 pc 0000000000ad0bdd  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::os::Thread::run(bluetooth::os::Thread::Priority)+173) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:57.256  2816  2816 F DEBUG   :       #08 pc 0000000000ad0d29  /apex/com.android.btservices/lib64/libbluetooth_jni.so (void* std::__1::__thread_proxy<std::__1::tuple<std::__1::unique_ptr<std::__1::__thread_struct, std::__1::default_delete<std::__1::__thread_struct> >, void (bluetooth::os::Thread::*)(bluetooth::os::Thread::Priority), bluetooth::os::Thread*, bluetooth::os::Thread::Priority> >(void*)+57) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:57.256  2816  2816 F DEBUG   :       #09 pc 00000000000ccd9a  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+58) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:57.256  2816  2816 F DEBUG   :       #10 pc 0000000000060d47  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+55) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:58.099  2824  2868 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2868 (bt_stack_manage), pid 2824 (droid.bluetooth)
+10-11 16:27:58.263  2894  2894 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-11 16:27:58.263  2894  2894 F DEBUG   : Build fingerprint: 'redroid/redroid_x86_64/redroid_x86_64:13/TQ3A.230805.001.S1/eng.frank.20240527.133549:userdebug/test-keys'
+10-11 16:27:58.263  2894  2894 F DEBUG   : Revision: '0'
+10-11 16:27:58.263  2894  2894 F DEBUG   : ABI: 'x86_64'
+10-11 16:27:58.263  2894  2894 F DEBUG   : Timestamp: 2026-10-11 16:27:58.129329047+0000
+10-11 16:27:58.263  2894  2894 F DEBUG   : Process uptime: 0s
+10-11 16:27:58.263  2894  2894 F DEBUG   : Cmdline: com.android.bluetooth
+10-11 16:27:58.263  2894  2894 F DEBUG   : pid: 2824, tid: 2868, name: bt_stack_manage  >>> com.android.bluetooth <<<
+10-11 16:27:58.263  2894  2894 F DEBUG   : uid: 1002
+10-11 16:27:58.263  2894  2894 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+10-11 16:27:58.263  2894  2894 F DEBUG   : Abort message: 'Unable to get a Bluetooth service after 500ms, start the HAL before starting Bluetooth'
+10-11 16:27:58.263  2894  2894 F DEBUG   :     rax 0000000000000000  rbx 0000000000000b08  rcx 0000762e3ac6870f  rdx 0000000000000006
+10-11 16:27:58.263  2894  2894 F DEBUG   :     r8  0000762b262dd338  r9  0000762b262dd338  r10 0000762b262dd250  r11 0000000000000203
+10-11 16:27:58.263  2894  2894 F DEBUG   :     r12 0000000000000008  r13 0000762be4813dcc  r14 0000762b262dd248  r15 0000000000000b34
+10-11 16:27:58.263  2894  2894 F DEBUG   :     rdi 0000000000000b08  rsi 0000000000000b34
+10-11 16:27:58.263  2894  2894 F DEBUG   :     rbp 0000762cd480d0d0  rsp 0000762b262dd240  rip 0000762e3ac6870f
+10-11 16:27:58.263  2894  2894 F DEBUG   : backtrace:
+10-11 16:27:58.263  2894  2894 F DEBUG   :       #00 pc 000000000005f70f  /apex/com.android.runtime/lib64/bionic/libc.so (abort+191) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:58.263  2894  2894 F DEBUG   :       #01 pc 00000000007ecaaf  /apex/com.android.art/lib64/libart.so (art::Runtime::Abort(char const*)+111) (BuildId: 06c16cb36276978c7a63a53ed7e8512f)
+10-11 16:27:58.263  2894  2894 F DEBUG   :       #02 pc 0000000000019cfc  /system/lib64/libbase.so (android::base::SetAborter(std::__1::function<void (char const*)>&&)::$_3::__invoke(char const*)+60) (BuildId: 9335a3052c0ad43b3680057cf90b0afe)
+10-11 16:27:58.263  2894  2894 F DEBUG   :       #03 pc 00000000000075c2  /system/lib64/liblog.so (__android_log_assert+370) (BuildId: 31ec9545051650161a78e056f9a402c7)
+10-11 16:27:58.263  2894  2894 F DEBUG   :       #04 pc 0000000000ae2897  /apex/com.android.btservices/lib64/libbluetooth_jni.so (base::internal::Invoker<base::internal::BindState<bluetooth::hal::HciHalHidl::Start()::'lambda'()>, void ()>::RunOnce(base::internal::BindStateBase*)+23) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:58.263  2894  2894 F DEBUG   :       #05 pc 0000000000acea6c  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::os::Alarm::on_fire()+108) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:58.263  2894  2894 F DEBUG   :       #06 pc 0000000000acffbd  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::os::Reactor::Run()+669) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:58.263  2894  2894 F DEBUG   :       #07 pc 0000000000ad0bdd  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::os::Thread::run(bluetooth::os::Thread::Priority)+173) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:58.263  2894  2894 F DEBUG   :       #08 pc 0000000000ad0d29  /apex/com.android.btservices/lib64/libbluetooth_jni.so (void* std::__1::__thread_proxy<std::__1::tuple<std::__1::unique_ptr<std::__1::__thread_struct, std::__1::default_delete<std::__1::__thread_struct> >, void (bluetooth::os::Thread::*)(bluetooth::os::Thread::Priority), bluetooth::os::Thread*, bluetooth::os::Thread::Priority> >(void*)+57) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:58.263  2894  2894 F DEBUG   :       #09 pc 00000000000ccd9a  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+58) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:58.263  2894  2894 F DEBUG   :       #10 pc 0000000000060d47  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+55) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:59.472  2900  2953 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2953 (bluetooth@1.1-s), pid 2900 (bluetooth@1.1-s)
+10-11 16:27:59.491  2957  2957 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-11 16:27:59.491  2957  2957 F DEBUG   : Build fingerprint: 'redroid/redroid_x86_64/redroid_x86_64:13/TQ3A.230805.001.S1/eng.frank.20240527.133549:userdebug/test-keys'
+10-11 16:27:59.491  2957  2957 F DEBUG   : Revision: '0'
+10-11 16:27:59.491  2957  2957 F DEBUG   : ABI: 'x86_64'
+10-11 16:27:59.491  2957  2957 F DEBUG   : Timestamp: 2026-10-11 16:27:59.479454508+0000
+10-11 16:27:59.491  2957  2957 F DEBUG   : Process uptime: 2s
+10-11 16:27:59.491  2957  2957 F DEBUG   : Cmdline: /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim
+10-11 16:27:59.491  2957  2957 F DEBUG   : pid: 2900, tid: 2953, name: bluetooth@1.1-s  >>> /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim <<<
+10-11 16:27:59.491  2957  2957 F DEBUG   : uid: 1002
+10-11 16:27:59.491  2957  2957 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+10-11 16:27:59.491  2957  2957 F DEBUG   :     rax 0000000000000000  rbx 0000000000000b54  rcx 0000735655f9d70f  rdx 0000000000000006
+10-11 16:27:59.491  2957  2957 F DEBUG   :     r8  0000000000000000  r9  0000000000000000  r10 00007353c5bfb590  r11 0000000000000203
+10-11 16:27:59.491  2957  2957 F DEBUG   :     r12 78e0cca4ecf40d05  r13 000073565779f540  r14 00007353c5bfb588  r15 0000000000000b89
+10-11 16:27:59.491  2957  2957 F DEBUG   :     rdi 0000000000000b54  rsi 0000000000000b89
+10-11 16:27:59.491  2957  2957 F DEBUG   :     rbp 0000561c2471ab40  rsp 00007353c5bfb580  rip 0000735655f9d70f
+10-11 16:27:59.491  2957  2957 F DEBUG   : backtrace:
+10-11 16:27:59.491  2957  2957 F DEBUG   :       #00 pc 000000000005f70f  /apex/com.android.runtime/lib64/bionic/libc.so (abort+191) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:59.491  2957  2957 F DEBUG   :       #01 pc 00000000000fc266  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (__cfi_check_fail+22) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:59.491  2957  2957 F DEBUG   :       #02 pc 000000000010f828  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (__cfi_check+38952) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:59.491  2957  2957 F DEBUG   :       #03 pc 0000000000054339  /apex/com.android.runtime/bin/linker64 (__dl__ZN15CFIShadowWriter7CfiFailEmPvS0_S0_+121) (BuildId: ed6494b4a5f0b4d30844f4b4923e00e6)
+10-11 16:27:59.491  2957  2957 F DEBUG   :       #04 pc 0000000000044c64  /apex/com.android.runtime/bin/linker64 (__loader_cfi_fail+52) (BuildId: ed6494b4a5f0b4d30844f4b4923e00e6)
+10-11 16:27:59.491  2957  2957 F DEBUG   :       #05 pc 0000000000308db2  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::LinkLayerController::Reset()+2498) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:59.491  2957  2957 F DEBUG   :       #06 pc 0000000000266264  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::DualModeController::Reset(bluetooth::hci::CommandView)+468) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:59.491  2957  2957 F DEBUG   :       #07 pc 0000000000265fa7  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (std::__1::__function::__func<rootcanal::DualModeController::DualModeController(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const&, unsigned short)::$_1, std::__1::allocator<rootcanal::DualModeController::DualModeController(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const&, unsigned short)::$_1>, void (bluetooth::hci::CommandView)>::operator()(bluetooth::hci::CommandView&&)+567) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:59.491  2957  2957 F DEBUG   :       #08 pc 000000000026ee9f  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::DualModeController::HandleCommand(std::__1::shared_ptr<std::__1::vector<unsigned char, std::__1::allocator<unsigned char> > >)+1903) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:59.491  2957  2957 F DEBUG   :       #09 pc 00000000001059e5  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (std::__1::__function::__func<android::hardware::bluetooth::V1_1::sim::BluetoothHci::sendHciCommand(android::hardware::hidl_vec<unsigned char> const&)::$_12, std::__1::allocator<android::hardware::bluetooth::V1_1::sim::BluetoothHci::sendHciCommand(android::hardware::hidl_vec<unsigned char> const&)::$_12>, void ()>::operator()()+389) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:59.491  2957  2957 F DEBUG   :       #10 pc 000000000031dc28  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (rootcanal::AsyncManager::AsyncTaskManager::ThreadRoutine()+648) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:59.491  2957  2957 F DEBUG   :       #11 pc 000000000031d8f5  /vendor/bin/hw/android.hardware.bluetooth@1.1-service.sim (void* std::__1::__thread_proxy<std::__1::tuple<std::__1::unique_ptr<std::__1::__thread_struct, std::__1::default_delete<std::__1::__thread_struct> >, rootcanal::AsyncManager::AsyncTaskManager::tryStartThread()::'lambda'()> >(void*) (.cfi)+37) (BuildId: acd306c8ff263611398867a9339ab88a)
+10-11 16:27:59.491  2957  2957 F DEBUG   :       #12 pc 00000000000ccd9a  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+58) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:59.491  2957  2957 F DEBUG   :       #13 pc 0000000000060d47  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+55) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:59.589  2906  2952 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2952 (HwBinder:2906_1), pid 2906 (droid.bluetooth)
+10-11 16:27:59.755  2965  2965 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-11 16:27:59.755  2965  2965 F DEBUG   : Build fingerprint: 'redroid/redroid_x86_64/redroid_x86_64:13/TQ3A.230805.001.S1/eng.frank.20240527.133549:userdebug/test-keys'
+10-11 16:27:59.756  2965  2965 F DEBUG   : Revision: '0'
+10-11 16:27:59.756  2965  2965 F DEBUG   : ABI: 'x86_64'
+10-11 16:27:59.756  2965  2965 F DEBUG   : Timestamp: 2026-10-11 16:27:59.619407820+0000
+10-11 16:27:59.756  2965  2965 F DEBUG   : Process uptime: 0s
+10-11 16:27:59.756  2965  2965 F DEBUG   : Cmdline: com.android.bluetooth
+10-11 16:27:59.756  2965  2965 F DEBUG   : pid: 2906, tid: 2952, name: HwBinder:2906_1  >>> com.android.bluetooth <<<
+10-11 16:27:59.756  2965  2965 F DEBUG   : uid: 1002
+10-11 16:27:59.756  2965  2965 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+10-11 16:27:59.756  2965  2965 F DEBUG   :     rax 0000000000000000  rbx 0000000000000b5a  rcx 0000762e3ac6870f  rdx 0000000000000006
+10-11 16:27:59.756  2965  2965 F DEBUG   :     r8  0000000000001002  r9  0000000000001002  r10 0000762b24f25840  r11 0000000000000203
+10-11 16:27:59.756  2965  2965 F DEBUG   :     r12 0000762c7481e5f0  r13 0000762c1483db10  r14 0000762b24f25838  r15 0000000000000b88
+10-11 16:27:59.756  2965  2965 F DEBUG   :     rdi 0000000000000b5a  rsi 0000000000000b88
+10-11 16:27:59.756  2965  2965 F DEBUG   :     rbp 0000762c1483db10  rsp 0000762b24f25830  rip 0000762e3ac6870f
+10-11 16:27:59.756  2965  2965 F DEBUG   : backtrace:
+10-11 16:27:59.756  2965  2965 F DEBUG   :       #00 pc 000000000005f70f  /apex/com.android.runtime/lib64/bionic/libc.so (abort+191) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:59.756  2965  2965 F DEBUG   :       #01 pc 0000000000ae1748  /apex/com.android.btservices/lib64/libbluetooth_jni.so (bluetooth::hal::(anonymous namespace)::HciDeathRecipient::serviceDied(unsigned long, android::wp<android::hidl::base::V1_0::IBase> const&)+56) (BuildId: f28b83e4597cb7dc6b8725a2c79351d5)
+10-11 16:27:59.756  2965  2965 F DEBUG   :       #02 pc 000000000004d9f7  /system/lib64/libhidlbase.so (android::hardware::hidl_binder_death_recipient::binderDied(android::wp<android::hardware::IBinder> const&)+103) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:59.756  2965  2965 F DEBUG   :       #03 pc 000000000009c153  /system/lib64/libhidlbase.so (android::hardware::BpHwBinder::reportOneDeath(android::hardware::BpHwBinder::Obituary const&)+131) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:59.756  2965  2965 F DEBUG   :       #04 pc 000000000009c08e  /system/lib64/libhidlbase.so (android::hardware::BpHwBinder::sendObituary()+270) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:59.756  2965  2965 F DEBUG   :       #05 pc 000000000009f8af  /system/lib64/libhidlbase.so (android::hardware::IPCThreadState::executeCommand(int)+1391) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:59.756  2965  2965 F DEBUG   :       #06 pc 000000000009f1e5  /system/lib64/libhidlbase.so (android::hardware::IPCThreadState::getAndExecuteCommand()+229) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:59.756  2965  2965 F DEBUG   :       #07 pc 00000000000a07df  /system/lib64/libhidlbase.so (android::hardware::IPCThreadState::joinThreadPool(bool)+191) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:59.756  2965  2965 F DEBUG   :       #08 pc 00000000000abf27  /system/lib64/libhidlbase.so (android::hardware::PoolThread::threadLoop()+23) (BuildId: 3c64b4b1cc80e97ff6e5c6578d50f145)
+10-11 16:27:59.756  2965  2965 F DEBUG   :       #09 pc 0000000000013e55  /system/lib64/libutils.so (android::Thread::_threadLoop(void*)+325) (BuildId: 056174139c244cde0be9a8d5970636f2)
+10-11 16:27:59.756  2965  2965 F DEBUG   :       #10 pc 00000000000ccd9a  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+58) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:27:59.756  2965  2965 F DEBUG   :       #11 pc 0000000000060d47  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+55) (BuildId: f090904cc3ac285a6f190f8003c3eb0e)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: FATAL EXCEPTION: main
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: Process: com.supercell.clashofclans, PID: 3072
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: cnsbodqak.ah: 02
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at cnsbodqak.g.a(Unknown Source:186)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at cnsbodqak.g.b(Unknown Source:0)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at java.lang.Runtime.nativeLoad(Native Method)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at java.lang.Runtime.nativeLoad(Runtime.java:1121)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at java.lang.Runtime.loadLibrary0(Runtime.java:1075)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at java.lang.Runtime.loadLibrary0(Runtime.java:998)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at java.lang.System.loadLibrary(System.java:1661)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at cnsbodqak.av.d(Unknown Source:2)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at cnsbodqak.av.b(Unknown Source:3)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at cnsbodqak.av.d(Unknown Source:29)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at cnsbodqak.av.a(Unknown Source:10)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at cnsbodqak.av.<clinit>(Unknown Source:2)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at cnsbodqak.av.a(Unknown Source:0)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at androidx.core.app.CoreComponentFactory.<clinit>(Unknown Source:0)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at java.lang.Class.newInstance(Native Method)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at android.app.LoadedApk.createAppFactory(LoadedApk.java:273)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at android.app.LoadedApk.createOrUpdateClassLoaderLocked(LoadedApk.java:1039)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at android.app.LoadedApk.getClassLoader(LoadedApk.java:1126)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at android.app.LoadedApk.getResources(LoadedApk.java:1374)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at android.app.ContextImpl.createAppContext(ContextImpl.java:3090)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at android.app.ContextImpl.createAppContext(ContextImpl.java:3082)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at android.app.ActivityThread.handleBindApplication(ActivityThread.java:6696)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2132)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:201)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:288)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7918)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:548)
+10-11 16:28:06.661  3072  3072 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:936)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: FATAL EXCEPTION: main
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: Process: com.supercell.clashofclans, PID: 3151
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: cnsbodqak.ah: 02
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at cnsbodqak.g.a(Unknown Source:186)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at cnsbodqak.g.b(Unknown Source:0)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at java.lang.Runtime.nativeLoad(Native Method)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at java.lang.Runtime.nativeLoad(Runtime.java:1121)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at java.lang.Runtime.loadLibrary0(Runtime.java:1075)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at java.lang.Runtime.loadLibrary0(Runtime.java:998)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at java.lang.System.loadLibrary(System.java:1661)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at cnsbodqak.av.d(Unknown Source:2)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at cnsbodqak.av.b(Unknown Source:3)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at cnsbodqak.av.d(Unknown Source:29)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at cnsbodqak.av.a(Unknown Source:10)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at cnsbodqak.av.<clinit>(Unknown Source:2)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at cnsbodqak.av.a(Unknown Source:0)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at androidx.core.app.CoreComponentFactory.<clinit>(Unknown Source:0)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at java.lang.Class.newInstance(Native Method)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at android.app.LoadedApk.createAppFactory(LoadedApk.java:273)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at android.app.LoadedApk.createOrUpdateClassLoaderLocked(LoadedApk.java:1039)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at android.app.LoadedApk.getClassLoader(LoadedApk.java:1126)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at android.app.LoadedApk.getResources(LoadedApk.java:1374)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at android.app.ContextImpl.createAppContext(ContextImpl.java:3090)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at android.app.ContextImpl.createAppContext(ContextImpl.java:3082)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at android.app.ActivityThread.handleBindApplication(ActivityThread.java:6696)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2132)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:201)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:288)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7918)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:548)
+10-11 16:28:57.389  3151  3151 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:936)

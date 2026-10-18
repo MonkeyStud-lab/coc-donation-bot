@@ -181,16 +181,33 @@ class VerifiedExecutor:
 
     def select(self, frame, unit_id):
         frame,card=self.find(frame,unit_id)
-        if card.quantity is None or card.quantity<=0:
-            raise ValueError('Unit count or availability is unverified: '+unit_id)
-        if not selected_card(frame,card):
+        # Cards rise/reflow after selection and deployment. Observe twice before
+        # deciding the click missed, then permit one fresh, identified CARD tap.
+        # Map taps and already-deployed hero abilities must never be retried here.
+        for attempt in range(2):
+            check_stop(self.stop)
+            if card.quantity is None or card.quantity<=0:
+                raise ValueError('Unit count or availability is unverified: '+unit_id)
+            if selected_card(frame,card):return frame,card
+            if card.kind in ('hero','siege') and hero_health_visible(frame,card):
+                raise ValueError('Unit is already deployed: '+unit_id)
             x,y,w,h=card.box
+            self.note('selection_intent',unit_id=unit_id,attempt=attempt+1,box=list(card.box))
             self.session.input.tap(x+w//2,y+h//2,jitter=0)
-            frame=self.frame();card=self.resolve(frame,unit_id)
-            if not selected_card(frame,card):
-                cv2.imwrite(str(self.path.with_suffix('.selection.png')),frame)
-                raise ValueError('Unit selection was not confirmed: '+unit_id)
-        return frame,card
+            for observation in range(2):
+                self.session._sleep(.2)
+                frame=self.frame()
+                try:card=self.resolve(frame,unit_id)
+                except ValueError:
+                    if observation==0:continue
+                    raise
+                confirmed=bool(selected_card(frame,card))
+                self.note('selection_observation',unit_id=unit_id,confirmed=confirmed,box=list(card.box))
+                if card.quantity is None or card.quantity<=0:
+                    raise ValueError('Unit count or availability is unverified: '+unit_id)
+                if confirmed:return frame,card
+        cv2.imwrite(str(self.path.with_suffix('.selection.png')),frame)
+        raise ValueError('Unit selection was not confirmed: '+unit_id)
 
     def deploy(self, unit_id, point):
         frame,target=self.position(point)

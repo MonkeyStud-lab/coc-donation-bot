@@ -19,7 +19,7 @@ class AnnotationExportTests(TestCase):
         self.image=self.root/'images/01.png'
         Image.new('RGB',(100,80)).save(self.image)
         self.schema=self.root/'schema.yaml'
-        self.schema.write_text('screens: [home]\nclasses:\n  navigation: [btn_open_chat]\n')
+        self.schema.write_text('version: 4\nscreens: [home]\nclasses:\n  navigation: [btn_open_chat]\n')
         (self.root/'manifest.json').write_text(json.dumps([{'id':1,'image':'01.png',
             'session':'session-a','suggested_screen':'other',
             'sha256':hashlib.sha256(self.image.read_bytes()).hexdigest()}]))
@@ -43,6 +43,24 @@ class AnnotationExportTests(TestCase):
         Image.new('RGB',(100,80),'red').save(self.image)
         with self.assertRaisesRegex(ValueError,'Image changed'):
             export(self.root,self.schema)
+
+    def test_ui_generation_and_source_survive_export_without_promoting_review(self):
+        manifest_path=self.root/'manifest.json'
+        manifest=json.loads(manifest_path.read_text())
+        provenance={'candidate_id':'C0217','source':'/private/session/217.png',
+                    'source_group':'collection','captured_at':'2026-10-15T12:00:00Z',
+                    'ui_generation':'current','ui_version':'2026-10-update'}
+        manifest[0].update(provenance)
+        manifest_path.write_text(json.dumps(manifest))
+        report=export(self.root,self.schema)
+        data=json.loads((self.root/'tasks_reviewed.json').read_text())[0]['data']
+        for key,value in provenance.items():
+            self.assertEqual(data[key],value)
+        self.assertEqual(report['ui_generations'],{'current':1})
+        self.assertEqual(data['schema_version'],4)
+        self.assertEqual(report['schema_version'],4)
+        self.assertFalse(data['human_confirmed'])
+        self.assertFalse(data['training_ready'])
 
     def test_invalid_or_outside_image_box_is_rejected(self):
         for bounds in ([90,8,20,16],[10,8,-20,16],[float('nan'),8,20,16]):

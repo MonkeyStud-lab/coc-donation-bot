@@ -174,7 +174,7 @@ class MappingTests(TestCase):
 
 
 class SurveyBoundsTests(TestCase):
-    def run_survey(self, projection=None, stop_after=None):
+    def run_survey(self, projection=None, stop_after=None, weak_target=None):
         from coc_bot.attack.survey import survey
         with TemporaryDirectory() as root:
             session=Mock()
@@ -185,16 +185,22 @@ class SurveyBoundsTests(TestCase):
             session.client.stop_check=lambda: stop_after is not None and session.input.swipe.call_count>=stop_after
             evidence={'verified':True,'scale':1.,'transform':[[1,0,0],[0,1,0]]}
             observation=OpponentMap(1000,600,time.time(),'test',[],True)
+            def fit(*args,**kwargs):
+                if weak_target is not None:
+                    kwargs['survey_evidence']['weak_sides']=[{'coverage':.12,'target':weak_target}]
+                return projection
             with patch('coc_bot.attack.survey.compare_camera',return_value=evidence), \
                     patch('coc_bot.attack.survey.observe_boundary',return_value=observation), \
-                    patch('coc_bot.attack.survey.fit_projection',return_value=projection), \
+                    patch('coc_bot.attack.survey.fit_projection',side_effect=fit), \
                     patch('coc_bot.attack.army.card_boxes',return_value=[(100,500,80,90)]):
                 if stop_after is not None:
                     with self.assertRaises(AdbStopped):survey(session,zoom=False,full_map=True)
                     self.assertEqual(session.input.swipe.call_count,stop_after)
                     return
                 result=survey(session,zoom=False,full_map=True)
-            session.input.tap.assert_called_once_with(140,545,jitter=0) # Select only, no map deploy.
+            self.assertEqual(session.input.tap.call_count,2) # Card selection only, no map deploy.
+            self.assertTrue(all(c.args==(140,545) for c in session.input.tap.call_args_list))
+            self.pan_calls=session.input.swipe.call_args_list
             return result,session.input.swipe.call_count
 
     def test_incomplete_map_gets_bounded_extended_pass_without_guessing(self):
@@ -209,6 +215,34 @@ class SurveyBoundsTests(TestCase):
 
     def test_stop_during_extended_pass_never_sends_remaining_pans(self):
         self.run_survey(stop_after=9)
+
+    def test_final_pass_targets_missing_evidence_without_adding_more_pans(self):
+        result,pans=self.run_survey(weak_target=(800,100))
+        self.assertEqual(pans,12)
+        self.assertIsNone(result['projection'])
+        self.assertTrue(all(c.args==(480,276,260,396,350) for c in self.pan_calls[-4:]))
+
+
+class OutlineSelectionTests(TestCase):
+    def test_existing_outline_is_not_toggled_off(self):
+        from coc_bot.attack.survey import reveal_boundary
+        frame=np.zeros((600,1000,3),np.uint8);session=Mock()
+        session.client.stop_check=lambda:False;session.capture.screenshot.return_value=frame
+        visible=OpponentMap(1000,600,time.time(),'test',[{},{}],True)
+        with patch('coc_bot.attack.survey.observe_boundary',return_value=visible):
+            reveal_boundary(session,frame)
+        session.input.tap.assert_not_called()
+
+    def test_failed_outline_click_retries_using_new_card_position(self):
+        from coc_bot.attack.survey import reveal_boundary
+        frame=np.zeros((600,1000,3),np.uint8);session=Mock()
+        session.client.stop_check=lambda:False;session.capture.screenshot.return_value=frame
+        absent=OpponentMap(1000,600,time.time(),'test',[],False)
+        visible=replace(absent,segments=[{},{}],stable=True)
+        with patch('coc_bot.attack.survey.observe_boundary',side_effect=[absent,absent,absent,visible]), \
+                patch('coc_bot.attack.army.card_boxes',side_effect=[[(100,500,70,90)],[(150,500,70,90)]]):
+            reveal_boundary(session,frame)
+        self.assertEqual([c.args for c in session.input.tap.call_args_list],[(135,545),(185,545)])
 
 
 class ObservationReviewTests(TestCase):

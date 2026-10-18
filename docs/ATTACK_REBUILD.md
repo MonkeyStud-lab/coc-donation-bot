@@ -83,7 +83,15 @@ view. It needs neither Android root nor another Waydroid window. Every gesture
 releases its fingers and removes only its own ADB forwarding rule.
 
 The survey takes at most three pinches and twelve short pans. It normally finishes
-within eight pans; an incomplete fit gets an extended pass toward the top edge.
+within eight pans. When all four candidate sides exist but coverage is insufficient,
+the final four pans bring their largest unobserved sections into view. These
+camera hints cannot authorize deployment; the same coverage thresholds must pass
+on fresh observations. Without usable four-side evidence, the bounded exploratory
+pass remains available.
+An already visible, stationary deployment outline is kept selected. Otherwise,
+the survey permits at most two freshly located army-card clicks and rechecks
+the outline, rather than assuming a click worked or toggling an existing outline
+off. No map/deployment taps are sent by the survey.
 Each view must have
 positive battle controls, a settled camera, and measured registration to the
 reference image or an overlapping registered view. Red boundary fragments are
@@ -136,7 +144,12 @@ bounded search inside the army bar; positions are reread on each use.
 
 Before the first deployment, all used units must match the reviewed inventory.
 Selection needs the bright card outline, allowing equipment chips above the
-card without treating those chips as the card itself. Hero identity includes
+card without treating those chips as the card itself. A selection click gets
+two fresh observations while the card settles. If it missed, one additional
+card click can use the newly recognized position. Already deployed heroes/siege
+machines cannot be reclicked through this retry path, and Stop cancels further
+attempts. Selection intent and confirmation are recorded in the execution journal.
+Hero identity includes
 unchanged crown/face landmarks because deployment can replace the lower portrait
 with an ability graphic. Each map tap is journaled before being
 sent and then checked against a fresh image: a decreased count, a depleted siege
@@ -216,6 +229,34 @@ also pass. The final automatic run returned home, restored the original camera,
 and reopened clan chat. All twenty protected calibration/routine files matched
 their pre-test hashes. The original production bot was resumed with its existing
 attack method; enabling Automatic remains an explicit settings choice.
+
+The October 18 live monitoring enabled Automatic in production. A complete
+19-deployment run verified eleven Electro Dragons, five spells, one siege and
+two available heroes, with both hero ability taps sent. Subsequent tests fixed
+results-label and home-camera recognition failures. The final battle-end check
+recognized results before the fallback, restored home zoom and reopened clan
+chat. All 34 protected calibration/template/routine files retained their hashes;
+the expanded Linux regression suite passed 197 tests.
+
+Monitoring also found conservative stops on maps without four verified edges
+and one hero selection that could not be confirmed. That final deployment run
+stopped after 17 verified placements, so it was not recorded as a fully successful
+army execution even though battle-end cleanup passed. These guards remain in
+place; ambiguous maps or card selection must not trigger blind map taps.
+
+The follow-up refinement keeps those approval thresholds intact. On 30 saved
+surveys, all 18 accepted and 12 rejected fits retained their decisions; six
+rejected fits supplied camera hints for further observation. Bounded selection
+retries, delayed card observations, outline preservation and targeted final pans
+pass the expanded 206-test Linux regression suite.
+
+With the game's decoration-hiding option enabled, the live acceptance run mapped
+an opponent using two views and one pan, verified all 19 deployments and sent both
+available hero ability taps. It recognized battle results visually, restored the
+home camera and reopened clan chat. All 34 protected calibration/template/routine
+files and application settings were unchanged. Hiding decorations reduces visual
+clutter, but this was not a controlled comparison of the same base with the
+option off; it does not replace boundary or selection verification.
 
 Offline tests cover plan quantities/order, geometry, stale cameras, uncertain
 selection/deployment, no duplicate taps, Stop, camera recovery, web ownership,

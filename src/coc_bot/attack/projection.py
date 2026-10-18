@@ -70,7 +70,7 @@ def input_area(x, y, width, height):
             and not (u>.76 and v<.23) and not (u<.48 and v>.70))
 
 
-def fit_projection(segments, width, height):
+def fit_projection(segments, width, height, *, survey_evidence=None):
     """Fit four independently observed sides; never fill in a missing side.
 
     Segments may be registered from multiple views into the reference image.
@@ -78,6 +78,9 @@ def fit_projection(segments, width, height):
     outline. Broken, stepped boundaries need not supply one long straight edge.
     The caller additionally checks repeat-frame camera stability.
     """
+    # Optional camera-planning hints never authorize deployment. A rejected fit
+    # remains None even when four candidate lines can guide further observation.
+    if survey_evidence is not None:survey_evidence.clear()
     families = {-1: [], 1: []}
     for segment in segments:
         a,b = np.asarray(segment['points'],float)*[width,height]
@@ -114,7 +117,7 @@ def fit_projection(segments, width, height):
     if not .35 < (right[0]-left[0])/width < 2.5 or not .35 < (bottom[1]-top[1])/height < 2.5:
         return None
     # Union of measured intervals rather than summed overlapping Hough detections.
-    coverage=[]
+    coverage=[];sides=[]
     for (slope,offset),members in zip(lines,supports):
         corners=[p for p in projection.corners if abs(p[1]-slope*p[0]-offset)<height*.02]
         if len(corners)!=2: return None
@@ -125,8 +128,20 @@ def fit_projection(segments, width, height):
             if merged and start <= merged[-1][1]: merged[-1][1]=max(end,merged[-1][1])
             else: merged.append([start,end])
         fraction=sum(b-a for a,b in merged)/length
-        if fraction < .10: return None
         coverage.append(fraction)
+        low,high=sorted(p[0] for p in corners)
+        cursor=low;gaps=[]
+        for start,end in merged:
+            start,end=max(low,start),min(high,end)
+            if end<=start:continue
+            if start>cursor:gaps.append((cursor,start))
+            cursor=max(cursor,end)
+        if cursor<high:gaps.append((cursor,high))
+        if gaps:
+            a,b=max(gaps,key=lambda p:p[1]-p[0]);x=(a+b)/2
+            sides.append({'coverage':fraction,'target':(x,slope*x+offset)})
+    if survey_evidence is not None:survey_evidence['weak_sides']=sorted(sides,key=lambda s:s['coverage'])
+    if min(coverage)<.10:return None
     if np.mean(coverage)<.30: return None
     # One side can be mostly hidden behind the army bar or buildings. A short
     # measured side is usable only when the other three are well supported;

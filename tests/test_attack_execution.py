@@ -54,6 +54,24 @@ class ProjectionTests(TestCase):
         for fractions in ([1,1,.12,.12],[.4,.4,.4,.12],[1,1,1,.08]):
             self.assertIsNone(fit_projection(segments(fractions),1000,600))
 
+    def test_weak_side_hints_only_guide_observation_and_do_not_approve_a_map(self):
+        from coc_bot.attack.survey import survey_pan
+        corners=self.projection().corners
+        segments=[]
+        for a,b in zip(corners,corners[1:]+corners[:1]):
+            a,b=np.array(a),np.array(b)
+            segments.append({'points':[(a/[1000,600]).tolist(),((a+(b-a)*.2)/[1000,600]).tolist()]})
+        evidence={}
+        self.assertIsNone(fit_projection(segments,1000,600,survey_evidence=evidence))
+        self.assertEqual(len(evidence['weak_sides']),4)
+        pan=survey_pan(evidence,np.eye(3),1000,600)
+        self.assertIsNotNone(pan)
+        self.assertLessEqual(abs(pan[0]),.22);self.assertLessEqual(abs(pan[1]),.20)
+        # A missing side doesn't become an observation hint from an older map.
+        self.assertIsNone(fit_projection(segments[:-1],1000,600,survey_evidence=evidence))
+        self.assertEqual(evidence,{})
+        self.assertIsNone(survey_pan(evidence,np.eye(3),1000,600))
+
     def test_geometry_keeps_troops_outside_and_spells_inside(self):
         army=(ArmyEntry('electro_dragon','troop',2,True),)
         plan=AttackPlan(army,(PlanStep('deploy_line','electro_dragon',2,(MapPoint(.055,.2),MapPoint(.055,.8))),))
@@ -292,7 +310,55 @@ class ExecutorTests(TestCase):
             exe,session,_=self.executor(root);exe.resolve=Mock(return_value=self.card(2))
             with patch('coc_bot.attack.executor.selected_card',return_value=False):result=exe.run()
             self.assertFalse(result.success);self.assertFalse(result.uncertain_tap)
-            self.assertEqual(session.input.tap.call_count,1) # army card only
+            self.assertEqual(session.input.tap.call_count,2) # bounded army-card taps only
+            self.assertTrue(all(c.args==(135,547) for c in session.input.tap.call_args_list))
+
+    def test_delayed_selection_gets_another_observation_without_another_click(self):
+        with TemporaryDirectory() as root:
+            exe,session,frame=self.executor(root)
+            exe.find=Mock(return_value=(frame,self.card(2)))
+            exe.resolve=Mock(side_effect=[ValueError('card moving'),self.card(2)])
+            with patch('coc_bot.attack.executor.selected_card',side_effect=[False,True]):
+                exe.select(frame,'electro_dragon')
+            session.input.tap.assert_called_once_with(135,547,jitter=0)
+
+    def test_missed_card_click_retries_at_fresh_position_without_deploying(self):
+        with TemporaryDirectory() as root:
+            exe,session,frame=self.executor(root)
+            old=ArmyCard('card-2',(100,470,70,125),'warden','hero',1)
+            moved=replace(old,box=(230,470,70,125))
+            exe.find=Mock(return_value=(frame,old));exe.resolve=Mock(return_value=moved)
+            with patch('coc_bot.attack.executor.selected_card',side_effect=[False,False,False,False,True]):
+                exe.select(frame,'warden')
+            self.assertEqual([c.args for c in session.input.tap.call_args_list],[(135,532),(265,532)])
+
+    def test_selection_retry_never_activates_an_already_deployed_hero(self):
+        with TemporaryDirectory() as root:
+            exe,session,frame=self.executor(root)
+            hero=ArmyCard('card-2',(100,470,70,125),'warden','hero',1)
+            exe.find=Mock(return_value=(frame,hero));exe.resolve=Mock(return_value=hero)
+            with patch('coc_bot.attack.executor.selected_card',return_value=False), \
+                    patch('coc_bot.attack.executor.hero_health_visible',side_effect=[False,True]):
+                with self.assertRaisesRegex(ValueError,'already deployed'):exe.select(frame,'warden')
+            session.input.tap.assert_called_once()
+
+    def test_stop_during_selection_observation_prevents_retry(self):
+        with TemporaryDirectory() as root:
+            exe,session,frame=self.executor(root)
+            exe.find=Mock(return_value=(frame,self.card(2)))
+            session._sleep.side_effect=AdbStopped('Stopped')
+            with patch('coc_bot.attack.executor.selected_card',return_value=False):
+                with self.assertRaises(AdbStopped):exe.select(frame,'electro_dragon')
+            session.input.tap.assert_called_once()
+
+    def test_numpy_selection_evidence_is_saved_as_plain_json_boolean(self):
+        with TemporaryDirectory() as root:
+            exe,session,frame=self.executor(root)
+            exe.find=Mock(return_value=(frame,self.card(2)));exe.resolve=Mock(return_value=self.card(2))
+            with patch('coc_bot.attack.executor.selected_card',side_effect=[np.bool_(False),np.bool_(True)]):
+                exe.select(frame,'electro_dragon')
+            rows=[json.loads(line) for line in exe.path.read_text().splitlines()]
+            self.assertIs(rows[-1]['confirmed'],True)
 
     def test_already_deployed_hero_blocks_preflight_before_any_map_tap(self):
         with TemporaryDirectory() as root:

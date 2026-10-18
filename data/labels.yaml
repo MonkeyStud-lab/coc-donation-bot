@@ -9,7 +9,7 @@
 # Consumed by scripts/preannotate.py (Label Studio config + heuristic
 # pre-annotations) and later by the YOLO data.yaml exporter.
 
-version: 3
+version: 4
 
 # Frame-level screen tag (single choice). Mirrors vision.screens.ScreenType plus
 # additional screen categories used for perception review.
@@ -31,6 +31,11 @@ screens:
   - settings
   - reward_screen
   - visiting_village
+  - army_confirmation
+  - army_management
+  - upgrade_menu
+  - upgrade_confirmation
+  - upgrade_in_progress
   - other
 
 # Object classes, grouped for readability. Group names are not labels.
@@ -51,6 +56,9 @@ classes:
     - settings_panel
     - clash_pass_panel
     - keyboard_overlay
+    - army_panel
+    - upgrade_menu_panel
+    - upgrade_dialog
   navigation:         # things the screen graph taps
     - btn_open_chat
     - btn_close_chat
@@ -95,6 +103,16 @@ classes:
     - battle_timer
     - star_indicator
     - damage_indicator
+  upgrades:
+    - recommended_upgrade
+    - active_upgrade
+    - upgrade_cost
+    - upgrade_duration
+    - lab_status
+    - btn_confirm_upgrade_resources
+    - btn_confirm_upgrade_item
+    - btn_finish_upgrade_gems
+    - btn_finish_upgrade_item
 
 # Map existing calibration keys (data/calibrated.yaml templates / tap_points /
 # rois) to classes so today's heuristics can pre-annotate frames.

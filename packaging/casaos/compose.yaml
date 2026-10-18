@@ -57,7 +57,7 @@ services:
           description:
             en_us: Full dashboard URL, including its port
 x-casaos:
-  icon: ${COC_ICON_URL:-https://raw.githubusercontent.com/MonkeyStud-lab/coc-donation-bot/main/web/public/casaos-icon.png}
+  icon: ${COC_ICON_URL:-https://raw.githubusercontent.com/MonkeyStud-lab/coc-donation-bot/main/web/public/casaos-icon.png?v=paint-castle-2}
   architectures: [amd64]
   main: bot
   category: Utilities

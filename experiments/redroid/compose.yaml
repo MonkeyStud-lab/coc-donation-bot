@@ -1,0 +1,24 @@
+# Isolated evaluation only. Never mount Waydroid data or production bot profiles.
+# Keep stopped until Docker/kernel readiness and free resources are checked.
+services:
+  redroid-evaluation:
+    image: redroid/redroid@sha256:41e5f0c1ff27a4a474c474e5595168cedf6c40fc5dd102c5617f48c80f511e9e
+    container_name: coc-redroid-evaluation
+    privileged: true
+    restart: "no"
+    ports:
+      - "127.0.0.1:5556:5555"
+    volumes:
+      - redroid-evaluation-data:/data
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
+    command:
+      - androidboot.use_memfd=true
+      - androidboot.redroid_gpu_mode=host
+      - androidboot.redroid_gpu_node=/dev/dri/renderD128
+      - androidboot.redroid_width=1853
+      - androidboot.redroid_height=1048
+      - androidboot.redroid_dpi=180
+      - androidboot.redroid_fps=30
+volumes:
+  redroid-evaluation-data:

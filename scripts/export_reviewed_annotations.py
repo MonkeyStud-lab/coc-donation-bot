@@ -64,6 +64,12 @@ def export(batch, schema_path):
             'suggested_screen':source['suggested_screen'],'reviewer':'AI visual review',
             'human_confirmed':False,'objects_complete':False,'training_ready':False,
             'review_notes':review.get('notes','')},'annotations':[{'result':result}]}
+        # Keep layout generations and original provenance through Label Studio
+        # round trips. These fields never grant training/human-review approval.
+        for key in ('candidate_id', 'source', 'source_group', 'captured_at', 'ui_generation', 'ui_version'):
+            if key in source:
+                task['data'][key] = source[key]
+        task['data']['schema_version'] = schema.get('version')
         tasks.append(task)
         cards.append(f'<article><h2>{source["id"]:02d} · {html.escape(screen)}</h2>'
                      f'<a href="previews/{Path(source["image"]).stem}.jpg"><img '
@@ -74,6 +80,9 @@ def export(batch, schema_path):
     report = {'images':len(tasks),'boxes':sum(classes.values()),'screen_corrections':corrections,
               'screens':dict(screens),'objects':dict(classes),'review_type':'AI visual review',
               'human_confirmed':False,'objects_complete':False,'training_ready':False}
+    report['ui_generations'] = dict(Counter(
+        task['data'].get('ui_generation', 'unspecified') for task in tasks))
+    report['schema_version'] = schema.get('version')
     (batch/'report.json').write_text(json.dumps(report,indent=2))
     (batch/'review.html').write_text('<!doctype html><meta charset="utf-8"><title>Annotation review</title>'
         '<style>body{background:#101827;color:#e2e8f0;font:16px system-ui;margin:30px}'

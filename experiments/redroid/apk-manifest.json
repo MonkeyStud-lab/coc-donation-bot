@@ -1,0 +1,27 @@
+[
+  {
+    "file": "base.apk",
+    "bytes": 41574698,
+    "sha256": "af161dfbbcb1dad8165d871754038ce01f81628b74e871ba59feab6b13a864e8"
+  },
+  {
+    "file": "split_config.en.apk",
+    "bytes": 53657,
+    "sha256": "92d1f13ff9644aa62a6e252462b2411bddfcea8853b8c2ce0f766c32f8941581"
+  },
+  {
+    "file": "split_config.tvdpi.apk",
+    "bytes": 125923,
+    "sha256": "6c6947d59cd92032569530dbb1587c189b940e41564ccaa9ecb7dbfcd9db6845"
+  },
+  {
+    "file": "split_config.x86_64.apk",
+    "bytes": 85214422,
+    "sha256": "87678b03f6ecce595056c73505968a6a019cf2e184d18eec0c5947805283fbd4"
+  },
+  {
+    "file": "split_install_time_asset_pack.apk",
+    "bytes": 648240252,
+    "sha256": "6c2f516354cad6dd7878304f327bef937e35518e9df46a93193725cd6cc3d39f"
+  }
+]

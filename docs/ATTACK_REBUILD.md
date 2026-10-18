@@ -106,12 +106,21 @@ Unsupported scenery can still stop an attack. Count changes provide the separate
 confirmation that a particular deployment actually happened.
 
 Home retains the battle zoom. The app saves its original home image before a
-survey and restores the measured scale afterward. A measured zoom-change hint
-can guide one correction when the original view is too different to match, but
-only a subsequent home-image comparison can clear the pending marker. Device or
+survey and restores the measured scale afterward. Restoration measures the
+actual home image; an opponent's starting zoom is not a home zoom reference.
+If no reliable match is available, one wider home overview can expose landmarks
+for a fresh measurement. Only a verified home-image comparison can clear the
+pending marker. Device or
 resolution changes, missing references, or failed comparisons leave it blocked.
 Restoration tolerates a measured scale difference below three percent; it does
 not rewrite calibration coordinates.
+If the restored view lands on sparse repeated decorations, a plausible existing
+translation can guide up to two bounded pans at home. Each pan requires a fresh
+image; only a subsequent verified comparison can clear the pending marker.
+These probes never authorize battle coordinates or bypass camera verification.
+Home-only matching includes edge landmarks while explicitly masking fixed HUD
+controls. A small source image pyramid handles large zoom differences without
+loosening reciprocal-match or distributed-inlier requirements.
 
 ## Army and execution
 
@@ -224,3 +233,71 @@ npm run build
 Scenery coverage, small display sizes, unknown skins, crowded/scrolled bars,
 network delays, and the observable effects of hero abilities remain validation
 limits. A single successful routine does not establish universal support.
+
+## Interrupted attacks and diagnostic storage
+
+Before opening an attack, the controller writes
+`data/attack-planner/attack-pending.json`. It records the device, attack ID,
+navigation phase and whether a deployment might have happened. Every map input
+is preceded by an atomic, fsynced checkpoint and a durable intent journal entry.
+Checkpoint write failures block the input. Stop leaves unfinished checkpoints
+intact; it never sends cleanup taps after cancellation.
+
+On Start, after an unexpected error, or before another farm operation, the device
+owner checks this marker and the existing camera recovery marker. Recovery:
+
+- Never replays army selection, deployment, hero abilities or upgrade actions.
+- Waits through a verified live battle. Two fresh results observations authorize
+  Return Home; recovery has no timer-based Return Home tap.
+- Cancels a positively recognized army confirmation or Multiplayer page using
+  Back. Generic screen labels do not authorize Back.
+- Requires the home Build control or clan-chat anchor, restores the original
+  camera when needed, then verifies clan chat on a fresh screenshot.
+  Camera restoration keeps the five-gesture limit and 3% verified zoom tolerance.
+  If repeated measurements show a tiny correction was ignored, it can use one
+  larger home-only gesture, then remeasure before correcting back. The final
+  permitted gesture also receives a fresh verification without another input.
+  In automatic mode only, a nearby home zoom endpoint can be accepted after a
+  strong zoom-out produces no measured zoom change (within 0.5%), with the
+  original home scale still within 7% and clan chat subsequently verified. The
+  old reference is preserved as `camera-legacy-before.png` and
+  `camera-legacy-blocked.json` prevents running fixed pixel sequences. Automatic
+  attacks must still rebuild and verify their opponent map from fresh images.
+  Tools → Restore camera can attempt the preserved legacy reference. The regular
+  3% camera-restoration tolerance and opponent geometry thresholds are unchanged.
+- Advances the farm interval once for a potentially fought battle. Its attack ID
+  is persisted so a crash between saving the interval and clearing the checkpoint
+  does not roll a second interval.
+- Stops after three unknown-screen/cancel attempts, three results taps, or four
+  minutes waiting. If blocked, open the home village manually and press Start.
+  A corrupt/foreign-device checkpoint is preserved and needs inspection; it is
+  never silently discarded. `last-attack.json` retains the last completed record.
+
+This recovers work when the controller starts again; it does not automatically
+restart a stopped bot process. Existing Docker restart policy remains unchanged.
+Malformed camera references and unknown menus can still require manual help.
+
+Generated diagnostic evidence under `data/debug/attack-surveys`,
+`attack-executions` and `attack-v2` is cleaned between operations: older than seven
+days, above 1 GiB combined, or above 40 evidence groups. The newest three groups
+in each category are protected, making the limits soft if those alone exceed the
+budget. Entire survey/execution groups are removed together. Any pending attack
+or camera recovery suspends cleanup. Calibration, backups, learned portraits,
+saved routines, reviewed observations, labeled datasets and screenshot collection
+are excluded. Collection keeps its separate configured storage policy.
+
+Tests in `test_attack_recovery.py` exercise abrupt process exit, failed atomic
+writes, battle/results/home recovery, duplicate interval saves and Stop.
+`test_screenshot_retention.py` covers age/size/count limits, pending guards,
+protected data, dry runs and links. No calibration is erased to simulate a crash.
+
+Validation on 2026-10-18: 235 Linux regression tests passed. A live controller
+was killed after 11 verified Electro Dragon deployments. Its journal received no
+further deployment inputs during recovery; results authorized one Return Home
+tap, home/clan chat were subsequently confirmed, and the interval was recorded
+under that same attack ID. The test exposed a nearby home zoom endpoint; the
+automatic-only endpoint handling preserved the old reference and blocked legacy
+pixel recipes. The final deployment resumed normal requests with both pending
+markers cleared. All 34 protected calibration/template/routine files and saved
+application settings remained unchanged. Retention removed about 1.08 GiB of
+generated evidence across the test; labeled collection data was excluded.

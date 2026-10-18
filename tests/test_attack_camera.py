@@ -10,7 +10,7 @@ import numpy as np
 
 from coc_bot.adb.client import AdbStopped
 from coc_bot.adb.multitouch import Multitouch, touch_packet
-from coc_bot.attack.camera import compare_camera
+from coc_bot.attack.camera import compare_camera, compare_home_zoom
 
 
 class MultitouchTests(TestCase):
@@ -145,6 +145,20 @@ class CameraEvidenceTests(TestCase):
         result = compare_camera(before, after)
         self.assertTrue(result['verified'], result)
         self.assertAlmostEqual(result['scale'], .35, delta=.03)
+
+    def test_home_zoom_uses_distributed_world_features_not_stationary_hud(self):
+        before=self.textured_map()
+        after=cv2.warpAffine(before,cv2.getRotationMatrix2D((500,250),0,.5),(1000,600))
+        result=compare_home_zoom(before,after)
+        self.assertTrue(result['verified_zoom'],result)
+        self.assertAlmostEqual(result['scale'],.5,delta=.02)
+        self.assertFalse(result['battlefield_mapping_ready'])
+        self.assertNotIn('verified',result)
+        # An unchanged resource HUD cannot certify a changed or blank village.
+        hud=np.random.default_rng(4).integers(0,255,(400,200,3),dtype=np.uint8)
+        before[:]=after[:]=0
+        before[20:420,800:]=after[20:420,800:]=hud
+        self.assertFalse(compare_home_zoom(before,after)['verified_zoom'])
 
 
 class HomeZoomGuardTests(TestCase):

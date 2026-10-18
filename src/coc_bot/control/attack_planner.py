@@ -153,6 +153,10 @@ def save_preview(config, ident, expected, plan_value, corners, *, save_routine=F
 
 def execute_preview(session, ident, expected):
     from coc_bot.attack.executor import VerifiedExecutor
+    from coc_bot.attack.recovery import AttackCheckpoint, finish_attack
+    checkpoint=AttackCheckpoint(session.config)
+    if checkpoint.load() is not None:
+        raise ValueError('Recover the unfinished attack before executing another preview')
     report=read_report(session.config.data_dir,ident)
     if report.get('device')!=session.config.adb_device:
         raise ValueError('Observation belongs to a different device; inspect this device again')
@@ -172,6 +176,8 @@ def execute_preview(session, ident, expected):
     check_stop(session.client.stop_check)
     # Reserve before sending input. A failed or interrupted attempt is never replayable.
     report['executed']=True;write_report(folder,report)
+    checkpoint.begin('opponent')
+    checkpoint.update(entered_opponent=True)
     executor=VerifiedExecutor(session,plan,projection,reference,catalog)
     try:
         result=executor.run()
@@ -179,7 +185,8 @@ def execute_preview(session, ident, expected):
         report['execution']=asdict(executor.result);write_report(folder,report)
         if executor.result.first_deploy_at or executor.result.uncertain_tap:
             from coc_bot.runtime.tracker import RuntimeTracker
-            tracker=RuntimeTracker(session.config);tracker.mark_farm_success();tracker.pause_farm_clock()
+            tracker=RuntimeTracker(session.config)
+            tracker.mark_farm_success(attack_id=checkpoint.load()['id']);tracker.pause_farm_clock()
     # Even a preflight failure can leave the game in an opponent. Finish that
     # match before returning control to donations, unless Stop was requested.
     try:
@@ -198,6 +205,10 @@ def execute_preview(session, ident, expected):
             restore_camera(session)
             report['camera_restored']=True
             report['chat_confirmed']=bool(session.navigator.ensure_clan_chat())
+            if report['chat_confirmed']:
+                check_stop(session.client.stop_check)
+                checkpoint.update('home_confirmed')
+                finish_attack(session)
             if result.success and report['chat_confirmed']:
                 path=template_path(session.config)
                 if path.is_file():
@@ -213,6 +224,9 @@ def execute_preview(session, ident, expected):
 
 def prepare_opponent(session):
     from coc_bot.attack.planned_farmer import remember_camera, restore_camera
+    from coc_bot.attack.recovery import recover_attack
+    if recover_attack(session):
+        raise ValueError('Interrupted attack recovered; prepare a new opponent when ready')
     if not session.attack_nav.leave_chat_for_home(): raise ValueError('Could not reach home')
     restore_camera(session)
     home=session.capture.screenshot()

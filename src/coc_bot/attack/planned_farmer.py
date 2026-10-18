@@ -5,10 +5,11 @@ import time
 from loguru import logger
 
 import cv2
+import numpy as np
 
 from coc_bot.adb.client import AdbStopped
 from coc_bot.attack.army import check_stop
-from coc_bot.attack.camera import compare_camera,compare_zoom
+from coc_bot.attack.camera import compare_camera,compare_zoom,compare_home_zoom
 from coc_bot.attack.executor import VerifiedExecutor
 from coc_bot.attack.survey import survey
 from coc_bot.control.attack_planner import load_template, learned_catalog
@@ -28,21 +29,28 @@ def remember_camera(session, home):
     path=root/'camera-before.png'
     if (root/'camera-pending.json').exists():
         raise ValueError('Restore the previous camera before changing zoom again')
-    cv2.imwrite(str(path),home)
-    (root/'camera-pending.json').write_text(json.dumps({'at':time.time(),'device':session.config.adb_device}),encoding='utf-8')
+    if not cv2.imwrite(str(path),home):
+        raise ValueError('Could not save the original home camera; zoom blocked')
+    from coc_bot.attack.recovery import atomic_json
+    atomic_json(root/'camera-pending.json',{'at':time.time(),'device':session.config.adb_device})
 
 
-def restore_camera(session):
+def restore_camera(session, *, legacy=False):
     """Only a positively identified home can restore a persisted zoom change."""
     root=session.config.data_dir/'attack-planner';pending=root/'camera-pending.json'
+    reference=root/'camera-before.png'
+    if legacy and not pending.exists() and (root/'camera-legacy-blocked.json').exists():
+        pending=root/'camera-legacy-blocked.json'
+        reference=root/'camera-legacy-before.png'
     if not pending.exists(): return True
     state=json.loads(pending.read_text(encoding='utf-8'))
     if state.get('device')!=session.config.adb_device:
         raise ValueError('Camera reference belongs to a different device')
     from coc_bot.vision.battle_menu import home_build_control_visible
     from coc_bot.adb.multitouch import Multitouch
-    original=cv2.imread(str(root/'camera-before.png'))
+    original=cv2.imread(str(reference))
     if original is None: raise ValueError('Original camera reference is missing')
+    pan_probes=0;overview_used=False;last_zoom_scale=None;deadzone_probe=False
     for attempt in range(5):
         check_stop(session.client.stop_check)
         frame=session.capture.screenshot()
@@ -53,33 +61,87 @@ def restore_camera(session):
         if not evidence['verified']:
             zoom=compare_zoom(original,frame)
             if not zoom.get('verified_zoom'):
-                hint=state.get('measured_scale')
-                if attempt==0 and type(hint) in (float,int) and .2<hint<.97:
-                    # Repeated decorations can defeat matching at extreme zoom.
-                    # Use the measured battle zoom for ONE approach gesture;
-                    # a subsequent home image must still prove restoration.
+                zoom=compare_home_zoom(original,frame)
+            if not zoom.get('verified_zoom'):
+                candidate=evidence.get('transform')
+                # Zooming a sparse home village can expose a different set of
+                # repeated decorations. A plausible translation may guide a
+                # bounded HOME-only pan, but cannot certify restoration. The
+                # next image must still pass the original full comparison.
+                if (candidate is not None and evidence.get('inliers',0)>=24 and
+                        evidence.get('scale') is not None and .2<evidence['scale']<4 and
+                        abs(evidence.get('rotation_degrees',180))<2 and pan_probes<2):
+                    h,w=frame.shape[:2]
+                    focus=np.array([w*.5,h*.42])
+                    matrix=np.asarray(candidate)
+                    dx,dy=focus-(matrix[:,:2]@focus+matrix[:,2])
+                    if abs(dx)<w and abs(dy)<h*.8 and max(abs(dx),abs(dy))>30:
+                        gain=min(1.,w*.30/max(abs(dx),1),h*.25/max(abs(dy),1))
+                        x,y=round(w*.48),round(h*.46)
+                        logger.info('Camera restore: checking a bounded home pan before remeasuring zoom')
+                        session.input.swipe(x,y,round(x+dx*gain),round(y+dy*gain),350)
+                        pan_probes+=1
+                        session._sleep(.5)
+                        continue
+                if not overview_used and pan_probes==0:
+                    # Opponent starting zoom can differ from home starting
+                    # zoom. Never multiply home zoom by that opponent ratio.
+                    # Get one wider HOME view, then measure against the actual
+                    # saved home image before making a corrective gesture.
                     with Multitouch(session.client,(frame.shape[1],frame.shape[0])) as touch:
-                        touch.pinch(start_span=.22,end_span=min(.70,.22/hint))
-                    session._sleep(.4)
+                        touch.pinch()
+                    overview_used=True
+                    session._sleep(1.)
+                    continue
+                if attempt<4:
+                    # Home loading, pinch settling and animated army portraits
+                    # can leave one frame without usable landmarks. Retry the
+                    # observation, not the gesture or the recovery hint.
+                    session._sleep(1.)
                     continue
                 raise ValueError('Could not match the original camera; restore it manually before using the old sequence')
             evidence=zoom
         scale=evidence['scale']
+        logger.debug('Camera restore: measured home scale {:.4f}',scale)
         # Tiny gestures are below the game's touch slop. A measured 3% scale
         # tolerance prevents endless correction of a sub-gesture difference.
         if abs(scale-1)<.03:
             pending.unlink();return True
         gain=max(.4,min(2.5,1/scale))
+        if (last_zoom_scale is not None and abs(scale-last_zoom_scale)<.003 and
+                .03<=abs(scale-1)<.08 and not deadzone_probe):
+            # A fresh verified home image proves the tiny correction produced
+            # no zoom change (touch slop). Move away once with a larger bounded
+            # gesture, then measure again before correcting toward the original.
+            gain=1.2 if scale>1 else .8
+            deadzone_probe=True
+            logger.info('Camera restore: small correction was ignored; checking one wider home gesture')
         start=.22 if gain>1 else .60
         end=max(.06,min(.70,start*gain))
         with Multitouch(session.client,(frame.shape[1],frame.shape[0])) as touch:
             touch.pinch(start_span=start,end_span=end)
+        last_zoom_scale=scale
         session._sleep(.4)
+    # The final permitted gesture still needs a fresh verification. Never
+    # report failure solely because there is no next loop iteration, and never
+    # add another gesture just to obtain that observation.
+    check_stop(session.client.stop_check)
+    final=session.capture.screenshot()
+    if final.shape==original.shape and home_build_control_visible(final):
+        evidence=compare_camera(original,final)
+        if not evidence.get('verified'):
+            evidence=compare_zoom(original,final)
+            if not evidence.get('verified_zoom'):
+                evidence=compare_home_zoom(original,final)
+        if ((evidence.get('verified') or evidence.get('verified_zoom')) and
+                abs(evidence['scale']-1)<.03):
+            pending.unlink();return True
     raise ValueError('Camera restoration did not converge; old sequence remains blocked')
 
 
 def run_planned_attack(farmer, *, automatic=False):
     from coc_bot.attack.farmer import FarmResult
+    from coc_bot.attack.recovery import AttackCheckpoint
     session=context(farmer)
     plan = None
     if not automatic:
@@ -117,6 +179,7 @@ def run_planned_attack(farmer, *, automatic=False):
             catalog=learned_catalog(farmer.config)
         executor=VerifiedExecutor(session,plan,observed['projection'],observed['reference'],catalog)
         result=executor.run()
+        AttackCheckpoint(farmer.config).update('deployment_finished')
     except ValueError as exc:
         failure=str(exc)
         logger.warning('Attack preparation stopped: {}',failure)
@@ -139,6 +202,9 @@ def run_planned_attack(farmer, *, automatic=False):
         restore_camera(session)
         farmer._set_mode(BotMode.DONATE)
         chat=farmer.donation_nav.ensure_clan_chat() if farmer.donation_nav else True
+        if not chat:
+            return FarmResult(False,'clan chat could not be confirmed',True)
+        AttackCheckpoint(farmer.config).update('home_confirmed')
         farmer._gs(GameState.CLAN_CHAT,'planned attack completed')
         return FarmResult(bool(result and result.success and chat),
                           failure or (result.reason if result else 'attack was not executed'),True)

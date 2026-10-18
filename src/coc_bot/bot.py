@@ -105,6 +105,7 @@ class DonationBot:
         self.navigator.mode = BotMode.DONATE
         self.farmer.attack_nav.mode = BotMode.ATTACK
         self.farmer._on_mode = self.set_mode
+        self.farmer.tracker = self.tracker
 
         # Stop button interrupts long waits (chat nav, farm, donation panel, breaks).
         stop = self.should_stop
@@ -263,14 +264,19 @@ class DonationBot:
             recorder.stop()
 
     def _run_inner(self) -> None:
-        if (self.config.data_dir/'attack-planner/camera-pending.json').exists():
-            raise ValueError('Return home and use Attacks → Restore camera before starting the bot.')
         try:
             self.client.health_check()
         except AdbError as exc:
             logger.error("ADB health check failed: {}", exc)
             raise
 
+        from coc_bot.attack.planned_farmer import context
+        from coc_bot.attack.recovery import recover_attack, pending
+        from coc_bot.runtime.screenshot_retention import prune_attack_diagnostics
+        if pending(self.config):
+            self.game_state.transition(GameState.RECOVERING, reason='resume interrupted attack')
+        recover_attack(context(self.farmer), tracker=self.tracker)
+        prune_attack_diagnostics(self.config.data_dir)
         self.break_manager.resume_pending_break()
         self.tracker.resume_farm_clock()
         self.tracker.start_loop_timing()
@@ -325,6 +331,10 @@ class DonationBot:
 
     def _loop_tick(self) -> None:
         if self._stop_requested or self._settings_stop_ready():
+            return
+        from coc_bot.attack.recovery import pending
+        if pending(self.config):
+            self._recover()
             return
         self._check_watchdog()
         if self._stop_requested or self._settings_stop_ready():
@@ -471,8 +481,10 @@ class DonationBot:
             return True
         # Interval clock advances after a fought battle even if leave/chat fails.
         # Otherwise leave bugs retry every farm_retry_cooldown_seconds (~minutes).
+        from coc_bot.attack.recovery import pending
         if result.success or result.counts_toward_interval:
-            self.tracker.mark_farm_success()
+            if not result.interval_recorded and not pending(self.config):
+                self.tracker.mark_farm_success()
             self._farm_fail_cooldown_until = 0.0
             if not result.success:
                 logger.warning(
@@ -489,11 +501,9 @@ class DonationBot:
                 result.reason,
                 cooldown,
             )
-        if (self.config.farm_engine in ('planner','automatic') and
-                (self.config.data_dir/'attack-planner/camera-pending.json').exists()):
-            logger.error('Planned attack needs recovery — stopping before donations. '
-                         'Return home and use Attacks → Restore camera.')
-            self.request_stop()
+        from coc_bot.attack.recovery import pending
+        if pending(self.config):
+            self._recover()
             return True
         self.set_mode(BotMode.DONATE)
         if not self._stop_requested:
@@ -733,6 +743,17 @@ class DonationBot:
 
         recorder.note_event("recovery", state=self._state)
         self.game_state.transition(GameState.RECOVERING, reason="watchdog/desync")
+        from coc_bot.attack.recovery import pending, recover_attack
+        from coc_bot.attack.planned_farmer import context
+        if pending(self.config):
+            # Let failure reach the controller: no repeated generic BACK/chat
+            # loop when attack recovery is blocked or checkpoint is corrupt.
+            recover_attack(context(self.farmer), tracker=self.tracker)
+            self.set_mode(BotMode.DONATE)
+            self.game_state.transition(GameState.CLAN_CHAT, reason='interrupted attack recovered')
+            self._set_state('scan_chat')
+            self._state_entered = time.monotonic()
+            return
         self.set_mode(BotMode.ANY)
         frame = self.capture.screenshot()
         screen = self.navigator.classify(frame, mode=BotMode.ANY)

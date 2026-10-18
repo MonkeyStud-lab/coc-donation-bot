@@ -116,3 +116,51 @@ def compare_zoom(before, after):
     if len(scales)<2 or max(scales)-min(scales)>.005:return {'verified_zoom':False}
     return {'verified_zoom':True,'scale':float(np.median(scales)),
             'battlefield_mapping_ready':False,'reason':'Independent artwork groups agree on zoom only'}
+
+
+def compare_home_zoom(before, after):
+    """A wider HOME-only feature mask, excluding fixed HUD widgets.
+
+    Sparse villages may keep their distinctive walls near the left edge. This
+    evidence is for restoring home zoom only, never opponent deployment.
+    """
+    if before.shape != after.shape:return {'verified_zoom':False}
+    h,w=before.shape[:2];mask=np.zeros((h,w),np.uint8)
+    mask[round(h*.03):round(h*.86),round(w*.01):round(w*.98)]=255
+    # Keep edge landmarks while excluding the actual fixed home controls:
+    # player badge, resources, trophies/chat, shop, and bottom corner buttons.
+    for y0,y1,x0,x1 in ((0,.20,0,.22),(0,.38,.76,1),
+                         (.18,.60,0,.11),(.40,.60,.89,1),
+                         (.70,1,.87,1),(.78,1,0,.20)):
+        mask[round(h*y0):round(h*y1),round(w*x0):round(w*x1)]=0
+    sift=cv2.SIFT_create(nfeatures=7000)
+    b,db=sift.detectAndCompute(cv2.cvtColor(after,cv2.COLOR_BGR2GRAY),mask)
+    if db is None or len(db)<2:return {'verified_zoom':False}
+    matcher=cv2.BFMatcher()
+    # At a large scale change, rendering removes different fine details. A
+    # source pyramid compares artwork at similar sizes instead of relaxing
+    # reciprocal matching or the distributed-inlier requirements.
+    for factor in (1., .5, .35, .75):
+        image=cv2.resize(before,None,fx=factor,fy=factor)
+        source_mask=cv2.resize(mask,(image.shape[1],image.shape[0]),interpolation=cv2.INTER_NEAREST)
+        a,da=sift.detectAndCompute(cv2.cvtColor(image,cv2.COLOR_BGR2GRAY),source_mask)
+        if da is None or len(da)<2:continue
+        reverse=matcher.match(db,da);pairs=matcher.knnMatch(da,db,k=2)
+        matches=[p[0] for p in pairs if len(p)==2 and p[0].distance<.60*p[1].distance and
+                 reverse[p[0].trainIdx].trainIdx==p[0].queryIdx]
+        if len(matches)<24:continue
+        source=np.float32([np.array(a[m.queryIdx].pt)/factor for m in matches])
+        target=np.float32([b[m.trainIdx].pt for m in matches])
+        matrix,inliers=cv2.estimateAffinePartial2D(source,target,method=cv2.RANSAC,
+                                                  ransacReprojThreshold=3,maxIters=3000)
+        if matrix is None or inliers is None:continue
+        good=inliers.ravel().astype(bool)
+        if good.sum()<24 or good.mean()<.60:continue
+        spread=np.ptp(source[good],axis=0)
+        scale=float(np.hypot(matrix[0,0],matrix[1,0]))
+        rotation=float(np.degrees(np.arctan2(matrix[1,0],matrix[0,0])))
+        if (spread[0]<w*.20 or spread[1]<h*.20 or
+                not .2<scale<4 or abs(rotation)>=2):continue
+        return {'verified_zoom':True,'scale':scale,'transform':matrix.tolist(),
+                'battlefield_mapping_ready':False,'reason':'Distributed home-world features establish zoom'}
+    return {'verified_zoom':False}

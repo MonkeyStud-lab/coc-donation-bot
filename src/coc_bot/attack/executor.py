@@ -1,6 +1,7 @@
 """One measured action at a time. An uncertain map tap is never replayed."""
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import time
 import uuid
@@ -98,6 +99,8 @@ class VerifiedExecutor:
         with self.path.open('a',encoding='utf-8') as handle:
             handle.write(json.dumps({'at':time.time(),'event':event,**fields})+'\n')
             handle.flush()
+            if event in ('map_tap_intent','ability_intent','finished'):
+                os.fsync(handle.fileno())
         if event=='step':
             logger.info('Attack step {}/{}: {} {}',fields['number']+1,len(self.plan.steps),
                         fields['action'].replace('_',' '),fields.get('unit_id','').replace('_',' '))
@@ -201,6 +204,12 @@ class VerifiedExecutor:
         self.note('map_tap_intent',unit_id=unit_id,quantity_before=before,target=target)
         check_stop(self.stop)
         sent_at=time.time()
+        from coc_bot.attack.recovery import AttackCheckpoint
+        checkpoint=AttackCheckpoint(self.session.config)
+        if checkpoint.load() is None:
+            checkpoint.begin('deploying')
+        checkpoint.update('deploying',deployment_possible=True,first_attempt_at=
+                          checkpoint.load().get('first_attempt_at',sent_at),journal=self.path.name)
         self.result.first_attempt_at=self.result.first_attempt_at or sent_at
         self.result.uncertain_tap=True
         cv2.imwrite(str(self.path.with_suffix('.before.png')),frame)

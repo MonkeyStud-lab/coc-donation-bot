@@ -205,6 +205,7 @@ class BattleEvidenceTests(TestCase):
 class ExecutorTests(TestCase):
     def executor(self, root, quantity=2):
         session=Mock();session.config.data_dir=Path(root);session.client.stop_check=lambda:False
+        session.config.adb_device='test'
         frame=np.zeros((600,1000,3),np.uint8)
         session.capture.screenshot.return_value=frame
         session.attack_nav.battlefield_ready.return_value=True
@@ -403,6 +404,92 @@ class TemplateTests(TestCase):
 
 
 class CameraRecoveryTests(TestCase):
+    def test_ignored_small_zoom_gets_one_bounded_escape_then_fresh_correction(self):
+        with TemporaryDirectory() as root:
+            folder=Path(root)/'attack-planner';folder.mkdir()
+            pending=folder/'camera-pending.json';pending.write_text(json.dumps({'device':'test'}))
+            frame=np.zeros((600,1000,3),np.uint8);cv2.imwrite(str(folder/'camera-before.png'),frame)
+            session=Mock();session.config.data_dir=Path(root);session.config.adb_device='test'
+            session.client.stop_check=lambda:False;session.capture.screenshot.return_value=frame
+            with patch('coc_bot.vision.battle_menu.home_build_control_visible',return_value=True), \
+                    patch('coc_bot.attack.planned_farmer.compare_camera',side_effect=
+                          [{'verified':True,'scale':n} for n in (1.043,1.043,.88,1.01)]), \
+                    patch('coc_bot.adb.multitouch.Multitouch') as touch:
+                self.assertTrue(restore_camera(session))
+            calls=touch.return_value.__enter__.return_value.pinch.call_args_list
+            self.assertEqual(len(calls),3)
+            self.assertAlmostEqual(calls[1].kwargs['end_span']/calls[1].kwargs['start_span'],1.2)
+            self.assertAlmostEqual(calls[2].kwargs['end_span']/calls[2].kwargs['start_span'],1/.88)
+            self.assertFalse(pending.exists())
+
+    def test_last_allowed_gesture_gets_one_fresh_verification_without_another_input(self):
+        with TemporaryDirectory() as root:
+            folder=Path(root)/'attack-planner';folder.mkdir()
+            pending=folder/'camera-pending.json';pending.write_text(json.dumps({'device':'test'}))
+            frame=np.zeros((600,1000,3),np.uint8);cv2.imwrite(str(folder/'camera-before.png'),frame)
+            session=Mock();session.config.data_dir=Path(root);session.config.adb_device='test'
+            session.client.stop_check=lambda:False;session.capture.screenshot.return_value=frame
+            with patch('coc_bot.vision.battle_menu.home_build_control_visible',return_value=True), \
+                    patch('coc_bot.attack.planned_farmer.compare_camera',side_effect=
+                          [{'verified':True,'scale':1.1}]*5+[{'verified':True,'scale':1.01}]), \
+                    patch('coc_bot.adb.multitouch.Multitouch') as touch:
+                self.assertTrue(restore_camera(session))
+            self.assertEqual(touch.return_value.__enter__.return_value.pinch.call_count,5)
+            self.assertEqual(session.capture.screenshot.call_count,6)
+            self.assertFalse(pending.exists())
+
+    def test_home_overview_requires_measured_home_scale_not_opponent_hint(self):
+        with TemporaryDirectory() as root:
+            folder=Path(root)/'attack-planner';folder.mkdir()
+            pending=folder/'camera-pending.json'
+            pending.write_text(json.dumps({'device':'test','measured_scale':.3}))
+            frame=np.zeros((600,1000,3),np.uint8)
+            cv2.imwrite(str(folder/'camera-before.png'),frame)
+            session=Mock();session.config.data_dir=Path(root);session.config.adb_device='test'
+            session.client.stop_check=lambda:False;session.capture.screenshot.return_value=frame
+            with patch('coc_bot.vision.battle_menu.home_build_control_visible',return_value=True), \
+                    patch('coc_bot.attack.planned_farmer.compare_camera',side_effect=[
+                        {'verified':False},{'verified':False},{'verified':True,'scale':1.01}]), \
+                    patch('coc_bot.attack.planned_farmer.compare_zoom',return_value={'verified_zoom':False}), \
+                    patch('coc_bot.attack.planned_farmer.compare_home_zoom',side_effect=[
+                        {'verified_zoom':False},{'verified_zoom':True,'scale':.5}]), \
+                    patch('coc_bot.adb.multitouch.Multitouch') as touch:
+                self.assertTrue(restore_camera(session))
+            calls=touch.return_value.__enter__.return_value.pinch.call_args_list
+            self.assertEqual(len(calls),2)
+            self.assertEqual(calls[0].kwargs,{}) # one wider overview, then observe
+            self.assertAlmostEqual(calls[1].kwargs['end_span']/calls[1].kwargs['start_span'],2.)
+            self.assertFalse(pending.exists())
+
+    def test_uncertain_home_translation_can_only_probe_then_requires_fresh_verified_image(self):
+        with TemporaryDirectory() as root:
+            folder=Path(root)/'attack-planner';folder.mkdir()
+            pending=folder/'camera-pending.json'
+            pending.write_text(json.dumps({'device':'test','measured_scale':.32}))
+            frame=np.zeros((600,1000,3),np.uint8)
+            cv2.imwrite(str(folder/'camera-before.png'),frame)
+            session=Mock();session.config.data_dir=Path(root);session.config.adb_device='test'
+            session.client.stop_check=lambda:False;session.capture.screenshot.return_value=frame
+            hint={'verified':False,'scale':1.02,'inliers':40,'rotation_degrees':0.,
+                  'transform':[[1.02,0,-450],[0,1.02,100]]}
+            with patch('coc_bot.vision.battle_menu.home_build_control_visible',return_value=True), \
+                    patch('coc_bot.attack.planned_farmer.compare_camera',side_effect=[hint,{'verified':True,'scale':1.02}]), \
+                    patch('coc_bot.attack.planned_farmer.compare_zoom',return_value={'verified_zoom':False}), \
+                    patch('coc_bot.adb.multitouch.Multitouch') as touch:
+                self.assertTrue(restore_camera(session))
+            session.input.swipe.assert_called_once()
+            touch.assert_not_called()
+            self.assertFalse(pending.exists())
+
+            pending.write_text(json.dumps({'device':'test','measured_scale':.32}))
+            session.input.reset_mock()
+            with patch('coc_bot.vision.battle_menu.home_build_control_visible',return_value=True), \
+                    patch('coc_bot.attack.planned_farmer.compare_camera',return_value=hint), \
+                    patch('coc_bot.attack.planned_farmer.compare_zoom',return_value={'verified_zoom':False}):
+                with self.assertRaisesRegex(ValueError,'Could not match'):restore_camera(session)
+            self.assertEqual(session.input.swipe.call_count,2)
+            self.assertTrue(pending.exists())
+
     def test_measured_hint_cannot_clear_pending_without_home_image_confirmation(self):
         with TemporaryDirectory() as root:
             folder=Path(root)/'attack-planner';folder.mkdir()

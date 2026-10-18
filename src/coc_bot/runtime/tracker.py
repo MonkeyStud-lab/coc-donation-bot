@@ -200,14 +200,26 @@ class RuntimeTracker:
         except ValueError:
             return None
 
-    def mark_farm_success(self) -> None:
+    def mark_farm_success(self, *, attack_id=None) -> None:
         """Record that a farm battle was fought (success or post-deploy leave fail)."""
         with self._lock:
+            if attack_id and self.state.last_completed_attack_id == attack_id:
+                return
             self.state.last_farm_at = datetime.now(timezone.utc).isoformat()
             self.state.farm_paused_at = None
             rolled = self._roll_next_farm_interval()
             self.state.next_farm_interval_seconds = rolled
-            save_runtime_state(self.state_path, self.state)
+            if attack_id:
+                from dataclasses import asdict
+                from coc_bot.attack.recovery import atomic_json
+                self.state.last_completed_attack_id = attack_id
+                try:
+                    atomic_json(self.state_path, asdict(self.state))
+                except OSError:
+                    self.state.last_completed_attack_id = None
+                    raise
+            else:
+                save_runtime_state(self.state_path, self.state)
         base = max(60, int(self.config.farm_interval_seconds))
         variance = max(0, int(self.config.farm_interval_variance_seconds))
         logger.info(

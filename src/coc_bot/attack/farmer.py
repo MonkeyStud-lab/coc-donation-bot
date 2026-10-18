@@ -25,6 +25,7 @@ class FarmResult:
     # True once troops were deployed — advances the auto-farm interval clock even
     # if leave/chat confirm fails (otherwise failures retry every fail-cooldown).
     counts_toward_interval: bool = False
+    interval_recorded: bool = False
 
 
 class AttackFarmer:
@@ -51,6 +52,7 @@ class AttackFarmer:
         self.deployer = EdgeDeployer(config, input_ctrl)
         self.stop_check: Callable[[], bool] | None = None
         self._on_mode: Callable[[BotMode], None] | None = None
+        self.tracker = None
 
     def _stopping(self) -> bool:
         return bool(self.stop_check and self.stop_check())
@@ -73,6 +75,15 @@ class AttackFarmer:
         return FarmResult(False, "stopped", counts_toward_interval=True)
 
     def _gs(self, state: GameState, reason: str) -> None:
+        from coc_bot.attack.recovery import AttackCheckpoint
+        checkpoint = AttackCheckpoint(self.config)
+        phases = {GameState.ATTACK_MENU: 'attack_menu', GameState.MATCHMAKING: 'matchmaking',
+                  GameState.IN_BATTLE: 'opponent', GameState.RETURNING_HOME: 'returning_home'}
+        if state in phases:
+            if state == GameState.ATTACK_MENU and checkpoint.load() is None:
+                checkpoint.begin()
+            else:
+                checkpoint.update(phases[state], **({'entered_opponent':True} if state == GameState.IN_BATTLE else {}))
         if self.game_state is not None:
             self.game_state.transition(state, reason=reason)
 
@@ -84,6 +95,28 @@ class AttackFarmer:
             self._on_mode(mode)
 
     def run_one_attack(self) -> FarmResult:
+        from dataclasses import replace
+        from coc_bot.attack.planned_farmer import context
+        from coc_bot.attack.recovery import AttackCheckpoint, recover_attack, finish_attack
+        from coc_bot.runtime.screenshot_retention import prune_attack_diagnostics
+        session = context(self)
+        if recover_attack(session, tracker=self.tracker):
+            return FarmResult(False, 'Interrupted attack recovered; no new attack started', interval_recorded=True)
+        prune_attack_diagnostics(self.config.data_dir)
+        try:
+            result = self._run_one_attack()
+            state = AttackCheckpoint(self.config).load()
+            if state is not None and state['phase'] == 'home_confirmed' and not self._stopping():
+                finish_attack(session, tracker=self.tracker)
+                result = replace(result, interval_recorded=True)
+            return result
+        finally:
+            prune_attack_diagnostics(self.config.data_dir)
+
+    def _run_one_attack(self) -> FarmResult:
+        if (getattr(self.config,'farm_engine','sequence')=='sequence' and
+                (self.config.data_dir/'attack-planner/camera-legacy-blocked.json').exists()):
+            return FarmResult(False,'The saved sequence camera changed. Restore its camera in Tools before using fixed taps.')
         if (getattr(self.config,'farm_engine','sequence')=='sequence' and
                 (self.config.data_dir/'attack-planner/camera-pending.json').exists()):
             return FarmResult(False, 'Return home and use Attacks → Restore camera before the old sequence.')
@@ -194,7 +227,11 @@ class AttackFarmer:
         )
         # Timer starts when the first troop goes down (beginning of dump).
         deploy_started = time.time()
+        from coc_bot.attack.recovery import AttackCheckpoint
+        AttackCheckpoint(self.config).update('deploying', deployment_possible=True,
+                                             first_attempt_at=deploy_started)
         taps = self.deployer.dump_army_along_edge(frame)
+        AttackCheckpoint(self.config).update('deployment_finished')
         logger.info("Deploy finished — {} sequence taps", taps)
         if taps <= 0:
             if self._stopping():
@@ -252,6 +289,7 @@ class AttackFarmer:
                 )
 
         self._gs(GameState.CLAN_CHAT, "farm success — chat open")
+        AttackCheckpoint(self.config).update('home_confirmed')
         logger.info("Farm attack completed successfully")
         return FarmResult(True, "ok", counts_toward_interval=True)
 

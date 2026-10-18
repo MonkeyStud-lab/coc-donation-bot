@@ -7,6 +7,9 @@ It checks two fixed labels together: **Return Home** near the bottom centre,
 and **Troops expended** above it. Both labels must match the bundled reference
 images, have the expected relative positions, and the Return Home text must be
 bright on a green control. This rejects a dimmed results screen under a popup.
+The Troops expended match isolates gold lettering from the changing scenery and
+army portraits below the title. A small blur tolerates subpixel rendering; both
+labels, their positions and the enabled green control are still required.
 The same target must appear in two consecutive successful observations, at
 least one second apart. A missing or failed observation resets confirmation.
 
@@ -64,3 +67,7 @@ layout has been validated in a live battle.
 
 If the fallback tap misses, recalibrate **Setup → Farm → Return Home** on a real
 results screen. Extending the timer will not correct a misplaced tap.
+
+Interrupted-attack recovery uses the same two-label results detector but never
+the timer fallback. It waits up to four minutes and pauses if results cannot be
+verified. See [attack recovery and storage](ATTACK_REBUILD.md#interrupted-attacks-and-diagnostic-storage).

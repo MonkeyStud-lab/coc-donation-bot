@@ -109,7 +109,7 @@ class DebugSession:
     def restore_attack_camera(self):
         from coc_bot.attack.planned_farmer import restore_camera
         if not self.attack_nav.leave_chat_for_home(): raise ValueError('Could not reach home')
-        restore_camera(self)
+        restore_camera(self,legacy=True)
         return 'Original camera restored'
 
     def close_waydroid(self) -> str:
@@ -439,7 +439,9 @@ class DebugSession:
             farmer.deployer.stop_check = stop
             self.navigator.stop_check = stop
         result = farmer.run_one_attack()
-        if result.success or result.counts_toward_interval:
+        from coc_bot.attack.recovery import pending
+        if ((result.success or result.counts_toward_interval) and
+                not result.interval_recorded and not pending(self.config)):
             tracker = RuntimeTracker(self.config)
             tracker.mark_farm_success()
             tracker.pause_farm_clock()

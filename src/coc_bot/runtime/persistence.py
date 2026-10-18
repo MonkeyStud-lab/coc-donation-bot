@@ -28,6 +28,7 @@ class RuntimeState:
     next_farm_interval_seconds: int | None = None
     # Rolled session length before break (base limit ± variance); None = roll on read.
     next_session_limit_seconds: int | None = None
+    last_completed_attack_id: str | None = None
 
     @classmethod
     def fresh(cls) -> RuntimeState:
@@ -64,6 +65,7 @@ class RuntimeState:
             farm_paused_at=data.get("farm_paused_at"),
             next_farm_interval_seconds=next_interval,
             next_session_limit_seconds=next_limit,
+            last_completed_attack_id=data.get('last_completed_attack_id'),
         )
 
 

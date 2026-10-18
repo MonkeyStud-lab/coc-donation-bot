@@ -17,16 +17,17 @@ class PlannedLifecycleTests(TestCase):
         with TemporaryDirectory() as root:
             pending=Path(root)/'attack-planner/camera-pending.json'
             pending.parent.mkdir();pending.write_text('{}')
-            config=SimpleNamespace(data_dir=Path(root),farm_engine='sequence',farm_calibrated=True)
-            bot=Mock(spec=DonationBot);bot.config=config;bot.client=Mock()
-            with self.assertRaisesRegex(ValueError,'Restore camera'):
-                DonationBot._run_inner(bot)
-            bot.client.health_check.assert_not_called()
-            farmer=Mock(spec=AttackFarmer);farmer.config=config;farmer.attack_nav=Mock()
-            result=AttackFarmer.run_one_attack(farmer)
-            self.assertFalse(result.success)
-            self.assertIn('Restore camera',result.reason)
-            self.assertFalse(farmer.attack_nav.mock_calls)
+            config=SimpleNamespace(data_dir=Path(root),adb_device='test',farm_engine='sequence',farm_calibrated=True)
+            bot=Mock(spec=DonationBot);bot.config=config;bot.client=Mock();bot.farmer=Mock();bot.tracker=Mock();bot.navigator=Mock()
+            bot.game_state=Mock()
+            farmer=Mock(spec=AttackFarmer);farmer.config=config;farmer.attack_nav=Mock();farmer.input=Mock();farmer.tracker=Mock()
+            farmer.capture=Mock()
+            with patch('coc_bot.attack.recovery.recover_attack',side_effect=ValueError('Recovery paused')):
+                with self.assertRaisesRegex(ValueError,'Recovery paused'): DonationBot._run_inner(bot)
+                with self.assertRaisesRegex(ValueError,'Recovery paused'): AttackFarmer.run_one_attack(farmer)
+            bot.client.health_check.assert_called_once()
+            bot.navigator.ensure_clan_chat.assert_not_called()
+            farmer._run_one_attack.assert_not_called()
 
     def test_unrestored_camera_stops_bot_before_donation_navigation(self):
         from coc_bot.bot import DonationBot
@@ -42,13 +43,16 @@ class PlannedLifecycleTests(TestCase):
             bot.farmer = Mock(); bot.tracker = Mock(); bot.game_state = Mock(); bot.navigator = Mock()
             bot.farmer.run_one_attack.return_value = FarmResult(False, 'camera recovery failed', True)
             self.assertTrue(DonationBot._maybe_run_farm(bot))
-            bot.request_stop.assert_called_once()
-            bot.tracker.mark_farm_success.assert_called_once()
+            bot._recover.assert_called_once()
+            bot.tracker.mark_farm_success.assert_not_called()  # recovered checkpoint owns interval accounting
             bot.navigator.ensure_clan_chat.assert_not_called()
             self.assertEqual(bot._set_state.call_args.args, ('farm',))
 
     def farmer(self):
         farmer = Mock()
+        temporary=TemporaryDirectory();self.addCleanup(temporary.cleanup)
+        farmer.config.data_dir=Path(temporary.name)
+        farmer.config.adb_device='test'
         farmer.config.farm_battle_timeout_seconds = 200
         farmer.input.client.stop_check = lambda: False
         farmer.attack_nav.classifier._clan_chat_anchor_visible.return_value = True

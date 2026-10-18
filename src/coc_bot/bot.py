@@ -168,7 +168,7 @@ class DonationBot:
             return "Farm: needs calibration (Setup → Farm)"
         from coc_bot.config import normalize_farm_deploy_sequence
 
-        if not normalize_farm_deploy_sequence(self.config.farm_deploy_sequence).get("taps"):
+        if self.config.farm_engine=='sequence' and not normalize_farm_deploy_sequence(self.config.farm_deploy_sequence).get("taps"):
             return "Farm: needs deploy sequence (Setup → Farm → Deploy tap sequence)"
         if self._farm_requested:
             return "Farm: manual attack queued"
@@ -263,6 +263,8 @@ class DonationBot:
             recorder.stop()
 
     def _run_inner(self) -> None:
+        if (self.config.data_dir/'attack-planner/camera-pending.json').exists():
+            raise ValueError('Return home and use Attacks → Restore camera before starting the bot.')
         try:
             self.client.health_check()
         except AdbError as exc:
@@ -439,7 +441,7 @@ class DonationBot:
             return True
         from coc_bot.config import normalize_farm_deploy_sequence
 
-        if not normalize_farm_deploy_sequence(self.config.farm_deploy_sequence).get("taps"):
+        if self.config.farm_engine=='sequence' and not normalize_farm_deploy_sequence(self.config.farm_deploy_sequence).get("taps"):
             logger.warning(
                 "Farm requested but no deploy tap sequence is programmed — skipping "
                 "(Setup → Farm → Deploy tap sequence)"
@@ -487,6 +489,12 @@ class DonationBot:
                 result.reason,
                 cooldown,
             )
+        if (self.config.farm_engine in ('planner','automatic') and
+                (self.config.data_dir/'attack-planner/camera-pending.json').exists()):
+            logger.error('Planned attack needs recovery — stopping before donations. '
+                         'Return home and use Attacks → Restore camera.')
+            self.request_stop()
+            return True
         self.set_mode(BotMode.DONATE)
         if not self._stop_requested:
             self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request)

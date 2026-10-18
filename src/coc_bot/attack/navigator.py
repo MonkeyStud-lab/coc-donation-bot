@@ -139,6 +139,13 @@ class AttackNavigator:
                     if not auxiliary_recovery.close(frame) or self._sleep(0.6):
                         return False
                     continue
+                # Busy chat cards can look like the gold Attack chip. A positive
+                # calibrated chat anchor must be closed before accepting it.
+                if self.donation_nav is not None and self.classifier._clan_chat_anchor_visible(frame):
+                    self.donation_nav.close_clan_chat(frame)
+                    if self._sleep(.8):
+                        return False
+                    continue
                 # Ground truth for farm: Attack! visible ⇒ ready (ignore false clan_chat).
                 if self.attack_button_visible(frame):
                     logger.info("Home ready — Attack! chip visible")
@@ -205,6 +212,8 @@ class AttackNavigator:
                     return False
             logger.warning("Could not reach home before attack")
             frame = self.capture.screenshot()
+            if self.classifier._clan_chat_anchor_visible(frame):
+                return False
             return self.attack_button_visible(frame) or (
                 self.classify(frame, mode=BotMode.HOME) == ScreenType.HOME
             )
@@ -342,6 +351,9 @@ class AttackNavigator:
 
     def open_attack_menu(self) -> bool:
         frame = self.capture.screenshot()
+        frame = self._close_confirmed_chat(frame)
+        if frame is None:
+            return False
         if self._attack_menu_open(frame):
             return True
 
@@ -349,6 +361,9 @@ class AttackNavigator:
             logger.info("Attack! not visible yet — clearing chat/overlays")
             self.leave_chat_for_home(timeout=12.0)
             frame = self.capture.screenshot()
+            frame = self._close_confirmed_chat(frame)
+            if frame is None:
+                return False
             if self._attack_menu_open(frame):
                 return True
 
@@ -414,6 +429,19 @@ class AttackNavigator:
         logger.warning("Could not open Attack menu — see data/debug/attack_*.png")
         return False
 
+    def _close_confirmed_chat(self, frame):
+        """Return a fresh frame only after the calibrated drawer anchor clears."""
+        if self.donation_nav is None or not self.classifier._clan_chat_anchor_visible(frame):
+            return frame
+        self.donation_nav.close_clan_chat(frame)
+        if self._sleep(.8):
+            return None
+        fresh=self.capture.screenshot()
+        if self.classifier._clan_chat_anchor_visible(fresh):
+            logger.warning('Clan chat still covers Attack — refusing candidate taps')
+            return None
+        return fresh
+
     def start_unranked_battle(self) -> bool:
         """Open unranked, then confirm the visible army page before search."""
         if self._stopping():
@@ -474,7 +502,7 @@ class AttackNavigator:
                 # A disconnected matchmaking attempt is not a deployable opponent.
                 return False
             if self.battlefield_ready(frame):
-                logger.info("Battlefield verified: End Battle and Next visible (screen={})", screen.value)
+                logger.info("Battlefield verified: independent combat controls visible (screen={})", screen.value)
                 return True
             if screen == ScreenType.MATCHMAKING:
                 logger.debug("wait_for_battle: still searching (matchmaking)")

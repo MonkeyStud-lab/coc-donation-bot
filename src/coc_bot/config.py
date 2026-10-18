@@ -70,6 +70,7 @@ class BotConfig:
     debug_save_frames: bool = False
     dry_run: bool = False
     farm_enabled: bool = False
+    farm_engine: str = 'sequence'
     upgrade_buildings_enabled: bool = False
     upgrade_research_enabled: bool = False
     upgrade_interval_seconds: int = 900
@@ -320,6 +321,7 @@ def load_config(
         clan_donation_limits=clan_limits,
         ocr_confidence_threshold=vision.get("ocr_confidence_threshold", 0.5),
         farm_enabled=bool(farm.get("enabled", False)),
+        farm_engine=str(farm.get('engine','sequence')) if farm.get('engine','sequence') in ('sequence','planner','automatic') else 'sequence',
         upgrade_buildings_enabled=upgrades.get('buildings_enabled') is True,
         upgrade_research_enabled=upgrades.get('research_enabled') is True,
         upgrade_interval_seconds=max(60,int(upgrades.get('interval_seconds',900))),

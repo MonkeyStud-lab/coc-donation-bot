@@ -44,6 +44,19 @@ class Settings(Payload):
     values: dict
 
 
+class AttackPreview(Payload):
+    observation_id: str = Field(max_length=32)
+    revision: str = Field(max_length=64)
+    plan: dict
+    corners: list[list[float]] = Field(min_length=4,max_length=4)
+    save_routine: StrictBool = False
+
+
+class AttackExecution(Payload):
+    observation_id: str = Field(max_length=32)
+    revision: str = Field(max_length=64)
+
+
 class Selection(Payload):
     capture: str
     part: str
@@ -56,6 +69,11 @@ class Selection(Payload):
 
 class Rename(Payload):
     name: str = Field(max_length=80)
+
+
+class ArmyReview(Payload):
+    revision: str = Field(max_length=64)
+    corrections: list[dict] = Field(max_length=50)
 
 
 def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
@@ -326,6 +344,71 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
     def diagnostic(action: str):
         service.diagnostic(action)
         return service.snapshot()
+
+    @app.get('/api/attack-observations/{ident}')
+    def attack_observation(ident: str):
+        from coc_bot.control.attack_observation import read_report
+        with service.lock:
+            return read_report(load_config().data_dir,ident)
+
+    @app.get('/api/attack-planner')
+    def attack_planner_state():
+        from coc_bot.control.attack_planner import template_path
+        from coc_bot.control.attack_observation import reports_root
+        config=load_config();path=template_path(config)
+        report=None
+        for file in sorted(reports_root(config.data_dir).glob('*/report.json'),key=lambda p:p.stat().st_mtime,reverse=True):
+            try:
+                candidate=json.loads(file.read_text(encoding='utf-8'))
+                if candidate.get('survey') and candidate.get('device')==config.adb_device:
+                    report=candidate;break
+            except (OSError,ValueError): continue
+        return {'report':report,'routine_saved':path.is_file(),'engine':config.farm_engine}
+
+    @app.get('/api/attack-observations/{ident}/default-plan')
+    def attack_default_plan(ident: str):
+        from coc_bot.control.attack_observation import read_report
+        from coc_bot.control.attack_planner import default_plan
+        return default_plan(read_report(load_config().data_dir,ident))
+
+    @app.get('/api/attack-planner/routine')
+    def attack_saved_routine():
+        from coc_bot.control.attack_planner import load_template
+        _,plan=load_template(load_config())
+        return plan.to_dict()
+
+    @app.post('/api/attack-planner/preview')
+    def attack_preview(body: AttackPreview):
+        from coc_bot.control.attack_planner import save_preview
+        with service.mutation():
+            report=save_preview(load_config(),body.observation_id,body.revision,body.plan,body.corners,
+                                save_routine=body.save_routine)
+            service.result=report
+            return report
+
+    @app.post('/api/attack-planner/execute')
+    def attack_execute(body: AttackExecution):
+        service.execute_attack_preview(body.observation_id,body.revision)
+        return service.snapshot()
+
+    @app.post('/api/attack-planner/automatic')
+    def attack_automatic():
+        service.automatic_attack()
+        return service.snapshot()
+
+    @app.get('/api/attack-observations/{ident}/images/{asset}')
+    def attack_observation_image(ident: str, asset: str):
+        from coc_bot.control.attack_observation import observation_asset
+        return FileResponse(observation_asset(load_config().data_dir,ident,asset),media_type='image/png')
+
+    @app.patch('/api/attack-observations/{ident}')
+    def attack_observation_review(ident: str, body: ArmyReview):
+        from coc_bot.control.attack_observation import review_army
+        with service.mutation():
+            reviewed=review_army(load_config().data_dir,ident,body.revision,body.corrections)
+            if isinstance(service.result,dict) and service.result.get('observation_id')==ident:
+                service.result=reviewed
+            return reviewed
 
     def find_backup(ident):
         from coc_bot.control.backups import list_backups

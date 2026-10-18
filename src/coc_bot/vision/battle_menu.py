@@ -1,5 +1,6 @@
 """Readable anchors for multiplayer selection, army confirmation and battle."""
 import cv2
+import re
 from coc_bot.vision.ocr import read_short_label
 
 
@@ -36,19 +37,47 @@ def army_confirmation_button(frame, *, stop_check=None):
 def battlefield_ready(frame, *, stop_check=None):
     """Require readable scout controls, rather than scenery/card colors.
 
-    This gate is specifically for BEFORE deployment: the opponent must show
-    End Battle/Surrender and either Next or the battle countdown label.
+    The opponent must show End Battle/Surrender and either Next, the battle
+    countdown label, or Overall Damage. The latter remains fixed during combat.
     Unknown/OCR failures never authorize taps.
     """
     end = _white_label(frame, (.015,.715,.13,.775), stop_check)
     # The game's heavy font commonly reads the final lowercase l as i.
-    if not any(word in end for word in ("endbattle", "endbattie", "surrender")):
+    if not (any(word in end for word in ("endbattle", "endbattie")) or
+            re.search(r'surre{1,2}nder', end)):
         return False
     next_label = _white_label(frame, (.89,.66,.985,.715), stop_check)
     if "next" in next_label:
         return True
     timer = _white_label(frame, (.43,.01,.57,.05), stop_check)
-    return "battlestartsin" in timer or "battleendsin" in timer
+    if re.search(r'battb?le(?:starts|e(?:n|fi)ds)i+n', timer):
+        return True
+    # Defender labels can sit beside the countdown and contaminate the wider
+    # crop after scouting ends. The shorter active-battle title fits this crop.
+    timer = _white_label(frame, (.45,.02,.55,.047), stop_check)
+    if re.search(r'battb?lee(?:n|fi)dsi+n', timer):
+        return True
+    return bool(re.search(r'[oq]veralldamage',
+                         _white_label(frame, (.83,.695,.985,.73), stop_check)))
+
+
+def active_battle_ready(frame, *, stop_check=None, timer_confirmed=False):
+    """Two independent active-battle labels when a unit tooltip covers Surrender.
+
+    Used only after the executor has already established the battlefield. A
+    timer-shaped patch or a portrait alone never authorizes a map input.
+    """
+    # A previously verified battle can supply an unchanged, bright timer
+    # heading. The independent damage label still needs fresh recognition.
+    if not timer_confirmed:
+        timer = _white_label(frame, (.45,.02,.55,.047), stop_check)
+        # Observed outlined-font errors: an extra b beside "tt", and n split as fi.
+        if not re.search(r'battb?lee(?:n|fi)dsi+n', timer):
+            return False
+    damage = _white_label(frame, (.83,.695,.985,.73), stop_check)
+    # The outlined O sometimes reads as q against green scenery. The entire
+    # damage label and independent timer are still required.
+    return bool(re.search(r'[oq]veralldamage', damage))
 
 
 def reward_continue_button(frame, *, stop_check=None):

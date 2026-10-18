@@ -43,6 +43,7 @@ clan:
 
 # Unranked Battle farming via programmed deploy tap sequence. Requires farm calibration.
 farm:
+  engine: sequence               # sequence | planner (saved routine) | automatic (built-in Electro Dragons)
   enabled: false
   interval_seconds: 3600          # base seconds between fought auto farms (even if leave fails)
   interval_variance_seconds: 300  # random ±N seconds around interval (0 = exact)

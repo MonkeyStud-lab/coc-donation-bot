@@ -184,13 +184,21 @@ SETTINGS: list[SettingField] = [
     ),
     SettingField(
         "farm_enabled",
-        "Enable elixir farm attacks",
-        "When enabled, run one unranked Battle per interval using your programmed "
-        "deploy tap sequence. Requires Setup → Farm calibration and a deploy sequence.",
+        "Enable scheduled farm attacks",
+        "Run one unranked attack per interval using the selected attack method. "
+        "Requires the normal Farm navigation calibration.",
         "bool",
         lambda c: c.farm_enabled,
         "Farm",
         ("farm", "enabled"),
+    ),
+    SettingField(
+        'farm_engine', 'Attack method',
+        'Automatic reads the army and builds an Electro Dragon attack without a saved routine. '
+        'Supports optional Rage, siege and recognized heroes; uncertain or unsupported armies are skipped. '
+        'Planner uses a saved, live-tested routine. Sequence keeps your existing taps.',
+        'choice', lambda c: c.farm_engine, 'Farm', ('farm','engine'),
+        choices=('sequence','planner','automatic'),
     ),
     SettingField(
         "farm_interval_seconds",

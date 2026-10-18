@@ -46,6 +46,24 @@ class UpdatedMenuTests(unittest.TestCase):
         nav._tap_named.assert_not_called()
         nav.capture.screenshot.assert_called_once()
 
+    def test_chat_anchor_is_closed_before_accepting_a_false_attack_chip(self):
+        nav=self.navigator()
+        nav.donation_nav=MagicMock()
+        nav.classifier.find_reload_game_button=MagicMock(return_value=None)
+        nav.classifier.auxiliary_page=MagicMock(return_value=None)
+        nav.classifier._clan_chat_anchor_visible=MagicMock(side_effect=[True,False])
+        nav.attack_button_visible=MagicMock(return_value=True)
+        self.assertTrue(nav.leave_chat_for_home(timeout=2))
+        nav.donation_nav.close_clan_chat.assert_called_once()
+
+    def test_attack_candidates_are_blocked_when_confirmed_chat_does_not_close(self):
+        nav=self.navigator()
+        nav.donation_nav=MagicMock()
+        nav.classifier._clan_chat_anchor_visible=MagicMock(return_value=True)
+        self.assertFalse(nav.open_attack_menu())
+        nav.donation_nav.close_clan_chat.assert_called_once()
+        nav.input.tap.assert_not_called()
+
     def test_calibrated_direct_flow_still_skips_second_tap_when_ocr_is_unavailable(self):
         nav=self.navigator(True)
         nav.config.tap_points['find_match']=[1645,930]
@@ -110,9 +128,33 @@ class UpdatedMenuTests(unittest.TestCase):
                 self.assertIsNone(army_confirmation_button(frame))
 
     def test_deploy_gate_requires_both_scout_labels(self):
-        for labels in (['attack'], ['endbattle','save',''], ['endbattle','',''], ['endbattle','next'], ['surrender','','battleendsin']):
+        for labels in (['attack'], ['endbattle','save','','',''], ['endbattle','','','',''], ['endbattle','next'], ['surrender','','battleendsin']):
             with patch('coc_bot.vision.battle_menu._white_label',side_effect=labels):
                 self.assertEqual(battlefield_ready(self.frame()),labels in (['endbattle','next'],['surrender','','battleendsin']))
+
+    def test_countdown_title_retry_excludes_adjacent_defender_labels(self):
+        with patch('coc_bot.vision.battle_menu._white_label',
+                   side_effect=['endbattie','','babtleendsin','battleendsiin']):
+            self.assertTrue(battlefield_ready(self.frame()))
+
+    def test_observed_bold_font_errors_still_require_two_battle_labels(self):
+        from coc_bot.vision.battle_menu import active_battle_ready
+        with patch('coc_bot.vision.battle_menu._white_label',
+                   side_effect=['surreender','','battleendsin']):
+            self.assertTrue(battlefield_ready(self.frame()))
+        with patch('coc_bot.vision.battle_menu._white_label',
+                   side_effect=['battleendsin','qveralldamage']):
+            self.assertTrue(active_battle_ready(self.frame()))
+        with patch('coc_bot.vision.battle_menu._white_label',
+                   side_effect=['surreender','','','','']):
+            self.assertFalse(battlefield_ready(self.frame()))
+
+    def test_end_battle_and_damage_are_independent_active_battle_anchors(self):
+        with patch('coc_bot.vision.battle_menu._white_label',
+                   side_effect=['endbattie','','unreadable','unreadable','overalldamage']):
+            self.assertTrue(battlefield_ready(self.frame()))
+        with patch('coc_bot.vision.battle_menu._white_label',return_value='overalldamage'):
+            self.assertFalse(battlefield_ready(self.frame()))
 
     def test_army_confirmation_is_tapped_before_accepting_opponent(self):
         nav=self.navigator(True)

@@ -71,7 +71,7 @@ Loaded by [`src/coc_bot/config.py`](../src/coc_bot/config.py) → `load_config()
 
 `COC_BOT_CONFIG` can select another calibration file; it does not isolate the rest of the data folder. Clan limits in `config/clan_perks.yaml` support the optional fill planner. The live donation path follows the game's colored/grey slots instead of calculating a housing budget.
 
-The GUI checks donation readiness before Start. Donations also require an elixir-button tap and a reference image of its selected state; the executor refuses donation taps if selection cannot be confirmed. Farm needs its navigation targets and a programmed deploy sequence. Setup shows missing parts; [RELIABILITY.md](RELIABILITY.md) describes the independent safeguards.
+The GUI checks donation readiness before Start. Donations also require an elixir-button tap and a reference image of its selected state; the executor refuses donation taps if selection cannot be confirmed. Farm needs its navigation targets. The Programmed tap sequence method also needs recorded deployment taps; Automatic does not. Setup shows missing parts; [RELIABILITY.md](RELIABILITY.md) describes the independent safeguards.
 
 ---
 
@@ -147,6 +147,13 @@ Farm is only started when the bot is **not** mid `open_donation` / `donate`.
 
 ## Farm attack loop
 
+The optional mass Electro Dragon planner, visual editor, and verified executor
+are documented in [ATTACK_REBUILD.md](ATTACK_REBUILD.md). The loop below remains
+the default Programmed tap sequence. The Automatic method reads the current army
+and generates a built-in Electro Dragon attack from a fresh opponent map, without
+a saved routine or manual map review. Custom planner scheduling requires a saved
+routine that completed a supervised live test. Neither method changes old calibration.
+
 Orchestrator: [`src/coc_bot/attack/farmer.py`](../src/coc_bot/attack/farmer.py).
 
 ```text
@@ -163,9 +170,9 @@ leave clan chat → Attack! → unranked Battle → battlefield
 | Deploy taps | `attack/deployer.py` + `farm_deploy_sequence` in `calibrated.yaml` |
 | Triggers | GUI **Farm attack now**, or auto when `farm.enabled` + interval elapsed |
 
-### Farm deploy sequence (required)
+### Programmed tap sequence method
 
-Farm **only** uses a programmed tap sequence. Without taps in `farm_deploy_sequence`, attacks abort before deploy.
+When **Attack method** is **sequence**, farm uses a programmed tap sequence. Without taps in `farm_deploy_sequence`, that method aborts before deployment. **automatic** and **planner** use their own army and map checks instead.
 
 Program from **Setup → Farm → Deploy tap sequence** (Recalibrate Selected), or Diagnostics: be on the battlefield first; the bot pans, shows a screenshot, and you click taps in order (numbered circles; radius = **farm deploy jitter**). The sequence stores its own **side / pan_swipes**; Settings → Farm deploy side / pan swipes are defaults for new sequences. Jitter applies only to sequence taps — donations use Timing → Tap jitter.
 

@@ -226,6 +226,11 @@ class ControlService:
         # Explicit allowlist: never accept module names, paths or shell commands.
         actions = {
             "health_check": "health_check", "classify_screen": "classify_screen",
+            "zoom_home": "test_home_zoom_out",
+            "inspect_attack": "inspect_attack",
+            "survey_attack": "survey_attack",
+            "prepare_attack": "prepare_attack",
+            "restore_attack_camera": "restore_attack_camera",
             "open_clan_chat": "open_clan_chat", "find_classify_request": "find_and_classify_request",
             "open_donation": "open_donation_panel", "close_donation": "close_donation_panel",
             "scroll_chat": "scroll_chat_step", "anti_idle": "anti_idle_nudge",
@@ -247,6 +252,22 @@ class ControlService:
                     self.platform.update("stopped", "Game closed — use Retry startup when ready")
                 return result
         self.job(action, execute)
+
+    def execute_attack_preview(self, ident, revision):
+        def execute(cancel):
+            from coc_bot.runtime.device_lease import DeviceLease
+            from coc_bot.control.attack_planner import execute_preview
+            session=self.session(cancel)
+            with DeviceLease(session.config.adb_device):
+                return execute_preview(session,ident,revision)
+        self.job('planned_attack',execute)
+
+    def automatic_attack(self):
+        """One built-in attack, without editing settings or a saved routine."""
+        def execute(cancel):
+            success, message = self.session(cancel).farm_one_shot(cancel.is_set, automatic=True)
+            return {'automatic_attack': True, 'success': success, 'message': message}
+        self.job('automatic_attack', execute)
 
     def snapshot(self):
         with self.lock:

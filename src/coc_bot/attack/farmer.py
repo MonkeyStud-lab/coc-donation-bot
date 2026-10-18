@@ -84,8 +84,15 @@ class AttackFarmer:
             self._on_mode(mode)
 
     def run_one_attack(self) -> FarmResult:
+        if (getattr(self.config,'farm_engine','sequence')=='sequence' and
+                (self.config.data_dir/'attack-planner/camera-pending.json').exists()):
+            return FarmResult(False, 'Return home and use Attacks → Restore camera before the old sequence.')
         if not self.config.farm_calibrated:
             return FarmResult(False, "farm not calibrated (need attack_button, unranked_battle, return_home)")
+
+        if getattr(self.config,'farm_engine','sequence') in ('planner','automatic'):
+            from coc_bot.attack.planned_farmer import run_planned_attack
+            return run_planned_attack(self,automatic=self.config.farm_engine=='automatic')
 
         from coc_bot.config import normalize_farm_deploy_sequence
 
@@ -114,6 +121,12 @@ class AttackFarmer:
                 return FarmResult(False, "stopped")
             self._abort_to_chat()
             return FarmResult(False, "could not reach home")
+
+        from coc_bot.attack.planned_farmer import context, restore_camera
+        try:
+            restore_camera(context(self))
+        except ValueError as exc:
+            return FarmResult(False,str(exc))
 
         if self._stopping():
             return FarmResult(False, "stopped")

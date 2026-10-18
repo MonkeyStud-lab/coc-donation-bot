@@ -85,6 +85,8 @@ bash scripts/get_started.sh
 ```
 
 - **Dashboard:** Start, Stop, Farm attack now, connection controls, and activity.
+- **Attacks (browser):** Run an automatic Electro Dragon attack, or review the army,
+  map an opponent, and edit a custom routine. Existing calibration stays separate.
 - **Settings:** Donations, timing presets, farming, breaks, themes, and collection
   limits. Developer options expose individual timing values.
 - **Setup:** Calibrate individual parts using the in-app instructions.
@@ -131,6 +133,16 @@ For changed game buttons, see [game UI compatibility and recalibration](docs/UI_
 
 Battle results are checked using consecutive screenshots. The timer remains
 as a fallback. See [battle completion](docs/BATTLE_COMPLETION.md) for details.
+
+For automatic mass Electro Dragon farming without a saved routine, choose
+**Attacks → Automatic attack**. For scheduled use, set **Settings → Attack method**
+to **automatic**. It reads current quantities, maps the village, and skips uncertain
+or unsupported armies. Normal Farm navigation calibration is still required.
+
+For a custom map-based routine, open **Attacks** and follow the
+[attack planner guide](docs/ATTACK_REBUILD.md). It reads the army, lets you correct
+it, and checks each deployment. The existing tap sequence remains the default;
+switching to **Planner** requires a successful supervised run of your saved routine.
 
 ### Optional upgrades
 

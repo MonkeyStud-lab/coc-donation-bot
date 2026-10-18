@@ -63,6 +63,55 @@ class DebugSession:
         self.client.health_check()
         return f"ADB OK — device {self.config.adb_device}"
 
+    def test_home_zoom_out(self) -> str:
+        """Manual experiment only. The existing farm engine never calls this."""
+        import uuid
+        import cv2
+        from coc_bot.adb.multitouch import Multitouch
+        from coc_bot.attack.camera import compare_camera
+        from coc_bot.vision.battle_menu import home_build_control_visible
+        from coc_bot.vision.screens import ScreenType
+        frame = self.capture.screenshot()
+        if (self.classifier.classify(frame) != ScreenType.HOME or
+                not home_build_control_visible(frame) or
+                self.classifier.looks_like_blocking_popup(frame)):
+            raise ValueError('Close clan chat and other menus, then open your home village before testing zoom.')
+        h, w = frame.shape[:2]
+        if self.client.wm_size() != (w, h):
+            raise ValueError('Android input dimensions differ from the screenshot; zoom test blocked.')
+        folder = self.config.data_dir / 'debug' / 'attack-v2' / uuid.uuid4().hex
+        folder.mkdir(parents=True)
+        cv2.imwrite(str(folder / 'before.png'), frame)
+        with Multitouch(self.client, (w, h)) as touch:
+            touch.pinch()
+        self._sleep(.8)
+        after = self.capture.screenshot()
+        cv2.imwrite(str(folder / 'after.png'), after)
+        result = compare_camera(frame, after)
+        import json
+        (folder / 'camera.json').write_text(json.dumps(result, indent=2))
+        if result.get('zoomed_out'):
+            return f'Zoom-out verified (map scale {result["scale"]:.2f}). Camera evidence: {folder}. Automatic attacks unchanged.'
+        return f'Gesture sent; zoom-out not verified. It may already be zoomed out. Evidence: {folder}. Automatic attacks unchanged.'
+
+    def inspect_attack(self):
+        from coc_bot.control.attack_observation import inspect_attack
+        return inspect_attack(self)
+
+    def survey_attack(self):
+        from coc_bot.control.attack_planner import survey_opponent
+        return survey_opponent(self)
+
+    def prepare_attack(self):
+        from coc_bot.control.attack_planner import prepare_opponent
+        return prepare_opponent(self)
+
+    def restore_attack_camera(self):
+        from coc_bot.attack.planned_farmer import restore_camera
+        if not self.attack_nav.leave_chat_for_home(): raise ValueError('Could not reach home')
+        restore_camera(self)
+        return 'Original camera restored'
+
     def close_waydroid(self) -> str:
         """Close the game and the current user's session, with bounded cancellation."""
         import subprocess
@@ -371,7 +420,7 @@ class DebugSession:
         )
 
     @exclusive_device
-    def farm_one_shot(self, should_stop=None) -> tuple[bool, str]:
+    def farm_one_shot(self, should_stop=None, *, automatic=False) -> tuple[bool, str]:
         """Run a full unranked farm attack once (leave chat → deploy → return home)."""
         from collections.abc import Callable
 
@@ -381,16 +430,16 @@ class DebugSession:
         stop: Callable[[], bool] | None = should_stop
         self.client.stop_check = stop
         self.client.health_check()
-        farmer = AttackFarmer(
-            self.config, self.capture, self.input, self.matcher, self.navigator
-        )
+        from dataclasses import replace
+        config = replace(self.config, farm_engine='automatic') if automatic else self.config
+        farmer = AttackFarmer(config, self.capture, self.input, self.matcher, self.navigator)
         if stop is not None:
             farmer.stop_check = stop
             farmer.attack_nav.stop_check = stop
             farmer.deployer.stop_check = stop
             self.navigator.stop_check = stop
         result = farmer.run_one_attack()
-        if result.success:
+        if result.success or result.counts_toward_interval:
             tracker = RuntimeTracker(self.config)
             tracker.mark_farm_success()
             tracker.pause_farm_clock()

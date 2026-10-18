@@ -1,4 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
+import {AttackObservation} from './AttackObservation';
+import {AttackPlanner} from './AttackPlanner';
 import {createRoot} from 'react-dom/client';
 import './style.css';
 
@@ -14,7 +16,7 @@ type Capture = {id:string;width:number;height:number;revision:string;at:string;t
 let csrf='';
 const FIRST_LAUNCH=location.pathname.startsWith('/first-launch');
 const BASE=FIRST_LAUNCH?'/first-launch':'';
-const BASIC_SETTINGS=new Set(['gui_timing_preset','donate_open_requests','farm_enabled',
+const BASIC_SETTINGS=new Set(['gui_timing_preset','donate_open_requests','farm_enabled','farm_engine',
   'farm_interval_seconds','farm_interval_variance_seconds','session_limit_seconds',
   'session_limit_variance_seconds','gui_theme','gui_show_debug_activity','gui_dev_options']);
 async function api(path:string, method='GET', body?:unknown) {
@@ -199,7 +201,7 @@ function App(){
     (advanced||BASIC_SETTINGS.has(f.key)||f.key.startsWith('upgrade_'))&&
     (f.label+' '+f.description).toLowerCase().includes(search.toLowerCase()))||[];
   return <div className="app"><aside><a className="brand" href="#" onClick={e=>e.preventDefault()}>CoC Bot</a>
-    <nav>{['Dashboard','Settings','Setup','Library','Diagnostics'].map(p=><button key={p}
+    <nav>{['Dashboard','Attacks','Settings','Setup','Library','Diagnostics'].map(p=><button key={p}
       className={page===p?'selected':''} onClick={()=>navigate(p)}>{p}</button>)}</nav>
     {FIRST_LAUNCH&&<button disabled={locked} onClick={()=>location.assign('/')}>Exit first-launch test</button>}
     {passwordRequired&&<button onClick={()=>attempt(async()=>{await api('logout','POST');expired();})}>Sign out</button>}</aside>
@@ -234,6 +236,7 @@ function App(){
         <button onClick={()=>navigator.clipboard.writeText(logs.map(x=>x.at+' '+x.level+' '+x.text).join('\n')).catch(()=>setNotice('Clipboard unavailable. Use Export in Diagnostics.'))}>Copy</button></div>
         <div className="log">{logs.filter(x=>debug||x.level!=='DEBUG').map(x=><div key={x.id}><time>{new Date(x.at).toLocaleTimeString()}</time> {x.text}</div>)}<div ref={logEnd}/></div></section>
     </>}
+    {page==='Attacks'&&<AttackPlanner api={api} base={BASE} result={status?.result} locked={locked} operation={status?.operation} stop={()=>command('stop')}/>}
     {page==='Settings'&&<>
       <div className="toolbar"><input aria-label="Search settings" placeholder="Search settings" value={search} onChange={e=>setSearch(e.target.value)}/>
         <label className="toggle"><input type="checkbox" checked={advanced} onChange={e=>setAdvanced(e.target.checked)}/>Advanced</label>
@@ -327,7 +330,7 @@ function App(){
         <button onClick={()=>attempt(async()=>{const data=await api('readiness');setNotice(data.issues.length?data.issues.join(' · '):'Calibration checks passed');})}>Check calibration</button>
         <button onClick={()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([logs.map(x=>x.at+' '+x.level+' '+x.text).join('\n')],{type:'text/plain'}));a.download='bot-activity.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}}>Export activity</button>
         <a href={BASE+'/api/report'} download="bot-report.json">Download report</a></div>
-      <section>{[['health_check','Check device'],['classify_screen','Recognize screen'],['open_clan_chat','Open clan chat'],
+      <section>{[['health_check','Check device'],['classify_screen','Recognize screen'],['zoom_home','Test zoom out at home'],['inspect_attack','Inspect army and opponent map'],['open_clan_chat','Open clan chat'],
         ['find_classify_request','Inspect request'],['open_donation','Open donation'],['close_donation','Close donation'],
         ['scroll_chat','Scroll chat'],['anti_idle','Test inactivity nudge'],['farm_open_attack','Open Attack menu'],
         ['farm_start_search','Start opponent search'],['farm_classify','Recognize battle'],
@@ -337,7 +340,9 @@ function App(){
         <div className="setting" key={id}><span>{label}</span><button disabled={locked}
           onClick={()=>{if(id==='farm_clear_deploy'&&!confirm('Remove your saved farm deploy sequence?'))return;
             attempt(()=>api('diagnostics/'+id,'POST'));}}>Run</button></div>)}</section>
-      {status?.result&&!status.result?.id&&!status.result?.upgrade_report&&<pre className="result">{typeof status.result==='string'?status.result:JSON.stringify(status.result,null,2)}</pre>}
+      {status?.result?.attack_observation&&<AttackObservation report={status.result} base={BASE}
+        save={(id,revision,corrections)=>api('attack-observations/'+id,'PATCH',{revision,corrections})}/>}
+      {status?.result&&!status.result?.id&&!status.result?.upgrade_report&&!status.result?.attack_observation&&<pre className="result">{typeof status.result==='string'?status.result:JSON.stringify(status.result,null,2)}</pre>}
     </>}
     </main>
     {viewer&&<GameViewer close={()=>setViewer(false)}/>}

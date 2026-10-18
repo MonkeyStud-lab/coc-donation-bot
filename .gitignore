@@ -10,6 +10,7 @@ build/
 data/calibrated.yaml
 data/runtime_state.json
 data/upgrades/
+data/attack-planner/
 data/debug/
 data/calibration_backups/
 data/templates/

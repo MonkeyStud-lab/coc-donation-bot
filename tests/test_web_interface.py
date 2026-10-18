@@ -47,6 +47,101 @@ class WebTests(TestCase):
         self.client.post("/api/logout", headers=self.headers)
         self.assertEqual(self.client.get("/api/status").status_code, 401)
 
+    def test_attack_review_is_private_revisioned_and_does_not_enable_deployment(self):
+        from coc_bot.attack.army import ArmyCard
+        from coc_bot.control.attack_observation import write_report
+        ident='b'*32
+        folder=self.home/'data/debug/attack-observations'/ident
+        folder.mkdir(parents=True)
+        report={'attack_observation':True,'observation_id':ident,'cards':[
+            ArmyCard('card-0',(0,0,10,10),None,'hero',1).to_dict()],
+            'ready_for_execution':False,'map':{'coverage':'partial'}}
+        write_report(folder,report)
+        (folder/'overlay.png').write_bytes(b'test-image')
+        url='/api/attack-observations/'+ident
+        self.assertEqual(self.client.get(url).status_code,200)
+        self.assertEqual(self.client.get(url+'/images/overlay.png').content,b'test-image')
+        body={'revision':report['revision'],'corrections':[
+            {'slot':'card-0','unit_id':'barbarian_king','kind':'hero','quantity':1,'confirmed':True}]}
+        self.assertEqual(self.client.patch(url,json=body).status_code,403)
+        updated=self.client.patch(url,json=body,headers=self.headers)
+        self.assertEqual(updated.status_code,200)
+        self.assertTrue(updated.json()['cards'][0]['confirmed'])
+        self.assertFalse(updated.json()['ready_for_execution'])
+        self.assertEqual(self.client.patch(url,json=body,headers=self.headers).status_code,400)
+        self.assertEqual(self.client.get(url+'/images/report.json').status_code,400)
+        self.client.post('/api/logout',headers=self.headers)
+        self.assertEqual(self.client.get(url+'/images/overlay.png').status_code,401)
+
+    def test_automatic_attack_needs_csrf_exclusive_ownership_and_honors_stop(self):
+        from unittest.mock import Mock
+        entered=threading.Event()
+        session=Mock()
+        def run(stop, *, automatic=False):
+            self.assertTrue(automatic)
+            entered.set()
+            while not stop():
+                threading.Event().wait(.01)
+            return False,'Stopped'
+        session.farm_one_shot.side_effect=run
+        self.service.session_factory=lambda:session
+        url='/api/attack-planner/automatic'
+        self.assertEqual(self.client.post(url).status_code,403)
+        self.assertEqual(self.client.post(url,headers=self.headers).status_code,200)
+        self.assertTrue(entered.wait(1))
+        self.assertEqual(self.client.post(url,headers=self.headers).status_code,409)
+        self.client.post('/api/stop',headers=self.headers)
+        self.assertTrue(self.service.controller.wait(1))
+        self.assertEqual(self.service.result,{'automatic_attack':True,'success':False,'message':'Stopped'})
+        self.assertFalse((self.home/'data/attack-planner/routine.json').exists())
+
+    def test_automatic_attack_method_roundtrips_in_settings(self):
+        saved=save_settings({'farm_engine':'automatic'},revision())
+        self.assertEqual(load_config().farm_engine,'automatic')
+        self.assertEqual(settings_snapshot()['values']['farm_engine'],'automatic')
+
+    def test_attack_planner_requires_csrf_valid_geometry_and_idle_ownership(self):
+        from coc_bot.attack.army import ArmyCard
+        from coc_bot.attack.plans import AttackPlan,ArmyEntry,PlanStep,MapPoint
+        from coc_bot.control.attack_observation import write_report
+        ident='d'*32;folder=self.home/'data/debug/attack-observations'/ident;folder.mkdir(parents=True)
+        report={'observation_id':ident,'page':'battle','device':load_config().adb_device,
+                'survey':{'captured_at':0},'cards':[ArmyCard('card-0',(0,0,20,20),
+                   'electro_dragon','troop',11,confirmed=True).to_dict()]}
+        write_report(folder,report)
+        plan=AttackPlan((ArmyEntry('electro_dragon','troop',11,True),),
+                       (PlanStep('deploy_point','electro_dragon',11,(MapPoint(.055,.5),)),))
+        body={'observation_id':ident,'revision':report['revision'],'plan':plan.to_dict(),
+              'corners':[[500,50],[900,300],[500,550],[100,300]]}
+        self.assertEqual(self.client.post('/api/attack-planner/preview',json=body).status_code,403)
+        invalid=body|{'corners':[[0,0]]*4}
+        self.assertEqual(self.client.post('/api/attack-planner/preview',json=invalid,headers=self.headers).status_code,400)
+        entered=threading.Event()
+        self.service.job('other tool',lambda cancel:(entered.set(),cancel.wait(1)))
+        self.assertTrue(entered.wait(1))
+        self.assertEqual(self.client.post('/api/attack-planner/preview',json=body,headers=self.headers).status_code,409)
+        review={'revision':report['revision'],'corrections':[]}
+        self.assertEqual(self.client.patch('/api/attack-observations/'+ident,json=review,headers=self.headers).status_code,409)
+        self.service.stop();self.assertTrue(self.service.controller.wait(1))
+        saved=self.client.post('/api/attack-planner/preview',json=body,headers=self.headers)
+        self.assertEqual(saved.status_code,200,saved.text)
+        self.assertFalse(saved.json()['ready_for_execution'])
+        self.assertEqual(self.client.get('/api/attack-planner').json()['report']['observation_id'],ident)
+
+    def test_saved_attack_routine_can_be_loaded_but_not_from_another_device(self):
+        from coc_bot.attack.plans import AttackPlan,ArmyEntry,PlanStep,MapPoint
+        from coc_bot.control.attack_planner import template_path
+        plan=AttackPlan((ArmyEntry('electro_dragon','troop',11,True),),
+                       (PlanStep('deploy_point','electro_dragon',11,(MapPoint(.055,.5),)),))
+        config=load_config();path=template_path(config);path.parent.mkdir(parents=True)
+        value={'device':config.adb_device,'plan':plan.to_dict(),'live_verified':False}
+        path.write_text(json.dumps(value))
+        response=self.client.get('/api/attack-planner/routine')
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['steps'][0]['quantity'],11)
+        value['device']='different-device';path.write_text(json.dumps(value))
+        self.assertEqual(self.client.get('/api/attack-planner/routine').status_code,400)
+
     def test_password_free_bootstrap_keeps_csrf_origin_and_socket_guards(self):
         service = ControlService()
         with TestClient(create_app(service, auth_path=self.home / "missing-password.json",
@@ -81,7 +176,7 @@ class WebTests(TestCase):
 
     def test_settings_revision_and_validation(self):
         settings = self.client.get("/api/settings").json()
-        self.assertEqual(len(settings["fields"]), 46)
+        self.assertEqual(len(settings["fields"]), 47)
         self.assertEqual(len(settings["themes"]), 7)
         body = {"revision": settings["revision"], "values": {"farm_interval_seconds": 7200}}
         result = self.client.put("/api/settings", headers=self.headers, json=body)

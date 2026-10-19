@@ -17,13 +17,18 @@ def seed(source, target):
         shutil.copy2(source, target)
 
 
+def seed_profile(app, profile):
+    """Public defaults/artwork only; never seed account-specific calibration."""
+    for name in ("config", "data/game", "data/live", "data/icons"):
+        seed(app / name, profile / name)
+
+
 def main():
     profile = Path(os.environ.get("COC_BOT_HOME", "/profile"))
     profile.mkdir(parents=True, exist_ok=True, mode=0o700)
     profile.chmod(0o700)
     app = Path("/app")
-    for name in ("config", "data/game", "data/live"):
-        seed(app / name, profile / name)
+    seed_profile(app, profile)
     (profile / "data").mkdir(parents=True, exist_ok=True)
     host = os.environ.get("COC_WEB_HOST", "auto")
     if host == "auto":

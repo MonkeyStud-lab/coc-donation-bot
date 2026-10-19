@@ -1,5 +1,6 @@
 # Python
 .venv/
+.android/
 __pycache__/
 *.py[cod]
 *.egg-info/

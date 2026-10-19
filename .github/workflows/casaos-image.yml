@@ -17,12 +17,21 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Image name
         run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
-      - uses: docker/build-push-action@v6
+      - name: Build candidate
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: packaging/casaos/Dockerfile
           platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ env.IMAGE }}:casaos
-            ${{ env.IMAGE }}:casaos-${{ github.sha }}
+          load: true
+          push: false
+          tags: coc-bot-casaos:candidate
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+      - name: Verify fresh-profile assets without Android or network
+        run: docker run --rm --network none --entrypoint python coc-bot-casaos:candidate /app/packaging/casaos/verify_image.py
+      - name: Publish verified candidate
+        run: |
+          docker tag coc-bot-casaos:candidate "$IMAGE:casaos-$GITHUB_SHA"
+          docker push "$IMAGE:casaos-$GITHUB_SHA"
+          docker tag coc-bot-casaos:candidate "$IMAGE:casaos"
+          docker push "$IMAGE:casaos"

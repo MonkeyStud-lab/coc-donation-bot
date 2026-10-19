@@ -130,6 +130,10 @@ tested one-click package.
    bash packaging/casaos/build.sh
    ```
 
+   The build downloads the public recognition artwork and gesture assets. It
+   fails if required automatic-attack artwork is unavailable; you do not need
+   another user's profile or icon cache. See the [offline image check](docs/CASAOS_PACKAGE.md#build-and-install).
+
 3. In CasaOS, install a custom app by importing
    [`packaging/casaos/compose.yaml`](packaging/casaos/compose.yaml).
 4. Review its setup service before installing. It has administrator-level host
@@ -137,6 +141,7 @@ tested one-click package.
    helper. The ordinary bot container runs without those privileges.
 5. Open the CasaOS app tile. The default dashboard address is
    `http://YOUR_LINUX_IP:8767`. Follow its startup status and installation prompts.
+   The first Android startup can take several minutes; keep the status page open.
 6. For a fresh game installation, import your own trusted Clash APK archive,
    then sign in through **Live view → Take control**. Game APKs and account
    credentials are not included in the repository or container image.

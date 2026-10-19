@@ -13,6 +13,8 @@ fi
 mkdir -p /host/opt/coc-casaos-installer
 cp /app/packaging/casaos/install_host.py /host/opt/coc-casaos-installer/
 cp /app/packaging/casaos/host_agent.py /host/opt/coc-casaos-installer/
+chmod 755 /host/opt/coc-casaos-installer
+chmod 644 /host/opt/coc-casaos-installer/install_host.py /host/opt/coc-casaos-installer/host_agent.py
 if [ ! -x /host/usr/bin/python3 ]; then
     chroot /host /usr/bin/apt-get update
     chroot /host /usr/bin/apt-get install -y python3

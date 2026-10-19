@@ -6,6 +6,7 @@ package names, file paths, or service names. Lease connections share the existin
 host flock protocol so a desktop bot cannot compete with the container.
 """
 import argparse
+import base64
 import fcntl
 import hashlib
 from http.server import BaseHTTPRequestHandler
@@ -16,11 +17,37 @@ from pathlib import Path
 import pwd
 import socket
 import socketserver
+import stat
+import struct
 import subprocess
 import tempfile
 import threading
 import time
 from urllib.parse import parse_qs, urlparse
+
+
+ADB_PREPARED = Path("/var/lib/coc-casaos/android-adb-prepared")
+
+
+def adb_public_key(profile, uid):
+    """Read only the app-owned, bounded Android public key; never its private key."""
+    root = Path(profile).resolve()
+    path = root / ".android/adbkey.pub"
+    if not path.resolve().is_relative_to(root):
+        raise RuntimeError("ADB public key must stay inside the app profile")
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as source:
+        info = os.fstat(source.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != uid or not 1 <= info.st_size <= 4096:
+            raise RuntimeError("ADB public key must be a small app-owned regular file")
+        try:
+            token = source.read(4097).split()[0].decode("ascii")
+            raw = base64.b64decode(token, validate=True)
+            if len(raw) != 524 or struct.unpack_from("<I", raw)[0] != 64 or struct.unpack_from("<I", raw, 520)[0] not in (3, 65537):
+                raise ValueError("Not an Android RSA public key")
+        except (UnicodeError, ValueError, IndexError) as exc:
+            raise RuntimeError("Invalid Android ADB public key") from exc
+    return token
 
 
 class Runtime:
@@ -40,22 +67,63 @@ class Runtime:
             raise RuntimeError((result.stderr or result.stdout).strip()[-1500:] or "Runtime command failed")
         return result.stdout
 
+    def android_booted(self, timeout=30):
+        # Read through LXC, not ADB: status checks must not create a shared ADB
+        # server with the helper/session user's identity before the app starts.
+        return self.command(["lxc-attach", "-P", "/var/lib/waydroid/lxc", "-n", "waydroid",
+            "--", "/system/bin/getprop", "sys.boot_completed"], check=False, timeout=timeout).strip() == "1"
+
+    @staticmethod
+    def adb_port_ready(ip):
+        try:
+            with socket.create_connection((ip, 5555), timeout=1):
+                return True
+        except OSError:
+            return False
+
+    def authorize_adb(self):
+        """Enroll only the managed app's key; retain Android ADB authentication."""
+        if not self.config.get("prepare_adb"):
+            return False
+        if not self.config.get("profile"):
+            raise RuntimeError("Refresh the host helper to configure the managed ADB identity")
+        token = adb_public_key(self.config["profile"], self.config.get("app_uid", 1000))
+        existing = self.command(["waydroid", "shell", "cat", "/data/misc/adb/adb_keys"], check=False)
+        present = token in {line.split()[0] for line in existing.splitlines() if line.split()}
+        if not present:
+            # token contains validated base64 only. Paths and permissions are
+            # fixed here; browser requests never supply keys or shell commands.
+            script = ("umask 027; mkdir -p /data/misc/adb && "
+                      "chown 1000:2000 /data/misc/adb && chmod 2750 /data/misc/adb && "
+                      "printf '%s\\n' '" + token + " coc-bot' >> /data/misc/adb/adb_keys && "
+                      "chown 1000:2000 /data/misc/adb/adb_keys && "
+                      "chmod 640 /data/misc/adb/adb_keys && restorecon /data/misc/adb /data/misc/adb/adb_keys")
+            try:
+                self.command(["waydroid", "shell", "--", "sh", "-c", script])
+            except RuntimeError as exc:
+                raise RuntimeError(str(exc).replace(token, "<managed ADB public key>")) from None
+        return not present
+
     def status(self):
         text = self.command(["waydroid", "status"], user=True, check=False)
         values = {key.strip(): value.strip() for key, value in
                   (line.split(":", 1) for line in text.splitlines() if ":" in line)}
-        ip = values.get("IP address")
+        ip = None
+        try:
+            ip = str(ipaddress.IPv4Address(values.get("IP address", "")))
+        except ipaddress.AddressValueError:
+            # A new session reports UNKNOWN until Android's network is ready.
+            # Keep waiting; never publish a placeholder as an ADB address.
+            pass
         if ip:
-            ip = str(ipaddress.IPv4Address(ip))
             # Some LXC/Waydroid combinations report STOPPED for a healthy payload.
             # Confirm Android itself rather than restarting a reachable session.
             if values.get("Container") == "STOPPED":
                 try:
-                    boot = self.command(["adb", "-s", ip + ":5555", "shell", "getprop", "sys.boot_completed"],
-                                        user=True, check=False, timeout=3)
+                    boot = self.android_booted(timeout=3)
                 except subprocess.TimeoutExpired:
-                    boot = ""
-                if boot.strip() == "1":
+                    boot = False
+                if boot:
                     values["Container"] = "RUNNING"
                 else:
                     # Waydroid may retain RUNNING session metadata after its user
@@ -108,23 +176,34 @@ class Runtime:
                     raise RuntimeError("The adopted desktop display is unavailable. Log into its Wayland session, then Retry.")
                 self.adopted_unit("coc-waydroid-adopted-session", ["session", "start"])
                 adopted_start = True
-            deadline = time.monotonic() + 180
+            # First Android boot also prepares app data; give slow fresh hosts
+            # time without lengthening ordinary reopen/failure recovery.
+            managed_adb = bool(self.config.get("prepare_adb"))
+            first_boot = managed_adb and not ADB_PREPARED.exists()
+            configured = not first_boot
+            deadline = time.monotonic() + (600 if first_boot else 180)
             while time.monotonic() < deadline:
                 status = self.resume()
-                marker = Path("/var/lib/coc-casaos/android-adb-prepared")
-                if self.config.get("prepare_adb") and not marker.exists() and status["session"] == "RUNNING":
-                    boot = self.command(["waydroid", "shell", "getprop", "sys.boot_completed"], check=False)
-                    if boot.strip() == "1":
-                        # Only a newly initialized package Android image reaches this branch.
-                        for args in (["settings", "put", "global", "adb_enabled", "1"],
-                                     ["setprop", "persist.adb.tcp.port", "5555"],
-                                     ["setprop", "service.adb.tcp.port", "5555"],
-                                     ["stop", "adbd"], ["start", "adbd"]):
-                            self.command(["waydroid", "shell", *args])
-                        marker.parent.mkdir(parents=True, exist_ok=True)
-                        marker.write_text("configured\n")
-                        status = self.status()
-                if status["ip"] and status["session"] == "RUNNING" and status["container"] == "RUNNING":
+                running = bool(status["ip"] and status["session"] == "RUNNING" and status["container"] == "RUNNING")
+                booted = running and (not managed_adb or self.android_booted())
+                if booted and not configured:
+                    for args in (["settings", "put", "global", "adb_enabled", "1"],
+                                 ["setprop", "persist.adb.tcp.port", "5555"],
+                                 ["setprop", "service.adb.tcp.port", "5555"]):
+                        self.command(["waydroid", "shell", *args])
+                    self.authorize_adb()
+                    if not self.adb_port_ready(status["ip"]):
+                        self.command(["waydroid", "shell", "setprop", "ctl.restart", "adbd"])
+                    configured = True
+                if booted and configured:
+                    self.authorize_adb()
+                    if managed_adb:
+                        if not self.adb_port_ready(status["ip"]):
+                            time.sleep(1)
+                            continue
+                        if first_boot:
+                            ADB_PREPARED.parent.mkdir(parents=True, exist_ok=True)
+                            ADB_PREPARED.write_text("configured\n")
                     if self.config.get("needs_ui"):
                         self.command(["systemctl", "start", "--no-block", "coc-waydroid-ui.service"])
                     elif adopted_start:
@@ -230,6 +309,16 @@ class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
 
 
+def notify_ready():
+    """Let systemd complete startup only after the request socket is listening."""
+    address = os.environ.get("NOTIFY_SOCKET")
+    if address:
+        if address.startswith("@"):
+            address = "\0" + address[1:]
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notification:
+            notification.sendto(b"READY=1", address)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="/etc/coc-casaos/host.json")
@@ -253,6 +342,7 @@ def main():
         os.chmod(path, 0o600)
         if os.geteuid() == 0:
             os.chown(path, config.get("app_uid", runtime.user.pw_uid), config.get("app_gid", runtime.user.pw_gid))
+        notify_ready()
         server.serve_forever(poll_interval=.2)
 
 

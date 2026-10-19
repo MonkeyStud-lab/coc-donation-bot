@@ -6,6 +6,7 @@ run is read-only and does not require root. Existing desktop sessions may be
 adopted explicitly; new installations use a dedicated headless Wayland session.
 """
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -76,13 +77,17 @@ def _protect_profile(root, destination):
     files = [root / p for p in ("data/calibrated.yaml", "data/user_settings.yaml",
              "data/runtime_state.json", "config/default.yaml") if (root / p).is_file()]
     files += [p for p in (root / "data/templates").rglob("*") if p.is_file()]
+    # Routines, reviewed artwork and pending intents are part of a migration,
+    # not disposable diagnostics. Keep them with calibration before host changes.
+    for relative in ("data/attack-planner", "data/upgrades"):
+        files += [p for p in (root / relative).rglob("*") if p.is_file()]
     hashes = {}
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as output:
         for file in files:
             if file.is_symlink() or not file.resolve().is_relative_to(root):
                 raise RuntimeError("Backup source contains an external link")
             content = file.read_bytes()
-            key = str(file.relative_to(root))
+            key = file.relative_to(root).as_posix()
             hashes[key] = hashlib.sha256(content).hexdigest()
             output.writestr(key, content)
         output.writestr("manifest.json", json.dumps(hashes, indent=2))
@@ -107,22 +112,82 @@ def inspect():
 
 
 def copy_profile(source, destination):
-    """Import into empty private storage only. Never merge over live calibration."""
+    """Stage a complete supported import, then atomically publish into empty storage."""
     source, destination = Path(source), Path(destination)
+    if not source.is_dir() or source.is_symlink() or destination.is_symlink():
+        raise RuntimeError("Import requires an existing source directory and a separate real destination")
+    resolved_source, resolved_destination = source.resolve(), destination.resolve()
+    if (resolved_source.is_relative_to(resolved_destination) or
+            resolved_destination.is_relative_to(resolved_source)):
+        raise RuntimeError("Import source and destination must not overlap")
+    if destination.exists() and (not destination.is_dir() or any(destination.iterdir())):
+        raise RuntimeError("Import destination is not empty; use Library restore or a new profile")
+    candidates = []
     for name in ("config", "data/calibrated.yaml", "data/templates", "data/user_settings.yaml",
-                 "data/runtime_state.json", "data/game", "data/icons", "data/models", "data/live"):
-        src, dst = source / name, destination / name
+                 "data/runtime_state.json", "data/game", "data/icons", "data/models", "data/live",
+                 "data/attack-planner", "data/upgrades"):
+        src = source / name
         if not src.exists():
             continue
-        if dst.exists():
-            raise RuntimeError("Import destination already contains " + name + "; use Library restore instead")
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        if src.is_dir():
-            if any(p.is_symlink() for p in src.rglob("*")):
-                raise RuntimeError("Import source contains links; use a verified calibration archive")
-            shutil.copytree(src, dst)
-        else:
-            shutil.copy2(src, dst)
+        if src.is_symlink() or (src.is_dir() and any(p.is_symlink() for p in src.rglob("*"))):
+            raise RuntimeError("Import source contains links; use a verified calibration archive")
+        candidates.append((name, src))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".coc-import-", dir=destination.parent) as temporary:
+        staged = Path(temporary) / "profile"
+        staged.mkdir(mode=0o700)
+        for name, src in candidates:
+            dst = staged / name
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if src.is_dir():
+                shutil.copytree(src, dst)
+            else:
+                shutil.copy2(src, dst)
+        # Recheck after staging; do not merge into files created meanwhile.
+        if destination.exists():
+            if not destination.is_dir() or any(destination.iterdir()):
+                raise RuntimeError("Import destination changed while copying; existing files were preserved")
+            destination.rmdir()  # Empty only; never recursively remove user data.
+        staged.rename(destination)
+
+
+def create_adb_identity(profile, uid=1000, gid=1000):
+    """Create the managed app's key pair before its first ADB server starts."""
+    if os.geteuid() == 0 and uid != 0:
+        # The profile belongs to the app. Perform every key-file operation as
+        # that user, never as root through an app-writable path.
+        run("setpriv", "--reuid=" + str(uid), "--regid=" + str(gid),
+            "--clear-groups", "--no-new-privs", sys.executable, str(Path(__file__).resolve()),
+            "--prepare-adb-identity", str(Path(profile).resolve()), timeout=120)
+        return
+    directory = Path(profile) / ".android"
+    if directory.is_symlink():
+        raise RuntimeError("Managed ADB identity directory must not be a link")
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    keys = [directory / name for name in ("adbkey", "adbkey.pub")]
+    if any(p.is_symlink() for p in keys):
+        raise RuntimeError("Managed ADB keys must not be links")
+    if any(p.exists() for p in keys) and not all(p.is_file() for p in keys):
+        raise RuntimeError("Incomplete ADB key pair; restore both keys before retrying")
+    if not any(p.exists() for p in keys):
+        with tempfile.TemporaryDirectory(prefix=".keygen-", dir=directory) as temporary:
+            staged = [Path(temporary) / p.name for p in keys]
+            run("adb", "keygen", str(staged[0]), timeout=60)
+            if not all(p.is_file() and p.stat().st_size for p in staged):
+                raise RuntimeError("ADB key generation did not create a complete pair")
+            published = []
+            try:
+                for source, target in zip(staged, keys):
+                    os.link(source, target)  # Exclusive: never replace an existing identity.
+                    published.append((source, target))
+            except Exception:
+                for source, target in published:
+                    if target.exists() and target.stat().st_ino == source.stat().st_ino:
+                        target.unlink()
+                raise
+    for path in (directory, *keys):
+        os.chown(path, uid, gid)
+        path.chmod(0o700 if path == directory else 0o600)
 
 
 def install(args):
@@ -152,7 +217,7 @@ def install(args):
         if not previous.get("manage_services", True):
             args.adopt_user, args.display = previous["user"], previous["display"]
     run("apt-get", "update")
-    run("apt-get", "install", "-y", "python3", "curl", "ca-certificates", "weston",
+    run("apt-get", "install", "-y", "python3", "curl", "ca-certificates", "weston", "util-linux",
         "dbus-user-session", "adb", "mesa-utils", "libgl1-mesa-dri")
     if not report["binder"]:
         # Only install modules for the currently running kernel. Never replace the kernel.
@@ -199,7 +264,8 @@ def install(args):
     installation.mkdir(parents=True, exist_ok=True)
     shutil.copy2(Path(__file__).with_name("host_agent.py"), installation / "host_agent.py")
     config = {"user": user.pw_name, "display": display, "socket": "/run/coc-waydroid/host.sock",
-              "manage_services": not bool(args.adopt_user), "app_uid": 1000, "app_gid": 1000}
+              "manage_services": not bool(args.adopt_user), "app_uid": 1000, "app_gid": 1000,
+              "profile": str(profile)}
     config["needs_ui"] = not bool(args.adopt_user)
     config["prepare_adb"] = new_android or (
         existing.exists() and json.loads(existing.read_text()).get("prepare_adb", False))
@@ -225,7 +291,7 @@ def install(args):
             "ExecStart=/usr/bin/waydroid show-full-ui\nRemainAfterExit=yes\nTimeoutStartSec=90\n")
     (units / "coc-waydroid-host.service").write_text(
         "[Unit]\nDescription=CoC CasaOS host runtime helper\nAfter=network.target\n"
-        "[Service]\nExecStart=/usr/bin/python3 /opt/coc-casaos-host/host_agent.py\n"
+        "[Service]\nType=notify\nTimeoutStartSec=30\nExecStart=/usr/bin/python3 /opt/coc-casaos-host/host_agent.py\n"
         "RuntimeDirectory=coc-waydroid\nRuntimeDirectoryMode=0755\nRuntimeDirectoryPreserve=restart\nRestart=on-failure\nRestartSec=5\n"
         "UMask=0077\n[Install]\nWantedBy=multi-user.target\n")
     profile.mkdir(parents=True, exist_ok=True)
@@ -233,34 +299,90 @@ def install(args):
     for path in [profile, *profile.rglob("*")]:
         if not path.is_symlink():
             os.chown(path, 1000, 1000)
+    if config["prepare_adb"]:
+        create_adb_identity(profile)
     run("systemctl", "daemon-reload")
     run("systemctl", "enable", "--now", "waydroid-container.service", "coc-waydroid-host.service")
     print("Host prepared. Install/start the CasaOS app, then import the Clash APK archive.", flush=True)
 
 
-def refresh_helper(args):
-    """Refresh only the helper after proving the game controller is stopped."""
+def runtime_status(config):
+    """Read current Waydroid state without relying on a previously started helper."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("coc_host_refresh", Path(__file__).with_name("host_agent.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.Runtime(config).status()
+
+
+@contextmanager
+def helper_maintenance_lease(config):
+    """Keep the native/container device lock even before the first controller ran."""
     import fcntl
     import ipaddress
-    if os.geteuid() != 0:
-        raise RuntimeError("Helper refresh needs administrator privileges")
-    config = json.loads(Path("/etc/coc-casaos/host.json").read_text())
+    import pwd
     metadata = Path(config["socket"]).with_name("device.json")
-    serial = str(ipaddress.IPv4Address(json.loads(metadata.read_text())["ip"])) + ":5555"
+    try:
+        ip = str(ipaddress.IPv4Address(json.loads(metadata.read_text())["ip"]))
+    except (FileNotFoundError, ValueError, KeyError):
+        # Failed first startup may not have published metadata yet. Query the
+        # installed user's runtime, never guess a device or skip its lease.
+        try:
+            ip = str(ipaddress.IPv4Address(runtime_status(config).get("ip") or ""))
+        except ipaddress.AddressValueError as exc:
+            raise RuntimeError("Waydroid has not published a valid IP address. Recover Android, then retry helper refresh.") from exc
+    serial = ip + ":5555"
     digest = hashlib.sha256(serial.encode()).hexdigest()
     lock = Path(tempfile.gettempdir()) / ("coc-bot-device-" + digest + ".lock")
-    with lock.open("r+b") as handle:
+    try:
+        handle = lock.open("r+b")
+    except FileNotFoundError:
+        try:
+            handle = lock.open("x+b")
+        except FileExistsError:
+            handle = lock.open("r+b")
+        else:
+            if os.geteuid() == 0:
+                owner = pwd.getpwnam(config["user"])
+                os.fchown(handle.fileno(), owner.pw_uid, owner.pw_gid)
+    with handle:
         try:
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise RuntimeError("Stop automation and release Live view control before refreshing the helper")
+        yield
+
+
+def upgrade_helper_unit(content):
+    if "RuntimeDirectoryPreserve=" not in content:
+        content = content.replace("RuntimeDirectoryMode=0755", "RuntimeDirectoryMode=0755\nRuntimeDirectoryPreserve=restart")
+    if not re.search(r"(?m)^Type=", content):
+        content = content.replace("[Service]\n", "[Service]\nType=notify\n")
+    else:
+        content = re.sub(r"(?m)^Type=simple$", "Type=notify", content)
+    if not re.search(r"(?m)^TimeoutStartSec=", content):
+        content = content.replace("Type=notify\n", "Type=notify\nTimeoutStartSec=30\n")
+    return content
+
+
+def refresh_helper(args):
+    """Refresh only the helper after proving the game controller is stopped."""
+    if os.geteuid() != 0:
+        raise RuntimeError("Helper refresh needs administrator privileges")
+    config = json.loads(Path("/etc/coc-casaos/host.json").read_text())
+    with helper_maintenance_lease(config):
         protect_profile(args.profile, args.backups)
+        if config.get("prepare_adb"):
+            config["profile"] = str(Path(args.profile).resolve())
+            create_adb_identity(config["profile"], config.get("app_uid", 1000), config.get("app_gid", 1000))
+            Path("/etc/coc-casaos/host.json").write_text(json.dumps(config, indent=2))
         target = Path("/opt/coc-casaos-host/host_agent.py")
         shutil.copy2(Path(__file__).with_name("host_agent.py"), target)
         unit = Path("/etc/systemd/system/coc-waydroid-host.service")
         content = unit.read_text()
-        if "RuntimeDirectoryPreserve=" not in content:
-            unit.write_text(content.replace("RuntimeDirectoryMode=0755", "RuntimeDirectoryMode=0755\nRuntimeDirectoryPreserve=restart"))
+        upgraded = upgrade_helper_unit(content)
+        if content != upgraded:
+            unit.write_text(upgraded)
         run("systemctl", "daemon-reload")
         run("systemctl", "restart", "coc-waydroid-host.service")
     print("Helper refreshed; Android and calibration were not reset.")
@@ -270,6 +392,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--refresh-helper", action="store_true", help="Refresh only the installed helper after stopping automation")
+    parser.add_argument("--prepare-adb-identity", help=argparse.SUPPRESS)
     parser.add_argument("--profile", default="/DATA/AppData/coc-bot/profile")
     parser.add_argument("--backups", default="/DATA/AppData/coc-bot/backups")
     parser.add_argument("--adopt-user", help="Keep an existing desktop Waydroid session instead of creating headless services")
@@ -277,7 +400,9 @@ def main():
     parser.add_argument("--import-from", help="Copy a previous bot profile into an empty package profile")
     args = parser.parse_args()
     try:
-        if args.refresh_helper:
+        if args.prepare_adb_identity:
+            create_adb_identity(args.prepare_adb_identity, os.getuid(), os.getgid())
+        elif args.refresh_helper:
             refresh_helper(args)
         else:
             install(args)

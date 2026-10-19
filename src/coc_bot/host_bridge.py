@@ -6,6 +6,10 @@ import socket
 from urllib.parse import urlencode
 
 
+# Includes the host's first-boot allowance and bounded service-start overhead.
+STARTUP_TIMEOUT_SECONDS = 900
+
+
 class UnixConnection(http.client.HTTPConnection):
     def __init__(self, path=None, timeout=15):
         super().__init__("localhost", timeout=timeout)
@@ -78,7 +82,7 @@ def shim_main():
     if command == "waydroid" and args == ["status"]:
         print(request("status")["raw_status"])
     elif command == "waydroid" and args in (["show-full-ui"], ["session", "start"]):
-        request("ensure", timeout=240)
+        request("ensure", timeout=STARTUP_TIMEOUT_SECONDS)
     elif command == "waydroid" and args == ["session", "stop"]:
         request("stop", timeout=45)
     elif command == "gdbus" and args == ["call", "--system", "--dest", "id.waydro.Container",

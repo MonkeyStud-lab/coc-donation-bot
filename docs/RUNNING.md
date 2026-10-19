@@ -119,14 +119,20 @@ full `config/` and `data/` profile while idle, including pending recovery marker
 Keep sensitive copies private and preserve permissions. Use a separate destination;
 do not merge a live profile with another running controller.
 
+For CasaOS, also retain the profile's private `.android/` identity when making a
+complete profile backup. It authorizes the app's Android connection, not a game
+account. Setup can create/enroll an identity for newly managed Android images;
+it does not overwrite an existing complete key pair.
+
 On the new host, install dependencies rather than copying `.venv`. Update the ADB
 address, check resolution/layout/language, and test calibration. Planner approval
 is device-specific; a saved routine may need another supervised run. Transferring
 a profile does not transfer Waydroid's Android app data or sign-in.
 
 CasaOS host installation snapshots include configuration, calibration/templates,
-user settings, and runtime state with checksum verification. They still do not
-include the entire planner or Android account. See [backup scope](CASAOS_PACKAGE.md#data-protection).
+user settings, runtime state, planner routines/artwork/recovery files, and upgrade
+journals with checksum verification. They exclude screenshot collections, caches,
+and Android account data. See [backup scope](CASAOS_PACKAGE.md#data-protection).
 
 ## Updates
 

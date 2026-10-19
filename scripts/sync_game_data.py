@@ -19,9 +19,12 @@ If download fails, the existing data/game/units.yaml is left unchanged.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import re
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -46,6 +49,8 @@ TROOP_BUILDINGS = {"Barrack", "Barrack2", "Dark Elixir Barrack"}
 SIEGE_BUILDINGS = {"SiegeWorkshop"}
 
 USER_AGENT = "coc-donation-bot/0.1 (+https://github.com/MonkeyStud-lab/coc-donation-bot)"
+MAX_ICON_BYTES = 3 * 1024 * 1024
+CORE_ICONS = {"troops/electro_dragon.webp", "spells/rage_spell.webp"}
 
 
 def _slug(name: str) -> str:
@@ -78,7 +83,8 @@ def fetch_bytes(url: str, timeout: float = 30.0) -> bytes | None:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             if getattr(resp, "status", 200) >= 400:
                 return None
-            return resp.read()
+            data = resp.read(MAX_ICON_BYTES + 1)
+            return data if len(data) <= MAX_ICON_BYTES else None
     except (urllib.error.URLError, TimeoutError):
         return None
 
@@ -181,7 +187,37 @@ def icon_urls_for(unit_id: str, category: str) -> list[str]:
     return urls
 
 
-def sync_icons(units: dict[str, dict], *, force: bool = False) -> int:
+def valid_icon(data: bytes) -> bool:
+    """Only decodable alpha-masked artwork can seed the army catalog."""
+    import cv2
+    import numpy as np
+
+    if not data or len(data) > MAX_ICON_BYTES:
+        return False
+    image = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_UNCHANGED)
+    return bool(image is not None and image.ndim == 3 and image.shape[2] == 4
+                and 16 <= min(image.shape[:2]) <= max(image.shape[:2]) <= 2048
+                and np.count_nonzero(image[:, :, 3] > 100) >= 100)
+
+
+def write_atomic(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    try:
+        # These are public reference assets, built as root but read by the
+        # unprivileged app user. Keep private profile backups restricted elsewhere.
+        os.chmod(name, 0o644)
+        with os.fdopen(fd, "wb") as output:
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(name, path)
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+
+def sync_icons(units: dict[str, dict], *, force: bool = False,
+               require_core: bool = False) -> int:
     """Download icons for known units into data/icons/{category}/{unit_id}.webp."""
     if not units:
         units = load_units_yaml()
@@ -192,27 +228,41 @@ def sync_icons(units: dict[str, dict], *, force: bool = False) -> int:
     downloaded = 0
     skipped = 0
     missing = 0
+    manifest = {}
     for unit_id, info in sorted(units.items()):
         category = str(info.get("category", "troop"))
+        if not re.fullmatch(r"[a-z0-9_]+", unit_id) or category not in ("troop", "siege", "spell"):
+            raise ValueError("Invalid icon identity or category")
         out_dir = ICONS_DIR / ("spells" if category == "spell" else "troops")
         out_path = out_dir / f"{unit_id}.webp"
-        if out_path.exists() and not force:
+        key = out_path.relative_to(ICONS_DIR).as_posix()
+        if out_path.is_file() and not force and valid_icon(out_path.read_bytes()):
             skipped += 1
+            manifest[key] = hashlib.sha256(out_path.read_bytes()).hexdigest()
             continue
         data = None
         for url in icon_urls_for(unit_id, category):
             data = fetch_bytes(url)
-            if data:
+            if data and valid_icon(data):
                 break
-        if not data:
+            data = None
+        if data is None:
             missing += 1
             continue
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path.write_bytes(data)
+        write_atomic(out_path, data)
+        manifest[key] = hashlib.sha256(data).hexdigest()
         downloaded += 1
         print(f"  icon {unit_id} -> {out_path.relative_to(ROOT)}")
 
     print(f"Icons: downloaded={downloaded} skipped={skipped} missing={missing} -> {ICONS_DIR}")
+    write_atomic(ICONS_DIR / "manifest.json", json.dumps({
+        "source": ASSETS_BASE, "files": manifest,
+        "missing_core": sorted(CORE_ICONS - manifest.keys()),
+    }, indent=2).encode("utf-8"))
+    if require_core and CORE_ICONS - manifest.keys():
+        print("Required automatic-attack artwork is unavailable: " +
+              ", ".join(sorted(CORE_ICONS - manifest.keys())), file=sys.stderr)
+        return 1
     return 0 if downloaded or skipped else 1
 
 
@@ -279,15 +329,17 @@ def main() -> None:
         action="store_true",
         help="Only download icons (uses existing units.yaml)",
     )
+    parser.add_argument("--require-core-icons", action="store_true",
+                        help="Fail when Electro Dragon or Rage artwork is missing/invalid")
     args = parser.parse_args()
 
     if args.icons_only:
-        raise SystemExit(sync_icons({}, force=args.force))
+        raise SystemExit(sync_icons({}, force=args.force, require_core=args.require_core_icons))
 
     code = sync(force=args.force)
     if args.icons:
         units = load_units_yaml()
-        icon_code = sync_icons(units, force=args.force)
+        icon_code = sync_icons(units, force=args.force, require_core=args.require_core_icons)
         if code == 0:
             code = icon_code
     raise SystemExit(code)

@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 import zipfile
 import os
 
@@ -53,20 +54,38 @@ class Platform:
         if self.cancel.is_set():
             raise RuntimeError("Runtime preparation canceled. Use Retry when ready.")
 
+    def wait_for_android(self, client, timeout=120):
+        """A connected ADB transport does not prove Package Manager is ready."""
+        from coc_bot.adb.client import AdbError, AdbStopped
+        deadline = time.monotonic() + timeout
+        while True:
+            self.check_cancel()
+            try:
+                result = client.run_shell("pm path android", check=False, timeout=10)
+                if result.returncode == 0 and any(line.startswith("package:") for line in result.stdout.splitlines()):
+                    return
+            except AdbStopped:
+                raise
+            except AdbError:
+                self.check_cancel()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError("Android has not finished starting (package service unavailable). Use Retry.")
+            self.cancel.wait(min(1, remaining))
+
     def prepare(self):
         try:
-            from coc_bot.host_bridge import request
+            from coc_bot.host_bridge import request, STARTUP_TIMEOUT_SECONDS
             from coc_bot.adb.client import AdbClient
             from coc_bot.config import load_config
             from coc_bot.runtime.device_lease import DeviceLease
             from coc_bot.adb.capture import ScreenCapture
-            request("ensure", timeout=240)
+            request("ensure", timeout=STARTUP_TIMEOUT_SECONDS)
             self.check_cancel()
             config = load_config()
             client = AdbClient(config.adb_device)
             client.stop_check = self.cancel.is_set
             self.update("connecting", "Connecting to Android")
-            client.ensure_connected()
             with DeviceLease(config.adb_device):
                 self.check_cancel()
                 # A restarted Android payload can retain a transport marked
@@ -75,8 +94,9 @@ class Platform:
                 from coc_bot.runtime.processes import run_process
                 run_process(["adb", "disconnect", config.adb_device], text=True,
                             timeout=15, stop_check=self.cancel.is_set)
-                if not client.connect():
-                    raise RuntimeError("Android connection could not be refreshed. Use Retry.")
+                client.ensure_connected()
+                self.update("checking_android", "Waiting for Android to finish starting")
+                self.wait_for_android(client)
                 installed = client.run_shell("pm path " + PACKAGE, check=False).stdout.strip()
                 if installed and (self.explicit_update or os.environ.get("COC_AUTO_UPDATE_GAME", "1") == "1"):
                     from coc_bot.control.game_updates import update_game

@@ -41,22 +41,25 @@ Persistent locations:
 - Host Waydroid storage: Android installation and game/account data, separate
   from bot-profile backups.
 
-Setup snapshots calibration YAML, templates, user settings, runtime state, and
-base configuration with a SHA-256 manifest before changes. It verifies the archive
-and keeps it private. These snapshots are not complete copies of every profile
-file: custom planner routines/artwork, collection, and Android account data need
-separate backups. Library calibration ZIPs are narrower still: calibration and
-templates, not settings or account data.
+Setup snapshots calibration YAML, templates, user settings, runtime state, base
+configuration, and everything in `data/attack-planner/` and `data/upgrades/` with
+a SHA-256 manifest before changes. This includes saved routines, reviewed artwork,
+and pending recovery/purchase state. It verifies the archive and keeps it private.
+These snapshots exclude collections, caches, downloaded models, APK archives,
+the private ADB identity, and Android account data. Library calibration ZIPs are narrower still: calibration
+and templates, not settings or account data.
 
 Before migration, Stop/release manual control and keep an independent full-profile
-backup on another device. Import copies the supported old profile files into empty
-storage only; it does not merge over a live setup or promise to migrate every new
-feature directory. Preserve planner state separately and inspect the imported
-profile before starting. Do not copy `.venv` between hosts.
+backup on another device. Import stages configuration, calibration/templates,
+settings/runtime state, game data/icons/models/gesture assets, planner files, and
+upgrade files before publishing into empty storage. A failed copy leaves the
+destination unpublished; a nonempty destination or linked source is rejected.
+It does not merge over a live setup or migrate every feature directory. Inspect
+the imported profile before starting. Do not copy `.venv` between hosts.
 
 Image builds exclude private calibration, datasets, APKs, and account files.
-Entrypoint seeds missing defaults/game data/gesture assets without overwriting
-existing user files. Shared calibration locks protect installer snapshots from
+Entrypoint seeds missing defaults/game data/gesture assets and public unit icons
+without overwriting existing user files. Shared calibration locks protect installer snapshots from
 concurrent edits even when host/container profile paths differ. Device leases
 exclude the original controller and package controller in both directions.
 
@@ -67,6 +70,20 @@ From a checkout on the CasaOS Linux host:
 ```bash
 bash packaging/casaos/build.sh
 ```
+
+The build downloads and validates public unit/spell artwork and the pinned
+gesture server. Missing Electro Dragon or Rage artwork fails the build; a fresh
+profile does not depend on an old installation's icon cache. Public assets remain
+readable by the unprivileged app user. Existing custom artwork is preserved.
+To check a built image without a device or network:
+
+```bash
+docker run --rm --network none --entrypoint python coc-bot-casaos:local /app/packaging/casaos/verify_image.py
+```
+
+This checks a blank profile, artwork checksums/catalog loading, the pinned gesture
+server, and preservation of existing artwork. It does not test Android startup
+or recognition against a real game screen.
 
 In CasaOS, install a custom app by importing
 [`packaging/casaos/compose.yaml`](../packaging/casaos/compose.yaml). The local image
@@ -109,8 +126,10 @@ for existing-host deployments; preserve its settings rather than replacing it
 with the two-service fresh-install configuration.
 
 A manually triggered image-publishing workflow exists under
-`.github/workflows/casaos-image.yml`. Its GHCR publication/installation is a
-separate release path, not proof of a tested public app-store installation.
+`.github/workflows/casaos-image.yml`. It builds a candidate, runs the offline
+fresh-profile check, and only then publishes revision-specific and moving CasaOS
+tags. Its GHCR publication/installation is a separate release path, not proof of
+a tested public app-store installation.
 
 ## Install Clash without Google sign-in
 
@@ -133,12 +152,32 @@ Electro Dragon mode does not. Automatic/planner modes still require navigation
 calibration, supported army readings, pinned gesture assets, and verified maps.
 See [attacks](ATTACK_REBUILD.md).
 
+Public artwork does not cover every hero portrait/skin. Use **Attacks** to review
+army readings and provide missing references when needed. Automatic mode skips
+unsupported or uncertain armies rather than guessing identities.
+
 ## Startup and controls
 
 The dashboard remains available while Android prepares or fails. Runtime status
 shows a stage/message/error and Retry. The helper starts/reuses the session,
 connects and refreshes only the selected ADB transport, checks/installs the game,
 launches it, and verifies screenshot health. Automation remains stopped.
+For a newly initialized Android image, the helper waits for boot completion and
+configures ADB before reporting readiness; an early IP address alone is not
+enough. First boot has a ten-minute allowance; ordinary reopen retains the
+three-minute wait. The browser stays available during preparation. Existing
+adopted Android installations retain their ADB setup.
+
+For new managed Android images, setup creates a private ADB key pair under the
+profile's `.android/` directory. The helper enrolls only its validated, app-owned
+public key and keeps Android's ADB authentication enabled. It does not expose a
+key-upload or shell-command endpoint. Existing adopted installations retain
+their authorization setup. Keep the entire profile private, including this key
+pair; calibration exports do not contain it.
+
+The helper signals readiness to systemd only after its Unix socket is listening.
+Initial setup and helper refresh therefore wait for the request endpoint before
+reporting success.
 
 **Start** begins automation; **Stop** cancels bot/tool actions and leaves the game
 open. **Close Waydroid and Clash** explicitly closes the session. Closing a browser
@@ -173,6 +212,9 @@ It takes a verified snapshot, checks device ownership, refreshes the helper,
 reloads systemd, and restarts `coc-waydroid-host.service`. It does not reinstall
 Android or reset calibration. Runtime directory preservation avoids stale socket
 mounts. Administrator authentication is a host requirement, not a dashboard field.
+If first startup never created device metadata, refresh queries the current
+runtime and still takes its device lease. A running controller or an unavailable
+device blocks replacement; an unknown address does not bypass this check.
 
 If reverting an image, keep the same compatible profile and installed environment.
 A profile restore must be deliberate; do not discard unfinished attack/upgrade
@@ -235,6 +277,13 @@ Thirty-seven protected files and settings remained unchanged. A donation request
 was not available in that particular deployment check, so fulfillment was not
 retested there.
 
+The October 18 isolated Ubuntu VM completed fresh CasaOS/Waydroid provisioning,
+headless service creation, dashboard startup, authenticated ADB enrollment, and
+trusted APK archive import. The candidate passed 335 Linux tests (two skipped)
+and all 38 administrator-run package tests. Android framework instability in
+software CPU emulation still prevented a complete fresh-game acceptance result.
+See the [VM record](CASAOS_FRESH_INSTALL_TEST.md) for the iterative fixes and limits.
+
 Still separate acceptance work:
 
 - A clean supported host from no Waydroid/profile through APK import and sign-in.
@@ -242,6 +291,10 @@ Still separate acceptance work:
 - Broader GPU/kernel/CPU/Android/browser combinations and sustained failure/soak tests.
 - Published image/app-store fresh installation, release updates, and rollback.
 - All new game layouts/languages, sceneries, capacities, and unknown army artwork.
+
+The fresh-install candidate changes have not been deployed to the existing
+production bot. Provisioning checks do not replace gameplay or physical-hardware
+acceptance.
 
 Historical pilot test counts do not establish these gates. The failed
 [ReDroid evaluation](REDROID_EVALUATION.md) is not a supported runtime alternative.

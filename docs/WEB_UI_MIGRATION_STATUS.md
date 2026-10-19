@@ -75,6 +75,11 @@ checks rerun by a documentation edit:
 Test counts describe those exact runs. Follow [RELIABILITY](RELIABILITY.md) for
 reproducible current checks, rather than treating old counts as new results.
 
+The separate [fresh-install VM record](CASAOS_FRESH_INSTALL_TEST.md) covers the
+October 18 provisioning candidate and its 335-test Linux regression run. That
+candidate is not the deployed `7d01eba` image; its checks do not replace live
+gameplay or physical-hardware acceptance.
+
 ## Remaining limits
 
 - Fresh host installation from no Waydroid/calibration, unattended headless reboot,

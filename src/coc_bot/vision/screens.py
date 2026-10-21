@@ -788,6 +788,12 @@ class ScreenClassifier:
         Defeat/Victory screens frame the loot card with opaque black Archer/Wizard
         (etc.) cutouts. Donation panels and live battles do not have these.
         """
+        # A dimmed donation popup also darkens both village edges. Its unique
+        # calibrated header is stronger evidence than this coarse color test.
+        # Keep this veto in the shared helper: callers also use it directly,
+        # independently of _looks_like_battle_results.
+        if self._template_visible(frame, "donation_panel"):
+            return False
         h, w = frame.shape[:2]
         y0, y1 = int(h * 0.22), int(h * 0.96)
         left = frame[y0:y1, 0 : int(w * 0.14)]

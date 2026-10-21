@@ -74,24 +74,19 @@ class SlotColorDetector:
         if not SlotColorDetector.has_icon(cell):
             return False
 
-        sample = cell_center_hsv(cell)
-        sat = float(sample[1])
-
-        if colored_hsv is not None and grey_hsv is not None:
-            d_color = hsv_distance(sample, colored_hsv)
-            d_grey = hsv_distance(sample, grey_hsv)
-            if d_color <= d_grey:
-                return True
-            # Requested spells/troops use many hues (Lightning blue vs Freeze cyan).
-            # If the cell is vividly saturated and clearly not grey, treat as donatable.
-            if sat >= self.saturation_threshold and d_grey >= 28.0:
-                return True
+        # Absolute reference colors change with capture brightness. In particular,
+        # a dark grey disabled card can be closer to the colored swatch than the
+        # grey swatch. Eligibility must require actual colored pixels instead.
+        # Keep the swatch arguments for compatibility with saved calibrations.
+        del colored_hsv, grey_hsv
+        hsv = cv2.cvtColor(cell, cv2.COLOR_BGR2HSV)
+        h, w = hsv.shape[:2]
+        # Pale faces (e.g. Ice Golem) have a grey center but retain colored card
+        # edges and resource icons. The lower card includes that evidence while
+        # excluding the red "Not enough space" toast across the top of the grid.
+        lower = hsv[int(h * .40):max(int(h * .98), 1),
+                    int(w * .03):max(int(w * .97), 1)]
+        if lower.size == 0:
             return False
-
-        if colored_hsv is not None:
-            if hsv_distance(sample, colored_hsv) <= 45.0:
-                return True
-            return sat >= self.saturation_threshold
-
-        # Fallback: colored icons are saturated; grey icons are not.
-        return sat >= self.saturation_threshold
+        colored = (lower[:, :, 1] >= self.saturation_threshold) & (lower[:, :, 2] >= 40)
+        return bool(float(np.mean(colored)) >= .08)

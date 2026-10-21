@@ -24,6 +24,7 @@ from coc_bot.runtime.persistence import load_runtime_state
 from coc_bot.donation.executor import DonationExecutor
 from coc_bot.donation.resource_mode import elixir_is_selected
 from coc_bot.vision import ocr
+from coc_bot.vision.screens import ScreenType
 
 
 class ReliabilityTests(unittest.TestCase):
@@ -227,10 +228,29 @@ class ReliabilityTests(unittest.TestCase):
         executor = DonationExecutor(config, capture, inputs)
         executor.classifier = Mock()
         executor.classifier.is_donation_panel.return_value = True
+        executor.classifier.classify.return_value = ScreenType.DONATION_PANEL
         with patch("coc_bot.donation.resource_mode.elixir_is_selected", side_effect=[False, True]), patch("coc_bot.donation.executor.interrupted_sleep", return_value=False):
             self.assertTrue(executor._ensure_elixir_resource())
         inputs.tap.assert_called_once_with(80, 40, jitter=0)
         self.assertEqual(capture.screenshot.call_count, 2)
+
+    def test_resource_verification_does_not_accept_panel_behind_popup(self):
+        config = load_config()
+        config.frame_width, config.frame_height = 200, 100
+        config.tap_points = {"donation_elixir_button": [40, 20]}
+        config.templates = {"donation_elixir_selected": "selected.png"}
+        config.rois = {"donation_elixir_selected": [.1, .1, .2, .2]}
+        executor = DonationExecutor(config, Mock(), Mock())
+        executor.classifier = Mock()
+        executor.classifier.is_donation_panel.return_value = True
+        for screens in ([ScreenType.POPUP], [ScreenType.DONATION_PANEL, ScreenType.POPUP]):
+            with self.subTest(screens=screens):
+                executor.capture.screenshot.return_value = np.zeros((100, 200, 3), np.uint8)
+                executor.classifier.classify.side_effect = screens
+                executor.input.reset_mock()
+                with patch("coc_bot.donation.resource_mode.elixir_is_selected", return_value=False), patch("coc_bot.donation.executor.interrupted_sleep", return_value=False):
+                    self.assertFalse(executor._ensure_elixir_resource())
+                self.assertEqual(executor.input.tap.call_count, len(screens) - 1)
 
     def test_changed_thin_selection_border_is_not_accepted(self):
         with tempfile.TemporaryDirectory() as tmp:

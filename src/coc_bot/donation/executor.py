@@ -12,7 +12,7 @@ from coc_bot.donation.inventory import InventoryParser, InventorySlot
 from coc_bot.donation.request_parser import RequestKind
 from coc_bot.stop import interrupted_sleep
 from coc_bot.vision.matcher import TemplateMatcher
-from coc_bot.vision.screens import BotMode, ScreenClassifier
+from coc_bot.vision.screens import BotMode, ScreenClassifier, ScreenType
 
 
 class DonationExecutor:
@@ -65,7 +65,7 @@ class DonationExecutor:
             logger.warning("Donation skipped: calibrate Elixir resource button and Selected elixir indicator in Setup → Donation panel.")
             return False
         frame = self.capture.screenshot()
-        if not self.classifier.is_donation_panel(frame):
+        if self.classifier.classify(frame, mode=BotMode.DONATE) != ScreenType.DONATION_PANEL:
             return False
         if elixir_is_selected(self.config, frame):
             return True
@@ -81,7 +81,8 @@ class DonationExecutor:
         confirmed = self.capture.screenshot()
         if self._stopping():
             return False
-        if self.classifier.is_donation_panel(confirmed) and elixir_is_selected(self.config, confirmed):
+        if (self.classifier.classify(confirmed, mode=BotMode.DONATE) == ScreenType.DONATION_PANEL
+                and elixir_is_selected(self.config, confirmed)):
             return True
         logger.warning("Elixir selection could not be confirmed — donation skipped to avoid spending gems.")
         return False

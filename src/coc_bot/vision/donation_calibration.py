@@ -91,8 +91,11 @@ def suggest_donation(frame):
             continue
         x, y, w, h = transform(REFERENCE["title"])
         crop = gray[y:y+h, x:x+w]
-        # Normalized correlation alone also matches a darkened page behind a popup.
-        if crop.size == 0 or float((crop > 215).mean()) < .15:
+        # Normalized correlation alone also matches heavily darkened background
+        # controls. A live, unobscured Waydroid capture can render the white title
+        # at 178 rather than 255, so do not require near-white display values.
+        # Four separate anchors still have to match; this only offers a preview.
+        if crop.size == 0 or float((crop > 155).mean()) < .15:
             continue
         proposals = []
         valid = True

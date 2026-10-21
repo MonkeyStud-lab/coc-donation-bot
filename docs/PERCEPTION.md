@@ -210,7 +210,7 @@ chat, full screenshot or private annotations are bundled.
 
 This is not the learned whole-screen classifier or a trained general object
 detector. Its first supported layout is the English seven-column panel with two
-troop rows and one spell row. Missing or obscured anchors, dimmed panels, clipped
+troop rows and one spell row. Missing or obscured anchors, heavily dimmed panels, clipped
 proposed areas, unsupported aspect ratios and uncertain matches return no
 suggestion. Other variants, especially troop-only/no-spell requests, need manual
 selection and more labeled examples. A foreground overlay that leaves the
@@ -240,6 +240,13 @@ ten dimmed/spell-heading-covered copies were refused. These mutations do not
 count as independent sessions. A reference-matcher scan of 227 newer captures
 found no additional candidates; that scan does not establish their true labels
 or prove that no other donation layouts are present.
+
+The subsequent real-panel deployment check exposed an overly strict absolute
+brightness cutoff: an unobscured Waydroid panel rendered white title pixels at
+178 rather than 255. The proposal-only check now accepts that lower-brightness
+case while still requiring all four anchors, refusing the half-brightness test
+and refusing an obscured anchor. This is not permission to act through a popup;
+the user must inspect the full preview before saving.
 
 Evaluate a hash-verified private batch without Android or a model-training step:
 

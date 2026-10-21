@@ -55,6 +55,14 @@ class DonationSuggestions(TestCase):
                       np.zeros((30,30),np.uint8)):
             self.assertFalse(suggest_donation(frame)['supported'])
 
+    def test_lower_brightness_unobscured_capture_still_requires_all_anchors(self):
+        # Live Waydroid panel: white title pixels were 178, not near 255.
+        visible = (panel() * .7).astype(np.uint8)
+        self.assertTrue(suggest_donation(visible)['supported'])
+        x,y,w,h = REFERENCE['gem']
+        visible[y-5:y+h+5,x-5:x+w+5] = 100
+        self.assertFalse(suggest_donation(visible)['supported'])
+
     def test_proposals_are_inside_the_frame(self):
         result = suggest_donation(panel())
         for p in result['proposals']:

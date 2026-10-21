@@ -363,6 +363,33 @@ class WebTests(TestCase):
         with self.assertRaises(ValueError):
             captures.get(meta["id"])
 
+    def test_suggestion_preview_never_saves_and_rejects_stale_or_expired_captures(self):
+        captures = self.client.app.state.captures
+        meta = captures.add(np.zeros((540, 960, 3), dtype=np.uint8))
+        before = calibration_revision()
+        url = '/api/captures/'+meta['id']+'/suggestions'
+        result = self.client.get(url)
+        self.assertEqual(result.status_code, 200)
+        self.assertFalse(result.json()['supported'])
+        self.assertEqual(result.json()['capture'], meta['id'])
+        self.assertEqual(calibration_revision(), before)
+        self.assertFalse((self.home/'data/calibrated.yaml').exists())
+        from test_donation_calibration import panel
+        visible = captures.add(panel())
+        preview = self.client.get('/api/captures/'+visible['id']+'/suggestions')
+        self.assertEqual(preview.status_code, 200)
+        self.assertTrue(preview.json()['supported'])
+        self.assertEqual(len(preview.json()['proposals']), 6)
+        self.assertEqual(calibration_revision(), before)
+        self.assertFalse((self.home/'data/calibrated.yaml').exists())
+        captures.save(meta['id'], 'frame_width', [], meta['revision'])
+        self.assertIn(self.client.get(url).status_code, (400, 409))
+        for _ in range(9):
+            captures.add(np.zeros((540,960,3), dtype=np.uint8))
+        self.assertEqual(self.client.get(url).status_code, 400)
+        self.client.post('/api/logout', headers=self.headers)
+        self.assertEqual(self.client.get(url).status_code, 401)
+
     def test_backup_path_guard(self):
         self.assertEqual(self.client.post("/api/backups/unknown/restore", headers=self.headers).status_code, 404)
         self.assertEqual(self.client.get("/api/library/images/unknown").status_code, 404)

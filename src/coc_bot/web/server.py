@@ -334,6 +334,11 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
         with service.lock:
             return Response(captures.get(ident)[1], media_type="image/png")
 
+    @app.get("/api/captures/{ident}/suggestions")
+    def suggestions(ident: str):
+        with service.lock:
+            return captures.suggest(ident)
+
     @app.post("/api/setup")
     def save_part(body: Selection):
         with service.mutation():

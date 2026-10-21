@@ -347,7 +347,7 @@ function App(){
     </main>
     {viewer&&<GameViewer close={()=>setViewer(false)}/>}
     {live&&<LiveView close={()=>setLive(false)} active={!!status?.active} stop={()=>command('stop')}/>}
-    {capture&&<Editor capture={capture} part={editor} locked={locked} refresh={()=>captureScreen(editor)}
+    {capture&&<Editor key={capture.id+':'+editor?.key} capture={capture} part={editor} locked={locked} refresh={()=>captureScreen(editor)}
       close={()=>{setCapture(null);setEditor(null);}}
       save={async(selection,cols,rows,jitter)=>{const saved=await attempt(()=>api('setup','POST',{
         capture:capture.id,part:editor!.key,selection,revision:capture.revision,cols,rows,jitter}));
@@ -490,6 +490,20 @@ function Editor({capture,part,locked,close,save,refresh}:{capture:Capture;part:P
   const [points,setPoints]=useState<number[][]>(part?.key==='deploy_sequence'?capture.taps||[]:[]),[box,setBox]=useState<number[]>([]);
   const [mode,setMode]=useState(part?.kind==='tap'?'point':'box'),[jitter,setJitter]=useState(capture.jitter??6);
   const [cols,setCols]=useState(part?.key==='troop_bar'?7:5),[rows,setRows]=useState(part?.key==='troop_bar'?2:1);
+  const [suggesting,setSuggesting]=useState(false),[suggestionNote,setSuggestionNote]=useState('');
+  const canSuggest=new Set(['donation_panel','donation_elixir_button','donation_troop_bar',
+    'donation_spell_bar','troop_bar','spell_bar']).has(part?.key||'');
+  async function suggest(){
+    setSuggesting(true);setSuggestionNote('');
+    try{
+      const result=await api('captures/'+capture.id+'/suggestions');
+      const proposed=result.proposals.find((p:{part:string})=>p.part===part?.key);
+      if(proposed){setMode('box');setPoints([]);setBox(proposed.selection);
+        if(proposed.cols)setCols(proposed.cols);if(proposed.rows)setRows(proposed.rows);}
+      setSuggestionNote(result.message);
+    }catch(error){setSuggestionNote(error instanceof Error?error.message:'Unable to suggest an area. Draw it manually.');}
+    finally{setSuggesting(false);}
+  }
   const origin=useRef<number[]|null>(null);
   const sequence=part?.key==='deploy_sequence';
   useEffect(()=>{
@@ -500,7 +514,15 @@ function Editor({capture,part,locked,close,save,refresh}:{capture:Capture;part:P
     const c=canvas.current;if(!c||!image.current)return;
     const ctx=c.getContext('2d')!;ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(image.current,0,0);
     ctx.strokeStyle='#55d4ff';ctx.fillStyle='#55d4ff44';ctx.lineWidth=3;
-    if(box.length){ctx.fillRect(...box as [number,number,number,number]);ctx.strokeRect(...box as [number,number,number,number]);}
+    if(box.length){ctx.fillRect(...box as [number,number,number,number]);ctx.strokeRect(...box as [number,number,number,number]);
+      if(part?.kind==='grid'&&Number.isInteger(cols)&&cols>=1&&cols<=20&&Number.isInteger(rows)&&rows>=1&&rows<=10){
+        const [x,y,w,h]=box;ctx.font='bold 18px sans-serif';
+        for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+          ctx.strokeRect(x+c*w/cols,y+r*h/rows,w/cols,h/rows);
+          ctx.strokeText(String(r*cols+c+1),x+(c+.5)*w/cols,y+(r+.5)*h/rows);
+        }
+      }
+    }
     points.forEach(([x,y],i)=>{
       ctx.beginPath();ctx.arc(x,y,sequence?Math.SQRT2*jitter:8,0,Math.PI*2);ctx.fill();ctx.stroke();
       // Existing engine varies each axis independently. The circle encloses
@@ -510,7 +532,7 @@ function Editor({capture,part,locked,close,save,refresh}:{capture:Capture;part:P
       ctx.fillStyle='#55d4ff44';ctx.strokeStyle='#55d4ff';ctx.lineWidth=3;
     });
   }
-  useEffect(paint,[points,box,jitter]);
+  useEffect(paint,[points,box,jitter,cols,rows]);
   function coordinate(e:React.PointerEvent){
     const rect=e.currentTarget.getBoundingClientRect();
     return [Math.max(0,Math.min(capture.width-1,Math.round((e.clientX-rect.left)*capture.width/rect.width))),
@@ -520,10 +542,13 @@ function Editor({capture,part,locked,close,save,refresh}:{capture:Capture;part:P
     aria-label={part?.label||'Game screenshot'}><div className="toolbar"><h2>{part?.label||'Game screenshot'}</h2>
     <button disabled={locked} onClick={refresh}>Refresh screenshot</button><button onClick={close}>Cancel</button></div>
     {part&&<p className="instructions">{part.instructions}</p>}
+    {canSuggest&&<div className="toolbar"><button disabled={locked||suggesting} onClick={suggest}>
+      {suggesting?'Finding area…':'Suggest area'}</button>
+      <span role="status">{suggestionNote||'Preview a suggested area, then check it before saving.'}</span></div>}
     {part?.kind==='tap'&&<select aria-label="Selection type" value={mode} onChange={e=>{setMode(e.target.value);setBox([]);setPoints([]);}}>
       <option value="point">Click a point</option><option value="box">Box the button and save its picture</option></select>}
     <canvas ref={canvas} width={capture.width} height={capture.height}
-      onPointerDown={e=>{if(!part||part.key==='frame_width')return;e.currentTarget.setPointerCapture(e.pointerId);
+      onPointerDown={e=>{if(!part||part.key==='frame_width'||locked||suggesting)return;e.currentTarget.setPointerCapture(e.pointerId);
         const p=coordinate(e);if(sequence)setPoints([...points,p]);else if(mode==='point')setPoints([p]);else{origin.current=p;setBox([]);}}}
       onPointerMove={e=>{if(!origin.current)return;const [x,y]=coordinate(e),[a,b]=origin.current;
         setBox([Math.min(a,x),Math.min(b,y),Math.abs(x-a),Math.abs(y-b)]);}}
@@ -533,7 +558,7 @@ function Editor({capture,part,locked,close,save,refresh}:{capture:Capture;part:P
       <button onClick={()=>setPoints(points.slice(0,-1))}>Undo</button><button onClick={()=>setPoints([])}>Clear</button><span>{points.length} taps</span></div>}
     {part?.kind==='grid'&&<div className="toolbar"><label>Columns<input type="number" min="1" max="20" value={cols} onChange={e=>setCols(Number(e.target.value))}/></label>
       <label>Rows<input type="number" min="1" max="10" value={rows} onChange={e=>setRows(Number(e.target.value))}/></label></div>}
-    {part&&<button className="primary" disabled={locked||(part.key!=='frame_width'&&!points.length&&!box.length)}
+    {part&&<button className="primary" disabled={locked||suggesting||(part.key!=='frame_width'&&!points.length&&!box.length)}
       onClick={()=>save(sequence?points:part.key==='frame_width'?[]:mode==='point'?points[0]:box,cols,rows,jitter)}>Save</button>}
   </section></div>;
 }

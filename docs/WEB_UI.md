@@ -117,6 +117,18 @@ not a change to the saved schedule or selected attack method.
 
 ## Calibration and backups
 
+For the donation title, elixir button, troop/spell areas and troop/spell grids,
+the screenshot editor includes **Suggest area**. Open a donation panel first,
+capture it, then press the button. Check the highlighted area and the numbered
+grid; adjust them if needed, and press **Save** to apply that one part. A preview
+does not change calibration or click anything in the game. Cancel discards it.
+
+The initial helper supports the inspected English panel with seven columns,
+two troop rows and one spell row. Other layouts can still be drawn manually.
+Slot colors and the selected-elixir indicator remain manual steps: locating the
+elixir button does not prove which resource mode is selected. See
+[automatic calibration scope and evidence](PERCEPTION.md#donation-calibration-proposals).
+
 Select a Setup part, prepare the game exactly as instructed, release manual
 control, then **Capture screen**. Editors use immutable screenshots and original
 Android dimensions; browser scaling/letterboxing does not change saved coordinates.

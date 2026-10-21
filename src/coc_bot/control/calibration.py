@@ -70,6 +70,14 @@ class Captures:
             raise ValueError("Screenshot expired. Capture again.")
         return self.frames[ident]
 
+    def suggest(self, ident):
+        """Analyze the immutable capture; never publish or save calibration."""
+        from coc_bot.vision.donation_calibration import suggest_donation
+        frame, _png, meta = self.get(ident)
+        if meta["revision"] != calibration_revision():
+            raise RevisionConflict("Calibration changed. Capture a fresh screenshot.")
+        return suggest_donation(frame) | {"capture": ident, "revision": meta["revision"]}
+
     @calibration_locked
     def save(self, ident, key, selection, expected, cols=7, rows=1, jitter=6):
         frame, _png, meta = self.get(ident)

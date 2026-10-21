@@ -198,6 +198,73 @@ inherited or incorrect, so agreement is not accuracy and disagreements need revi
 Neither trainer nor observer changes calibration, settings, purchases or navigation.
 Keep all models, approvals, evaluation logs and screenshots in the ignored data folder.
 
+## Donation calibration proposals
+
+The browser Setup editor has an optional **Suggest area** action for the donation
+title, elixir resource button, troop/spell areas and troop/spell grids. This uses
+`vision/donation_calibration.py`, a reference-based localizer independent of saved
+calibration. It matches the Donation Resource title, both section headings and
+the gem icon, checks title brightness, and locates the inspected layout relative
+to those anchors. Only generic text/icon crops ship in the package; no account,
+chat, full screenshot or private annotations are bundled.
+
+This is not the learned whole-screen classifier or a trained general object
+detector. Its first supported layout is the English seven-column panel with two
+troop rows and one spell row. Missing or obscured anchors, dimmed panels, clipped
+proposed areas, unsupported aspect ratios and uncertain matches return no
+suggestion. Other variants, especially troop-only/no-spell requests, need manual
+selection and more labeled examples. A foreground overlay that leaves the
+anchors visible may still escape these checks; inspect the full preview.
+
+Suggestions refer to an immutable capture and its calibration revision. A stale
+or expired capture cannot supply a proposal. Previewing issues no ADB input and
+saves no settings/templates. The user checks/edits the box and grid counts, then
+uses the existing transactional Save for that part, including its safety backup
+and ownership checks. Refresh creates a new editor selection rather than carrying
+old coordinates into the new frame. No batch auto-save or automatic navigation
+uses these proposals. Slot colors, the selected resource-state template, chat
+controls and other calibration remain manual. In particular, a located elixir
+button is never treated as proof that elixir mode is selected.
+
+The October 19 proposal evaluation used a private fixed batch of 108 screenshots:
+five previously reviewed panels and 103 other screens, including eight new
+collector hints visually corrected from donation panel to battle/results. All
+five panels produced proposals; all 103 negatives were refused. Troop-grid union
+box overlap exceeded 99%, spell-grid overlap exceeded 98%, and elixir-button
+overlap exceeded 96% against the existing AI-reviewed annotations. Those boxes
+are partial labels, not independent ground truth. One of the five panels supplied
+the generic reference crops, and all positives come from one device/layout.
+This is limited proposal evidence, not a generalization or calibration-free claim.
+Ten resized positive copies at 1280/1920 pixels wide also produced proposals;
+ten dimmed/spell-heading-covered copies were refused. These mutations do not
+count as independent sessions. A reference-matcher scan of 227 newer captures
+found no additional candidates; that scan does not establish their true labels
+or prove that no other donation layouts are present.
+
+Evaluate a hash-verified private batch without Android or a model-training step:
+
+```bash
+python scripts/evaluate_donation_suggestions.py \
+  --batch path/to/private-batch \
+  --output path/to/new-evaluation-directory
+```
+
+The batch's `manifest.json` is an array with `id`, `image` (relative to `images/`),
+`sha256`, `session`, `screen`, and partial `boxes` (`label`, pixel `xywh`). Mark the
+reference image with `reference_source: true`. The evaluator refuses changed
+images, paths outside the batch, duplicate IDs, missing sessions/unreviewed screen
+labels and existing output directories. It records refusals/acceptances and box
+union overlap; it never promotes partial annotations to approved training data.
+The new private review batch preserves the original captures and reviews.
+
+To progress to a learned control detector, collect the missing current layouts,
+complete and approve all visible instances of a fixed class set (including
+partial/disabled controls or explicit ignore regions), and reserve independent
+recording sessions for evaluation. Include Trade, popups, resource-mode changes
+and negative pages. Keep the present manual editor as a fallback until that
+detector has been validated. The existing screen-label approval alone does not
+approve this separate object-training work.
+
 ## Offline checks
 
 These checks do not issue ADB commands:

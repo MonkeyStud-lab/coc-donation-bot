@@ -9,11 +9,38 @@ from functools import wraps
 _guard = threading.Lock()
 _locks: dict[str, threading.Lock] = {}
 _frames: dict[str, tuple[object, float]] = {}
+_failures: dict[str, int] = {}
+_failure_listener = None
+
+
+def set_failure_listener(listener):
+    """The managed dashboard installs one listener; desktop capture stays inert."""
+    global _failure_listener
+    with _guard:
+        _failure_listener = listener
+
+
+def capture_failed(device):
+    with _guard:
+        _failures[device] = count = _failures.get(device, 0) + 1
+        listener = _failure_listener
+    if count >= 3 and listener is not None:
+        try:
+            listener(device)
+        except Exception as exc:
+            from loguru import logger
+            logger.warning('Capture recovery could not be scheduled: {}', exc)
+
+
+def capture_succeeded(device):
+    with _guard:
+        _failures.pop(device, None)
 
 
 def publish_frame(device, frame):
     with _guard:
         _frames[device] = (frame.copy(), time.monotonic())
+        _failures.pop(device, None)
 
 
 def latest_frame(device):
@@ -39,6 +66,14 @@ def serialized_capture(method):
         try:
             self._deadline = deadline
             return method(self, *args, **kwargs)
+        except AdbStopped:
+            raise
+        except AdbError:
+            # Owner contention and optional observation misses do not establish
+            # a broken Android renderer.
+            if method.__name__ == 'screenshot':
+                capture_failed(self.client.device)
+            raise
         finally:
             self._deadline = None
             lock.release()

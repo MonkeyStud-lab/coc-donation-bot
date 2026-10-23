@@ -1,5 +1,5 @@
 """Upgrade eligibility is independent of navigation and never uses color alone."""
-from coc_bot.upgrades.vision import compact
+from coc_bot.upgrades.vision import compact, pet_name
 
 PROTECTED = {
     'townhall','wall','walls','laboratory','barracks','darkbarracks','spellfactory',
@@ -18,17 +18,27 @@ BUILDINGS = {compact(name) for name in (
 
 
 def reason(config, kind, candidate, balances, availability):
-    if kind not in ('buildings','research'):
+    if kind not in ('buildings','research','pets'):
         return 'Unsupported upgrade category'
     if availability is None:
-        return 'Builder/research availability could not be verified'
+        return 'Upgrade-slot availability could not be verified'
     free,total=availability
+    if kind=='pets' and (total!=1 or type(free) is not int or free not in (0,1)):
+        return 'Pet-upgrade slot could not be verified'
     if free <= (config.upgrade_builders_reserved if kind=='buildings' else 0):
-        return 'No spare builders' if kind=='buildings' else 'Research is already busy'
+        return {'buildings':'No spare builders','research':'Research is already busy',
+                'pets':'Pet upgrade is already busy or unavailable'}[kind]
     if compact(candidate.name) in PROTECTED:
         return 'Excluded from automatic upgrades'
     if kind=='buildings' and compact(candidate.name) not in BUILDINGS:
         return 'Unrecognized building or excluded hero; no upgrade allowed'
+    if kind=='pets':
+        if pet_name(candidate.name) is None or candidate.currency!='dark_elixir':
+            return 'Unrecognized pet or dark-elixir price; no upgrade allowed'
+        if type(candidate.assigned) is not bool:
+            return 'Pet assignment could not be verified'
+        if candidate.assigned and not getattr(config,'upgrade_pets_include_assigned',False):
+            return 'Equipped pets are excluded in upgrade settings'
     exclusions={compact(name) for name in config.upgrade_excluded_names.split(',') if name.strip()}
     if compact(candidate.name) in exclusions:
         return 'Excluded in upgrade settings'

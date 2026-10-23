@@ -73,6 +73,8 @@ class BotConfig:
     farm_engine: str = 'sequence'
     upgrade_buildings_enabled: bool = False
     upgrade_research_enabled: bool = False
+    upgrade_pets_enabled: bool = False
+    upgrade_pets_include_assigned: bool = False
     upgrade_interval_seconds: int = 900
     upgrade_builders_reserved: int = 1
     upgrade_gold_reserve: int = 1_000_000
@@ -324,6 +326,8 @@ def load_config(
         farm_engine=str(farm.get('engine','sequence')) if farm.get('engine','sequence') in ('sequence','planner','automatic') else 'sequence',
         upgrade_buildings_enabled=upgrades.get('buildings_enabled') is True,
         upgrade_research_enabled=upgrades.get('research_enabled') is True,
+        upgrade_pets_enabled=upgrades.get('pets_enabled') is True,
+        upgrade_pets_include_assigned=upgrades.get('pets_include_assigned') is True,
         upgrade_interval_seconds=max(60,int(upgrades.get('interval_seconds',900))),
         upgrade_builders_reserved=max(0,min(6,int(upgrades.get('builders_reserved',1)))),
         upgrade_gold_reserve=max(0,int(upgrades.get('gold_reserve',1_000_000))),

@@ -4,6 +4,11 @@ Test date: **October 18, 2026**. Candidate based on `90a97a3` plus the
 fresh-install provisioning changes. This is a separate acceptance record from
 the existing-host gameplay checks; it does not describe a production deployment.
 
+Latest result: a subsequent blank-disk KVM run completed fresh provisioning,
+Android startup and APK installation with the complete `ddf04bb` image. Clash
+itself exited during native-library loading, so full game acceptance remains
+open. See the hardware-accelerated follow-up below.
+
 ## Isolation and environment
 
 - A disposable Ubuntu 24.04.5 VM started with no Docker, CasaOS, Waydroid, game,
@@ -141,3 +146,114 @@ the account owner. Fresh calibration and army review remain explicit steps;
 public unit icons do not provide every hero skin or navigation reference.
 
 See [the package guide](CASAOS_PACKAGE.md) for installation and backup scope.
+
+## Hardware-accelerated follow-up — October 18, 2026
+
+After SVM was enabled on the physical host, `/dev/kvm` appeared and an
+unprivileged test-container probe returned KVM API version 12. QEMU used
+`-accel kvm -cpu host`, four vCPUs and 8 GiB guest RAM, retaining VirtIO 3D and
+EGL-headless graphics. The previous VM disk was preserved. A second disk started
+from the verified Ubuntu cloud image with no Docker, CasaOS, Waydroid or profile.
+
+This clean run used source `ddf04bb` and the complete locally built image, with
+no code bind mounts or repair image layers. Image transfer checksums and the
+offline blank-profile acceptance check passed inside the guest. The actual
+Compose setup service exited successfully after installing host prerequisites,
+binder, Waydroid and fresh validated Android images. CasaOS and the bundled
+dashboard started normally.
+
+The normal dashboard flow reached **Import the Clash APK archive**, authenticated
+the new Android device, accepted the trusted archive, and installed Clash
+18.647.2. No production profile, Android account data or calibration was imported.
+Gameplay automation remained stopped.
+
+**Game compatibility is still an open acceptance gate.** Clash exited immediately
+with the obfuscated exception `pmmvato.ay: 02` during native-library loading. A
+fixed direct launch reproduced the failure. The working physical installation
+and this guest both selected x86-64 and the same game version; those checks do
+not explain the failure or establish an anti-VM/protection diagnosis.
+
+A separate trial of Waydroid's documented SwiftShader/default-gralloc fallback
+also failed to keep Clash running. That trial preserved and then restored the
+original Waydroid configuration. Dashboard screenshot capture succeeded and was
+visually checked: it showed a rendered Android launcher at 1853 × 1016, not a
+running game. **Close Waydroid and Clash** successfully stopped the session.
+Retry startup then reopened Android and attempted the installed game, reporting
+the same bounded game-compatibility error.
+
+A subsequent guest reboot brought back CasaOS, the healthy dashboard container,
+host helper, headless display and Android session without desktop login. Android
+reported boot completion, Package Manager was usable, and the installed Clash
+package remained present. The private ADB identity, default configuration,
+artwork manifest and test-profile sentinel matched their pre-reboot hashes.
+No private calibration appeared and automation remained stopped. The game still
+failed to remain running; the dashboard correctly reported that failure instead
+of marking the runtime ready. The temporary guests were shut down afterward,
+with their disks and diagnostic evidence retained.
+
+The new Android image also briefly reproduced the SystemUI
+`AppOpsControllerImpl` null-pointer crash reported in
+[Waydroid issue 2428](https://github.com/waydroid/waydroid/issues/2428). Android
+subsequently reached boot/package readiness; this observation does not establish
+that SystemUI caused Clash's separate native-load exception. CPU acceleration
+resolved the earlier speed limitation but did not establish game compatibility.
+
+## Controlled startup comparisons — October 18, 2026
+
+Further experiments used a child disk overlay of the stopped accelerated guest.
+The baseline disk, production Android data and production profile were not used
+as writable test storage. The guest had no game account or private calibration.
+
+The installed Clash APK was byte-for-byte identical to the working host's APK
+(18.647.2, native x86-64). Waydroid tools were version 1.6.2 on both machines.
+Android API level, CPU ABI, native-bridge selection, secure/debug properties and
+the inspected memory-mapping policies matched. These comparisons narrow the
+differences; they do not establish that every runtime dependency is identical.
+
+The working host used April 3 system and April 28 vendor images; the fresh guest
+initially used September images. The older public images were downloaded from
+the official distribution, their extracted hashes matched the working host's
+base images, and they were installed with fresh guest Android user data. The
+actual running April fingerprint was verified. Clash still exited during native
+loading with `pmmvato.ay: 02`. Replacing the Android image pair did not fix it.
+An initial harness attempt used `waydroid init -i` incorrectly as an image-input
+option; only the corrected, hash-verified preinstalled-image trial is evidence
+for this comparison. See Waydroid's
+[custom image instructions](https://docs.waydro.id/faq/using-custom-waydroid-images).
+
+Graphics remain an unresolved difference. The working host exposes AMD RADV
+Vulkan. The original guest rendered Android through VirGL/OpenGL. A Lavapipe
+selection trial also failed to keep Clash running, but Vulkan device enumeration
+was not checked in that trial, so it does not prove software Vulkan was usable.
+
+A separate Venus experiment used QEMU 10.2.1, Mesa 26.0.8 and virglrenderer 1.2,
+with blob resources, a 2 GiB host-memory window, shared memfd RAM, the existing
+host `/dev/udmabuf` device and an unlimited locked-memory allowance in the test
+container. No physical-host permissions, kernel settings or GPU bindings changed.
+Despite those changes, Android reported no Vulkan devices. A native Linux guest
+probe also failed at `vkCreateInstance` with `ERROR_OUT_OF_HOST_MEMORY`; QEMU
+reported `virgl blob create error: Invalid argument`. This is a failure of the VM
+Vulkan path, not a successful hardware-Vulkan game test, and does not prove the
+cause of Clash's obfuscated exception. The documented configuration references
+are [QEMU VirtIO GPU](https://www.qemu.org/docs/master/system/devices/virtio/virtio-gpu.html)
+and [Mesa Venus](https://docs.mesa3d.org/drivers/venus.html).
+
+No game binary, installer identity, security checks or VM-identification
+properties were modified. There is no demonstrated game-startup fix from these
+experiments. Passing provisioning or rendering the Android launcher must not
+be presented as end-to-end fresh-install acceptance.
+
+The headless guest's successful display/session/capture checks demonstrate the
+service architecture without a desktop, not game compatibility on every GPU.
+For the existing working machine, the next useful headless test is a reversible
+offscreen-compositor migration on bare metal while retaining its Waydroid owner,
+Android user data and frame dimensions. See
+[headless operation](CASAOS_PACKAGE.md#headless-operation). No production
+headless migration was attempted during these diagnostics.
+
+The final test guest shut down cleanly with exit code 0. Its disk overlays and
+private diagnostic logs were retained; five redundant stopped diagnostic
+containers were removed. Final production verification found all 34 protected
+files and settings unchanged, a healthy dashboard container and a ready runtime.
+Production automation remained stopped, as it was before testing. No update was
+deployed, and no private APKs, screenshots, keys or VM disks were added to Git.

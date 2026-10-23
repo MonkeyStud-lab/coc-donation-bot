@@ -22,15 +22,19 @@ The built-in pattern deploys Electro Dragons along one mapped edge, spreads Rage
 spells inside that edge, then deploys the siege machine and heroes. Each hero's
 ability follows its own verified deployment. Quantities come from the current army. Before deployment, the bot reads
 two matching frames on each army-bar page and checks both scroll endpoints. It
-rejects unknown cards, inconsistent counts, extra troop types, unsupported spells
-(including Recall), multiple siege cards, and incomplete opponent maps. Skipped
+requires verified Electro Dragons and consistent counts for every used card.
+Extra troop types, unrecognized cards and unsupported spells (including Recall)
+are left unused rather than cancelling the dragon attack. They never authorize
+selection or serve as army-scroll anchors. Multiple supported siege cards and
+incomplete opponent maps still block deployment. Skipped
 matches are allowed to finish, followed by home/camera/chat recovery; they advance
 the farm interval so an unsupported army is not retried repeatedly.
 
 Normal game connection and Farm navigation calibration are still needed. Artwork
 recognition uses the installed icon pack and any existing reviewed card references,
 but never needs `routine.json`. Unfamiliar hero skins may be unreadable and cause a
-skip. This is a supported-army automatic mode, not universal army recognition.
+skip if an identified card cannot be read consistently. Unrecognized skins are
+left unused. This is a supported-army automatic mode, not universal army recognition.
 The executor still verifies individual deployments and never repeats an uncertain
 tap. Stop interrupts immediately and leaves any required camera recovery pending.
 

@@ -92,7 +92,7 @@ class UpgradeRunner:
                 raise ValueError('Build menu did not open; no upgrades attempted')
         if current != kind:
             if self.stopped(): return None
-            self.input.tap(round(frame.shape[1]*(.761 if kind=='buildings' else .829)),
+            self.input.tap(round(frame.shape[1]*{'buildings':.761,'research':.829,'pets':.967}[kind]),
                            round(frame.shape[0]*.932),jitter=0)
             if self.wait(): return None
             frame=self.capture.screenshot()
@@ -103,9 +103,10 @@ class UpgradeRunner:
     def inspect(self, kind, frame):
         availability=self.reader.availability(frame,kind)
         balances=self.reader.balances(frame)
-        rows,end=self.reader.candidates(frame)
+        rows,end=(self.reader.pet_candidates(frame) if kind=='pets' else self.reader.candidates(frame))
         choices=[candidate.public()|{'skip':reason(self.config,kind,candidate,balances,availability)}
                  for candidate in rows]
+        if kind=='pets': choices.sort(key=lambda c:c.get('assigned') is not False)
         return {'kind':kind,'availability':availability,'balances':balances,
                 'recommendations':choices,'section_complete':end}
 
@@ -113,9 +114,9 @@ class UpgradeRunner:
         pending=state.get('pending')
         if not pending: return True
         if pending.get('kind') != kind: return False
-        active=self.reader.active_names(frame)
+        active=self.reader.active_names(frame,kind='pets') if kind=='pets' else self.reader.active_names(frame)
         available=self.reader.availability(frame,kind)
-        # Research uniquely owns one slot. Duplicate building names are ambiguous:
+        # Research and pets each own one slot. Duplicate building names are ambiguous:
         # require a decrease from the saved availability as well as the active name.
         busy=available is not None and available[0] < pending.get('free_before',0)
         count=sum(name==compact(pending.get('name','')) for name in active)
@@ -130,13 +131,13 @@ class UpgradeRunner:
         return False
 
     def run(self, kind, *, execute=False, expected=None):
-        if kind not in ('buildings','research'): raise ValueError('Unknown upgrade category')
+        if kind not in ('buildings','research','pets'): raise ValueError('Unknown upgrade category')
         if self.stopped(): return {'status':'stopped'}
         state=self.state()
         recovery_kind=kind
         if 'pending' in state:
             pending=state['pending']
-            if not isinstance(pending,dict) or pending.get('kind') not in ('buildings','research'):
+            if not isinstance(pending,dict) or pending.get('kind') not in ('buildings','research','pets'):
                 return {'status':'needs_review','message':'Previous upgrade category is unknown; manual review is required',
                         'pending':pending}
             recovery_kind=pending['kind']
@@ -178,9 +179,12 @@ class UpgradeRunner:
             report['selected']=eligible
             report['status']='ready' if eligible else 'nothing_eligible'
             if eligible is None:
-                report['message']='No eligible Suggested upgrade; reserves, availability and exclusions were applied'
+                label='pet' if kind=='pets' else 'Suggested'
+                report['message']=f'No eligible {label} upgrade; reserves, availability and exclusions were applied'
                 return report
-            fingerprint=hashlib.sha256(json.dumps([kind,compact(eligible['name']),eligible['cost'],eligible['currency']]).encode()).hexdigest()
+            identity=[kind,compact(eligible['name']),eligible['cost'],eligible['currency']]
+            if kind=='pets': identity.append(eligible.get('assigned'))
+            fingerprint=hashlib.sha256(json.dumps(identity).encode()).hexdigest()
             report['token']=fingerprint
             if not execute: return report
             if expected is not None and expected != fingerprint:
@@ -191,13 +195,15 @@ class UpgradeRunner:
             if self.reader.menu_kind(fresh)!=kind: raise ValueError('Build menu changed before selection')
             second=self.inspect(kind,fresh)
             stable=next((item for item in second['recommendations'] if compact(item['name'])==compact(eligible['name'])
-                         and item['cost']==eligible['cost'] and item['currency']==eligible['currency'] and not item['skip']),None)
+                         and item['cost']==eligible['cost'] and item['currency']==eligible['currency']
+                         and (kind!='pets' or item.get('assigned')==eligible.get('assigned')) and not item['skip']),None)
             if stable is None or second['balances']!=report['balances'] or second['availability']!=report['availability']:
                 return report|{'status':'changed','message':'Availability, price or resources changed; nothing was spent'}
             if self.stopped(): return {'status':'stopped'}
             from coc_bot.upgrades.vision import Candidate
-            candidate=Candidate(eligible['name'],eligible['cost'],eligible['currency'],tuple(stable['point']))
-            active_before=sum(name==compact(candidate.name) for name in self.reader.active_names(fresh))
+            candidate=Candidate(eligible['name'],eligible['cost'],eligible['currency'],tuple(stable['point']),stable.get('assigned'))
+            active=self.reader.active_names(fresh,kind='pets') if kind=='pets' else self.reader.active_names(fresh)
+            active_before=sum(name==compact(candidate.name) for name in active)
             self.input.tap(*candidate.point,jitter=0)
             detail_open=True
             if self.wait(): return {'status':'stopped'}
@@ -222,9 +228,13 @@ class UpgradeRunner:
             self.input.tap(*confirmation['point'],jitter=0)
             if self.wait(1.0): return {'status':'needs_review','pending':pending}
             frame=self.capture.screenshot()
-            if self.reader.running_detail(frame,candidate):
+            if (self.reader.running_detail(frame,candidate) or
+                    kind=='pets' and self.reader.detail_close(frame) is not None):
                 # Starting research leaves a details dialog open. Only close its
                 # verified X; Finish Now buttons must never receive another tap.
+                # Pet animation can keep the original Upgrade heading visible
+                # briefly after payment. Closing its verified X is safe; only
+                # the menu's active timer and busy slot can confirm success.
                 if self.stopped(): return {'status':'needs_review','pending':pending}
                 self.input.tap(*self.reader.detail_close(frame),jitter=0)
                 if self.wait(): return {'status':'needs_review','pending':pending}

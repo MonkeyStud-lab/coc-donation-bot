@@ -46,14 +46,20 @@ class AutomaticPlanTests(TestCase):
     def test_unknown_unsupported_and_ambiguous_armies_never_generate_a_plan(self):
         cases = [[], [card(stable=False)], [replace(card(),unit_id=None)],
                  [card(quantity=None)], [card(quantity=0)], [card(quantity=21)],
-                 [card(),card('recall_spell','spell',1)], [card(),card('freeze','spell',2)],
-                 [card(),card('barbarian','troop',10)], [card(),card()],
+                 [card('recall_spell','spell',1)], [card('king','hero',1)], [card(),card()],
                  [card(),card('flame_flinger','siege',1),card('battle_blimp','siege',1)],
                  [card(),card('rage','spell',1),card('rage_spell','spell',1)],
                  [card()]+[card('hero_'+str(i),'hero',1) for i in range(5)]]
         for cards in cases:
             with self.subTest(cards=cards), self.assertRaises(ValueError):
                 automatic_plan(cards)
+
+    def test_extra_cards_do_not_veto_verified_dragons_or_authorize_extra_taps(self):
+        unknown=replace(card(),slot='extra',unit_id=None,kind='unknown',quantity=None,stable=False)
+        plan=automatic_plan([unknown,card('barbarian','troop',50),card(),
+                             card('recall_spell','spell',5)])
+        self.assertEqual([e.unit_id for e in plan.army],['electro_dragon'])
+        self.assertEqual([(s.unit_id,s.quantity) for s in plan.steps],[('electro_dragon',11)])
 
 
 class AutomaticScanTests(TestCase):
@@ -94,6 +100,17 @@ class AutomaticScanTests(TestCase):
         with patch('coc_bot.attack.automatic.BattleFrameGate'), \
                 patch('coc_bot.attack.automatic.read_army',side_effect=self.read_pages([left,left,right])):
             with self.assertRaisesRegex(ValueError,'changed between pages'):scan_army(session,catalog)
+        session.input.tap.assert_not_called()
+
+    def test_ignored_cards_are_not_scroll_anchors_or_inventory(self):
+        session,catalog=self.session(),Mock()
+        unknown=replace(card(x=50),unit_id=None,kind='unknown',quantity=None)
+        cards=[unknown,card(x=250),card('recall_spell','spell',5,500)]
+        with patch('coc_bot.attack.automatic.BattleFrameGate'), \
+                patch('coc_bot.attack.automatic.read_army',side_effect=self.read_pages([cards]*3)):
+            army=scan_army(session,catalog)
+        self.assertEqual([c.unit_id for c in army],['electro_dragon'])
+        self.assertEqual([c.args[0] for c in session.input.swipe.call_args_list],[315,315])
         session.input.tap.assert_not_called()
 
     def test_unknown_card_and_inconsistent_frames_are_rejected(self):
@@ -160,18 +177,18 @@ class AutomaticLifecycleTests(TestCase):
             self.assertEqual(path.read_text(),'unrelated saved plan')
             f.donation_nav.ensure_clan_chat.assert_called_once()
 
-    def test_unsupported_army_recovers_without_deploy_and_advances_interval(self):
+    def test_missing_dragons_recovers_without_deploy_and_advances_interval(self):
         with TemporaryDirectory() as root:
             f=self.farmer(root)
             with patch('coc_bot.attack.planned_farmer.remember_camera'), \
                     patch('coc_bot.attack.planned_farmer.restore_camera') as restore, \
                     patch('coc_bot.attack.planned_farmer.survey',return_value={'projection':Mock(),'reference':Mock()}), \
                     patch('coc_bot.attack.planned_farmer.learned_catalog'), \
-                    patch('coc_bot.attack.automatic.scan_army',return_value=[card(),card('recall_spell','spell',1)]), \
+                    patch('coc_bot.attack.automatic.scan_army',return_value=[card('recall_spell','spell',1)]), \
                     patch('coc_bot.attack.planned_farmer.VerifiedExecutor') as executor:
                 result=run_planned_attack(f,automatic=True)
             self.assertFalse(result.success);self.assertTrue(result.counts_toward_interval)
-            self.assertIn('recall_spell',result.reason)
+            self.assertIn('no verified Electro Dragons',result.reason)
             executor.assert_not_called()
             self.assertEqual(restore.call_count,2)
             f.attack_nav.return_home_from_attack.assert_called_once()

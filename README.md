@@ -27,7 +27,8 @@ automation is stopped.
   map the opponent and verify individual deployments.
 - **Upgrades:** follows the game's Suggested building upgrades and laboratory
   research, subject to availability, supported names, exclusions, and resource
-  reserves. Previewing and starting an upgrade are separate actions.
+  reserves. Pet upgrades use a separate slot and prefer unassigned pets.
+  Previewing and starting an upgrade are separate actions.
 - **Browser controls:** Start/Stop, farm and break countdowns, activity logs,
   responsive settings, themes, guided calibration, and calibration backups.
 - **Recovery:** records unfinished attack and upgrade actions so a restart can
@@ -119,9 +120,12 @@ Gameplay automation stays stopped until you press **Start**.
 
 The initial target is an x86-64 Ubuntu/Debian host with systemd, compatible binder
 support, and working graphics, initially AMD/Intel. CasaOS and Docker must already
-be installed. Clean-host installation, unattended headless reboot, and other
-hardware combinations still need acceptance testing; this is not a universally
-tested one-click package.
+be installed. An isolated VM passed clean-host provisioning, APK installation,
+and unattended headless service recovery after reboot, but Clash still exits
+during startup there. Fresh-game and other hardware combinations still need
+acceptance testing; this is not a universally tested one-click package. See the
+[test record](docs/CASAOS_FRESH_INSTALL_TEST.md) and
+[headless operation guide](docs/CASAOS_PACKAGE.md#headless-operation).
 
 1. Download this repository on the CasaOS host using the clone commands above.
 2. In its project folder, build the local image:
@@ -207,6 +211,8 @@ recalibrate changed parts.
   timing presets, and collection limits. Advanced reveals less common options;
   Dev options exposes raw timing values.
 - **Setup:** guided calibration or direct access to one calibration part.
+  Advanced reveals older-UI and fallback controls. The programmed deploy
+  sequence is shown normally only for the sequence attack method.
 - **Library:** calibration backups/profiles, ZIP import/export, rename/delete,
   and the screenshot collection gallery.
 - **Diagnostics:** device/screen checks, current screenshot, navigation tests,
@@ -300,19 +306,24 @@ results are recognized. See the [attack guide](docs/ATTACK_REBUILD.md) and
 
 ## Optional upgrades
 
-Building/research automation is **off by default**. First stop the bot and use
-**Diagnostics → Building upgrades / Army research → Check upgrades**. This reads
-Suggested entries without spending. **Start recommended upgrade** is a separate
+Building/research/pet automation is **off by default**. First stop the bot and use
+**Diagnostics → Building upgrades / Army research / Pet upgrades → Check upgrades**. This reads
+eligible entries without spending. **Start recommended upgrade** is a separate
 action with confirmation and fresh checks.
 
 Enable desired categories in **Settings → Upgrades** for automatic operation.
-The bot checks builder/laboratory availability, supported recommendations, price,
+The bot checks builder/laboratory/pet availability, supported recommendations, price,
 currency, and balance. Reserves are minimum balances to keep **after** paying.
 You can also reserve builders and exclude names.
 
-Walls, heroes, the Town Hall, new building purchases, equipment/pets, and several
-army-production buildings are excluded. Only supported Suggested entries are
-eligible. This path does not authorize gems, magic items, or buying missing
+Pet upgrades use their own free slot and the dark-elixir reserve. Only unassigned
+pets are eligible by default. **Allow upgrades of equipped pets** is a separate
+setting because an upgrading pet may be unavailable for attacks.
+
+Walls, heroes, the Town Hall, new building purchases, equipment, and several
+army-production buildings are excluded. Buildings and research must be in the
+Suggested list; pets must have a verified name, assignment, and price.
+This path does not authorize gems, magic items, or buying missing
 resources. An uncertain spending result blocks another purchase until the
 pending action can be reconciled. See [upgrade rules and exclusions](docs/UPGRADES.md).
 
@@ -324,6 +335,15 @@ It waits through a verified battle, requires visual results to leave, and checks
 home/camera/clan chat before clearing the interrupted operation. Recovery does
 not use the ordinary timer-based Return Home fallback; it pauses if confirmation
 cannot be obtained. Upgrade spending has a separate pending-action journal.
+
+On CasaOS, three failed screenshot captures trigger a managed recovery check.
+The app pauses inputs and verifies that Android's shell responds while its
+graphics service times out before restarting the Waydroid session. A failed
+video capture can request the same check. It verifies capture again before
+resuming a previously running bot through its existing recovery journals.
+Stop cancels recovery and prevents automatic resume. Restarts are limited to
+two per hour, with a five-minute cooldown. Unconfirmed faults require manual
+inspection; recovery never reinstalls Android or resets calibration/game data.
 
 If recovery is pending, inspect the game and logs. Do not delete recovery files
 just to force another attack or purchase. **Stop** leaves unfinished recovery

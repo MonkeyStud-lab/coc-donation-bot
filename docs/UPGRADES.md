@@ -1,7 +1,9 @@
-# Suggested upgrades
+# Automatic upgrades
 
 The browser app can check the game's **Build** menu and start eligible building
-upgrades or laboratory research in its **Suggested upgrades** order. Automatic
+upgrades or laboratory research in its **Suggested upgrades** order. It can also
+upgrade eligible pets from the **Hero Pets** tab, preferring unassigned pets.
+Automatic
 upgrades are off by default. This is an initial implementation for the inspected
 English, landscape game interface; an unreadable or changed screen blocks spending.
 
@@ -9,7 +11,7 @@ English, landscape game interface; an unreadable or changed screen blocks spendi
 
 1. Stop the bot and close manual game controls.
 2. Open **Diagnostics** in the browser dashboard.
-3. Under **Building upgrades** or **Army research**, press **Check upgrades**.
+3. Under **Building upgrades**, **Army research**, or **Pet upgrades**, press **Check upgrades**.
    The app opens the Build menu, reads the recommendations, and returns to chat.
    Checking does not buy or start anything.
 4. Read the displayed cost and any reasons for skipping an entry.
@@ -27,7 +29,7 @@ See [current validation status](WEB_UI_MIGRATION_STATUS.md) for dated evidence.
 
 ## Automatic checks
 
-Open **Settings → Upgrades**. Enable building upgrades, research, or both, and
+Open **Settings → Upgrades**. Enable building upgrades, research, pet upgrades, or any combination, and
 Save while stopped, or Save & restart during normal operation. The latter waits
 for the current action; Stop cancels the pending settings restart. Start the bot
 normally when stopped. It checks between donation rounds, after the farming
@@ -40,7 +42,7 @@ The initial settings are:
 - Check every 900 seconds while running.
 - Keep one builder free.
 - Keep at least 1,000,000 gold, 2,000,000 elixir, and 50,000 dark elixir.
-- Additional exclusions accept building or troop names separated by commas.
+- Additional exclusions accept building, troop, spell or pet names separated by commas.
 
 The reserve is the minimum balance **after** paying for an upgrade. It is a floor,
 not a daily budget. Availability, price, resource type, and remaining balance all
@@ -52,10 +54,32 @@ Each resource reserve accepts values from 0 to 100,000,000 in both the browser
 and desktop settings. Builder reservations range from 0 to 6, and the check
 interval ranges from 60 to 86,400 seconds.
 
+## Pet upgrades
+
+Enable **Automatic pet upgrades** in Settings. The app verifies the **Hero Pets**
+tab and its separate pet-upgrade counter; spare builders or a free laboratory do
+not establish pet availability. It reads known pet names and dark-elixir prices,
+keeps the same dark-elixir reserve, and starts at most one pet upgrade per check.
+Locked pets, missing prices, unreadable names, and a busy pet slot are skipped.
+
+Pets have **Assigned** and **Unassigned** sections rather than a Suggested list.
+By default only unassigned pets are eligible, in displayed order. **Allow upgrades
+of equipped pets** is a separate opt-in; unassigned pets visible in the list are
+still preferred. Upgrading an equipped pet may make it unavailable for attacks.
+Pet House building upgrades remain excluded. A pet-upgrade operation never
+changes hero assignments, spends gems, or uses a hammer/book to finish instantly.
+
+Live validation on 2026-10-22 started an unassigned L.A.S.S.I upgrade for 60,000
+dark elixir. The balance decreased by that amount, gems stayed unchanged, and
+the pet counter changed from 1/1 to 0/1 with a matching active timer. Recovery
+also verified that timer and cleared the pending journal without another
+purchase. This validates the inspected English landscape interface; other
+layouts and future game changes still need testing.
+
 ## What is excluded
 
 The first version does not buy new buildings, upgrade the Town Hall, upgrade heroes
-or walls, manage equipment or pets, or upgrade the Laboratory, Barracks, spell
+or walls, manage equipment, or upgrade the Laboratory, Barracks, spell
 factories, Workshop, Hero Hall, or Pet House. Building names must match an explicit
 supported list. Laboratory research must appear in the verified Army upgrades tab.
 Unknown layouts, incomplete Suggested sections, unreadable numbers, and resource
@@ -69,17 +93,27 @@ authorizes gems, missing-resource purchases, books, hammers, or potions. These
 checks reduce mistakes; they cannot guarantee compatibility with future game
 changes. Test a preview after a game update before enabling automatic checks.
 
+Confirmation prices use both the original text and a contrast-isolated version
+with the same strict digit thresholds. This handles shading on green buttons
+without guessing a missing leading digit. Conflicting readable amounts block
+the purchase, even if one matches the recommended price.
+
+Live validation on 2026-10-22 started a Builder's Hut level-5 upgrade for
+7,000,000 gold. Gold changed from 24,500,000 to 17,500,000, gems stayed at 698,
+and free builders changed from 1/5 to 0/5. The active-name count increased from
+one Builder's Hut to two, and the runner confirmed its journal without a retry.
+
 ## Stops, interruptions, and uncertain results
 
 **Stop** interrupts previewing, navigation, and waiting. A resource press already
 sent to Android cannot be undone. Before that press, the app saves an intent in
 `data/upgrades/state.json` inside the active profile. A new matching progress row
-and a decrease in free builder/research slots confirm that it started.
+and a decrease in the corresponding free builder, research or pet slot confirm that it started.
 
 If verification fails or the app restarts after the press, it retains that pending
 intent and blocks another spending attempt. It can reconcile the pending entry
 when the corresponding running upgrade and slot usage become visible. It checks
-the pending entry's building or research tab first, even when the next requested
+the pending entry's building, research or pet tab first, even when the next requested
 check is for the other category or the pending category's automation is off.
 This recovery check only verifies the earlier attempt; it does not repeat its
 purchase or enable that category's automation. It never
@@ -102,7 +136,7 @@ control service and device lease prevent simultaneous upgrade, farm, calibration
 and manual-control jobs.
 
 The browser API provides `POST /api/upgrades/preview` with `kind` set to
-`buildings` or `research`. `POST /api/upgrades/start` also requires the token from
+`buildings`, `research` or `pets`. `POST /api/upgrades/start` also requires the token from
 the displayed preview. Both use the normal session, origin, and CSRF protections,
 and return their final report through `/api/status`. A token identifies the
 recommendation; fresh game checks still determine whether it can be started.

@@ -52,6 +52,7 @@ class ScrcpySource:
         self.config = b""
         self.first_pts = None
         self.packets = 0
+        self.capture_failed = False
 
     async def adb(self, *args):
         process = await asyncio.create_subprocess_exec("adb", "-s", self.device, *args,
@@ -157,6 +158,8 @@ class ScrcpySource:
             packet.pts = packet.dts = pts - self.first_pts
             packet.time_base = Fraction(1, 1_000_000)
             self.packets += 1
+            from coc_bot.adb.capture_coordinator import capture_succeeded
+            capture_succeeded(self.device)
             return packet
 
     async def close(self):
@@ -216,6 +219,7 @@ async def run_live(ws, auth, origins, owner_lock, service):
                             return pending.pop()
                         return await source.packet()
                     except Exception:
+                        source.capture_failed = True
                         failed.set()
                         raise
             peer = RTCPeerConnection(RTCConfiguration(iceServers=[]))
@@ -229,9 +233,13 @@ async def run_live(ws, auth, origins, owner_lock, service):
                 raise ValueError("Invalid live view offer")
             await peer.setRemoteDescription(RTCSessionDescription(message["sdp"], "offer"))
             await peer.setLocalDescription(await peer.createAnswer())
-            await source.start()
-            # Metadata alone is not proof that Android can produce video.
-            pending.append(await source.packet())
+            try:
+                await source.start()
+                # Metadata alone is not proof that Android can produce video.
+                pending.append(await source.packet())
+            except Exception:
+                source.capture_failed = True
+                raise
             source_ready.set()
             await ws.send_json({"type": "answer", "sdp": peer.localDescription.sdp})
             import time
@@ -278,5 +286,11 @@ async def run_live(ws, auth, origins, owner_lock, service):
                 await peer.close()
             if source:
                 await source.close()
+                if getattr(source, 'capture_failed', False):
+                    from coc_bot.adb.capture_coordinator import capture_failed
+                    capture_failed(source.device)
+                    recovery = getattr(service, 'capture_recovery', None)
+                    if recovery is not None:
+                        recovery.request(source.device)
             with suppress(Exception):
                 await ws.close()

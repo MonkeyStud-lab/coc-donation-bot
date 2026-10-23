@@ -54,6 +54,27 @@ class ProjectionTests(TestCase):
         for fractions in ([1,1,.12,.12],[.4,.4,.4,.12],[1,1,1,.08]):
             self.assertIsNone(fit_projection(segments(fractions),1000,600))
 
+    def test_stepped_boundary_counts_nearby_fragments_without_moving_outer_line(self):
+        corners=self.projection().corners
+        segments=[]
+        outer=[]
+        for a,b in zip(corners,corners[1:]+corners[:1]):
+            a,b=np.array(a,dtype=float),np.array(b,dtype=float)
+            middle=a+(b-a)*.20
+            anchor={'points':[(a/[1000,600]).tolist(),(middle/[1000,600]).tolist()]}
+            outer.append(anchor);segments.append(anchor)
+            # A parallel footprint step 16 pixels inward is observed, not a gap
+            # filled by guessing. Its length must not shift the outer anchor.
+            inward=np.array([0,16 if (a[1]+b[1])/2<300 else -16])
+            segments.append({'points':[((middle+inward)/[1000,600]).tolist(),
+                                        ((b+inward)/[1000,600]).tolist()]})
+        self.assertIsNone(fit_projection(outer,1000,600))
+        projection=fit_projection(segments,1000,600)
+        self.assertIsNotNone(projection)
+        np.testing.assert_allclose(projection.corners,corners,atol=1e-6)
+        # Three sides still cannot become a complete map.
+        self.assertIsNone(fit_projection(segments[:-2],1000,600))
+
     def test_weak_side_hints_only_guide_observation_and_do_not_approve_a_map(self):
         from coc_bot.attack.survey import survey_pan
         corners=self.projection().corners

@@ -25,11 +25,12 @@ class Platform:
         self.error = None
         self.game_update = None
         self.explicit_update = False
+        self.recovering = False
 
     def snapshot(self):
         with self.lock:
             return {"stage": self.stage, "message": self.message, "ready": self.ready,
-                    "busy": self.thread is not None and self.thread.is_alive(), "error": self.error,
+                    "busy": self.recovering or self.thread is not None and self.thread.is_alive(), "error": self.error,
                     "game_update": self.game_update}
 
     def update(self, stage, message, *, ready=False, error=None):
@@ -73,7 +74,7 @@ class Platform:
                 raise RuntimeError("Android has not finished starting (package service unavailable). Use Retry.")
             self.cancel.wait(min(1, remaining))
 
-    def prepare(self):
+    def prepare(self, *, skip_updates=False):
         try:
             from coc_bot.host_bridge import request, STARTUP_TIMEOUT_SECONDS
             from coc_bot.adb.client import AdbClient
@@ -98,7 +99,7 @@ class Platform:
                 self.update("checking_android", "Waiting for Android to finish starting")
                 self.wait_for_android(client)
                 installed = client.run_shell("pm path " + PACKAGE, check=False).stdout.strip()
-                if installed and (self.explicit_update or os.environ.get("COC_AUTO_UPDATE_GAME", "1") == "1"):
+                if installed and not skip_updates and (self.explicit_update or os.environ.get("COC_AUTO_UPDATE_GAME", "1") == "1"):
                     from coc_bot.control.game_updates import update_game
                     from loguru import logger
                     try:

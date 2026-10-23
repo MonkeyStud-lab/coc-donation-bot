@@ -10,7 +10,7 @@ from pathlib import Path
 import cv2
 from coc_bot.config import load_config, project_root, save_calibrated
 from coc_bot.calibration.schema import STEPS, part_is_configured
-from coc_bot.calibration.instructions import format_part_instruction
+from coc_bot.calibration.instructions import part_instruction
 from coc_bot.calibration.grid_math import build_grid_entry, GRID_BAR_ROI_KEYS
 from coc_bot.control.settings import RevisionConflict
 from coc_bot.calibration.transactions import calibration_locked
@@ -19,6 +19,40 @@ TEMPLATE_TAPS = {
     "open_chat", "close_chat", "clan_chat_tab", "attack_button", "unranked_battle",
     "find_match", "return_home", "donate_button", "donation_elixir_button",
 }
+
+
+def browser_instruction(step_id, part):
+    """Use the browser's actual buttons; preserve terminal/desktop directions."""
+    instruction = part_instruction(step_id, part.key)
+    prepare = instruction.prepare
+    action = instruction.do.replace('Confirm', 'Save')
+    targets = {
+        'open_chat': 'the chat bubble that opens clan chat',
+        'close_chat': 'the orange close-chat tab',
+        'clan_chat_tab': 'the swords-and-shield tab that returns to clan chat',
+        'attack_button': 'the Battle button',
+        'unranked_battle': 'Find a Match on the LEFT unranked Battle card',
+        'find_match': 'the second Find a Match button on the older interface',
+        'return_home': 'the Return Home button on the battle results screen',
+        'donation_elixir_button': 'the LEFT elixir toggle, excluding the gem button',
+    }
+    if part.key == 'frame_width':
+        prepare = 'Open Clash of Clans and go to your home village with clan chat closed. You can use Live view to prepare the game.'
+        action = 'Press Capture screen, check the screenshot, then Save. The app reads its width and height automatically; do not draw a box.'
+    elif part.key == 'deploy_sequence':
+        action = ('Press Pan and capture to move to the saved deployment edge, or Capture screen if already positioned. '
+                  'Click army icons and map locations in the exact order to replay. The numbered circles show tap order and variation. '
+                  'Use Undo to remove the last tap, adjust Farm tap variation if needed, then Save.')
+    elif part.key in targets:
+        action = ('Press Capture screen. In Selection type, choose “Box the button and save its picture” and draw a tight box around '
+                  + targets[part.key] + '. Then Save. You can instead choose “Click a point” and click its center.')
+    elif part.kind == 'grid':
+        target = 'troop/siege' if part.key == 'troop_bar' else 'spell'
+        action = ('Press Capture screen. Drag a box around ALL visible '+target+' slot cells. '
+                  'Enter Columns and Rows to match the screenshot, check the grid lines, then Save.')
+    else:
+        action = 'Press Capture screen. '+action
+    return prepare+'\n\n'+action
 
 
 def calibration_revision():
@@ -35,11 +69,18 @@ def calibration_revision():
 
 def checklist():
     config = load_config()
+    # Keep old profiles and the terminal calibrator compatible. These controls
+    # remain editable, but current installations do not need them in guided setup.
+    advanced = {'home', 'donation_panel', 'chat_scroll_down', 'find_match',
+                'loading', 'popup', 'popup_dismiss'}
+    if config.farm_engine != 'sequence':
+        advanced.add('deploy_sequence')
     return {"revision": calibration_revision(),
             "steps": [{"id": step.step_id, "label": step.title,
                        "parts": [asdict(p) | {
                            "configured": part_is_configured(config, p),
-                           "instructions": format_part_instruction(step.step_id, p.key),
+                           "advanced": p.key in advanced,
+                           "instructions": browser_instruction(step.step_id, p),
                        } for p in step.parts]} for step in STEPS.values()]}
 
 

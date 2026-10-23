@@ -139,8 +139,10 @@ four deployment-boundary sides before producing map coordinates.
 `army.py` reads current card artwork/counts. `automatic.py` checks matching army
 pages and builds the supported mass Electro Dragon plan without `routine.json`.
 The pattern deploys dragons, spreads Rage, then deploys one supported siege and
-recognizable available heroes, each followed by its ability. Unsupported units,
-unknown cards, and incomplete maps stop deployment.
+recognizable available heroes, each followed by its ability. Unsupported units
+and unknown cards are left unused. Missing verified dragons, inconsistent counts
+for used cards, and incomplete maps stop deployment. Nearby steps in the red
+boundary contribute measured coverage without moving its outer deployment line.
 
 The custom planner in `control/attack_planner.py` supports human-corrected army
 review, map/corner review, editable steps, saved routines, and supervised runs.
@@ -177,12 +179,17 @@ storage policies are in [the attack guide](ATTACK_REBUILD.md).
 
 ## Suggested upgrades
 
-Automatic building/research checks are off by default. They run between donation
+Automatic building/research/pet checks are off by default. They run between donation
 rounds after the farm-priority check, and a visible donation request has priority.
 Manual preview/start jobs use the same ownership and cancellation rules.
 
 `upgrades/vision.py` reads verified tabs, Suggested rows, availability, and
 confirmation controls. `digits.py` uses strict bundled numeric references.
+Pet rows use the verified Hero Pets tab and its own 0/1 or 1/1 counter. Assignment
+comes from the Assigned/Unassigned headings; a currently observed empty hero-slot
+reference can verify unassigned rows after scrolling. Unknown assignment blocks
+the upgrade. Equipped pets require a separate opt-in. Pet upgrades use dark
+elixir and never upgrade the Pet House building or change hero assignments.
 `policy.py` applies supported-name exclusions, reserves, and slot requirements.
 `runner.py` checks fresh balances and matching name/price/currency confirmations,
 persists intent, sends one resource press, then checks progress and slot changes.
@@ -215,6 +222,24 @@ Viewing is distinct from manual control and does not feed every video frame into
 the recognition engine. Manual taps/swipes have their own exclusive lease;
 calibration uses immutable captures, not moving video. Video startup/cleanup,
 frame-rate/freeze feedback, and LAN restrictions are documented in [WEB_UI](WEB_UI.md).
+
+Managed CasaOS capture recovery is coordinated by `control/capture_recovery.py`.
+Three consecutive screenshot failures, or a failed Android video source, request
+a check. Successful screenshots/video packets reset the failure streak. Owner
+contention, optional observation misses, Stop, and ICE negotiation alone do not
+establish a renderer hang. Recovery stops the bot, acquires its device lease,
+retries capture, verifies a responding shell and a timed-out SurfaceFlinger, and
+keeps the lease until the managed session stops. It releases ownership before
+ordinary startup rechecks Android, launches Clash, and verifies capture. APK
+updates are skipped during this recovery. The previous bot options are resumed
+only if recovery succeeds and Stop has not been requested. Attack deployments
+and upgrade purchases remain governed by their existing durable journals.
+
+`data/runtime/renderer-recovery.json` reserves restart attempts before shutdown:
+at most two per hour across app restarts. An in-process five-minute cooldown
+also bounds transient probes. Bad history, competing owners, an unconfirmed
+fault, or exhausted limits leaves an error for manual inspection. This recovery
+is enabled only for the managed dashboard, not arbitrary desktop ADB devices.
 
 Normal screenshots are transient/cached unless diagnostics or recording retain
 them. `vision/recorder.py` and `collection.py` optionally select diverse images and

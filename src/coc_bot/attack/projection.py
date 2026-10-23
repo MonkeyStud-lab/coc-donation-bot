@@ -97,11 +97,17 @@ def fit_projection(segments, width, height, *, survey_evidence=None):
         offsets = np.array([(a[1]+b[1]-slope*(a[0]+b[0]))/2 for a,b in family])
         if np.ptp(offsets) < height*.18: return None
         for extreme in (min(offsets), max(offsets)):
-            members = [pair for pair,offset in zip(family,offsets) if abs(offset-extreme)<height*.012]
-            pts = np.concatenate(members)
+            anchors = [pair for pair,offset in zip(family,offsets) if abs(offset-extreme)<height*.012]
+            pts = np.concatenate(anchors)
             # Median offset resists isolated fragments. Length coverage is checked below.
             offset = float(np.median(pts[:,1]-slope*pts[:,0]))
             lines.append((slope,offset))
+            # The red boundary steps around individual building footprints.
+            # Nearby parallel steps contribute observed length, but must never
+            # pull the enclosing line inward toward those buildings. Keep its
+            # original outer anchors independent of the coverage fragments.
+            members = [pair for pair,value in zip(family,offsets)
+                       if abs(value-extreme)<height*.035]
             supports.append(members)
     def cross(i,j):
         m,b=lines[i];n,c=lines[j]
@@ -122,14 +128,15 @@ def fit_projection(segments, width, height, *, survey_evidence=None):
         corners=[p for p in projection.corners if abs(p[1]-slope*p[0]-offset)<height*.02]
         if len(corners)!=2: return None
         length=abs(corners[1][0]-corners[0][0])
-        intervals=sorted((a[0],b[0]) for a,b in members)
+        low,high=sorted(p[0] for p in corners)
+        intervals=sorted((max(low,a[0]),min(high,b[0])) for a,b in members
+                         if min(high,b[0])>max(low,a[0]))
         merged=[]
         for start,end in intervals:
             if merged and start <= merged[-1][1]: merged[-1][1]=max(end,merged[-1][1])
             else: merged.append([start,end])
         fraction=sum(b-a for a,b in merged)/length
         coverage.append(fraction)
-        low,high=sorted(p[0] for p in corners)
         cursor=low;gaps=[]
         for start,end in merged:
             start,end=max(low,start),min(high,end)

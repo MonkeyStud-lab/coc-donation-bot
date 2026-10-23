@@ -176,7 +176,7 @@ class WebTests(TestCase):
 
     def test_settings_revision_and_validation(self):
         settings = self.client.get("/api/settings").json()
-        self.assertEqual(len(settings["fields"]), 47)
+        self.assertEqual(len(settings["fields"]), 49)
         self.assertEqual(len(settings["themes"]), 7)
         body = {"revision": settings["revision"], "values": {"farm_interval_seconds": 7200}}
         result = self.client.put("/api/settings", headers=self.headers, json=body)
@@ -204,6 +204,14 @@ class WebTests(TestCase):
             self.assertEqual(self.client.post('/api/upgrades/start', headers=self.headers,
                                              json={'kind':'research','token':'a'*64}).status_code, 200)
             upgrade.assert_called_once_with('research',execute=True,token='a'*64)
+            upgrade.reset_mock()
+            self.assertEqual(self.client.post('/api/upgrades/preview',headers=self.headers,
+                                             json={'kind':'pets'}).status_code,200)
+            upgrade.assert_called_once_with('pets')
+            upgrade.reset_mock()
+            self.assertEqual(self.client.post('/api/upgrades/start',headers=self.headers,
+                                             json={'kind':'pets','token':'b'*64}).status_code,200)
+            upgrade.assert_called_once_with('pets',execute=True,token='b'*64)
         entered=threading.Event()
         def work(cancel):
             entered.set()
@@ -219,13 +227,23 @@ class WebTests(TestCase):
         config=load_config()
         self.assertFalse(config.upgrade_buildings_enabled)
         self.assertFalse(config.upgrade_research_enabled)
+        self.assertFalse(config.upgrade_pets_enabled)
+        self.assertFalse(config.upgrade_pets_include_assigned)
         for values in ({'upgrade_gold_reserve':-1}, {'upgrade_builders_reserved':7},
                        {'upgrade_interval_seconds':0}, {'upgrade_research_enabled':'true'},
+                       {'upgrade_pets_enabled':'true'}, {'upgrade_pets_include_assigned':1},
                        {'upgrade_elixir_reserve':'nan'}, {'upgrade_elixir_reserve':'inf'},
                        {'upgrade_elixir_reserve':True}, {'upgrade_elixir_reserve':1.5}):
             response=self.client.put('/api/settings',headers=self.headers,
                                      json={'revision':revision(),'values':values})
             self.assertEqual(response.status_code,400,response.text)
+
+    def test_pet_settings_round_trip_without_enabling_assigned_pets(self):
+        response=self.client.put('/api/settings',headers=self.headers,
+                                 json={'revision':revision(),'values':{'upgrade_pets_enabled':True}})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertTrue(load_config().upgrade_pets_enabled)
+        self.assertFalse(load_config().upgrade_pets_include_assigned)
 
     def test_upgrade_reserves_above_ten_million_round_trip(self):
         keys=('upgrade_gold_reserve','upgrade_elixir_reserve','upgrade_dark_elixir_reserve')
@@ -332,6 +350,17 @@ class WebTests(TestCase):
         frame = np.full((100, 160, 3), 123, dtype=np.uint8)
         parts = [p for s in checklist()["steps"] for p in s["parts"]]
         self.assertEqual(len(parts), 32)
+        advanced={p['key'] for p in parts if p['advanced']}
+        self.assertTrue({'find_match','chat_scroll_down','loading','popup','popup_dismiss'}<=advanced)
+        self.assertNotIn('donation_elixir_selected',advanced)
+        self.assertNotIn('troop_bar',advanced)
+        instructions={p['key']:p['instructions'] for p in parts}
+        self.assertIn('Selection type',instructions['open_chat'])
+        self.assertNotIn('Choose “Yes”',instructions['open_chat'])
+        self.assertNotIn('must be visible',instructions['frame_width'])
+        self.assertIn('Columns and Rows',instructions['troop_bar'])
+        self.assertIn('Pan and capture',instructions['deploy_sequence'])
+        self.assertTrue(all('Capture screen' in p['instructions'] or 'Pan and capture' in p['instructions'] for p in parts))
         for part in parts:
             meta = captures.add(frame)
             key = part["key"]

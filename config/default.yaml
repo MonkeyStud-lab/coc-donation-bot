@@ -57,6 +57,8 @@ farm:
 upgrades:
   buildings_enabled: false
   research_enabled: false
+  pets_enabled: false
+  pets_include_assigned: false
   interval_seconds: 900
   builders_reserved: 1
   gold_reserve: 1000000

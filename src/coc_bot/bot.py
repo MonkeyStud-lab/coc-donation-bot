@@ -388,7 +388,8 @@ class DonationBot:
             return False
         kinds=[kind for kind,enabled in (
             ('buildings',self.config.upgrade_buildings_enabled),
-            ('research',self.config.upgrade_research_enabled)) if enabled]
+            ('research',self.config.upgrade_research_enabled),
+            ('pets',getattr(self.config,'upgrade_pets_enabled',False))) if enabled]
         if not kinds or time.monotonic()<self._next_upgrade_check:
             return False
         frame=self.capture.screenshot()
@@ -488,7 +489,7 @@ class DonationBot:
             self._farm_fail_cooldown_until = 0.0
             if not result.success:
                 logger.warning(
-                    "Farm leave/chat failed ({}) — still advancing interval clock "
+                    "Farm attempt did not complete ({}) — still advancing interval clock "
                     "({}s until next auto farm)",
                     result.reason,
                     max(60, int(self.config.farm_interval_seconds)),

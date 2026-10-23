@@ -44,6 +44,8 @@ class ControlService:
         self.settings_update = None
         self._settings_cancel = None
         self.platform = None
+        from coc_bot.control.capture_recovery import CaptureRecovery
+        self.capture_recovery = CaptureRecovery(self)
 
     def saved_timers(self):
         """Read frozen persisted clocks without rerolling or rewriting anything."""
@@ -86,6 +88,7 @@ class ControlService:
     def start(self, practice=False):
         with self.lock:
             self.idle()
+            self.capture_recovery.cancel.clear()
             if self.platform is not None and not self.platform.snapshot()["ready"]:
                 raise BusyError("Finish Android and game setup before starting the bot.")
             from coc_bot.config import load_config
@@ -99,6 +102,7 @@ class ControlService:
 
     def stop(self):
         with self.lock:
+            self.capture_recovery.cancel.set()
             if self._settings_cancel is not None:
                 self._settings_cancel.set()
             if self.platform is not None:
@@ -208,7 +212,7 @@ class ControlService:
             return "Farm started"
 
     def upgrade(self, kind, *, execute=False, token=None):
-        if kind not in ('buildings','research'):
+        if kind not in ('buildings','research','pets'):
             raise ValueError('Unknown upgrade category')
         if execute and (not isinstance(token,str) or len(token)!=64):
             raise ValueError('Check upgrades first, then start the displayed recommendation')
@@ -323,7 +327,11 @@ class ControlService:
     def close(self):
         self.stop()
         self.controller.close()
-        return self.controller.wait(30) and self.manual_owner is None
+        stopped = self.controller.wait(30)
+        recovery = self.capture_recovery.thread
+        if recovery is not None and recovery is not threading.current_thread():
+            recovery.join(30)
+        return stopped and not self.capture_recovery.active and self.manual_owner is None
 
     @contextmanager
     def mutation(self):

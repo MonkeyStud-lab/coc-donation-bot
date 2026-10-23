@@ -10,7 +10,7 @@ type Status = {active:boolean; state:string; operation:string|null; activity:str
 type Entry = {id:number; level:string; text:string; at:string};
 type Field = {key:string;label:string;description:string;kind:string;choices:string[];section:string;advanced:boolean};
 type SettingsData = {revision:string;values:Record<string,any>;fields:Field[];themes:any[]};
-type Part = {key:string;label:string;kind:string;configured:boolean;optional:boolean;instructions:string};
+type Part = {key:string;label:string;kind:string;configured:boolean;optional:boolean;advanced?:boolean;instructions:string};
 type SetupData = {revision:string;steps:{id:string;label:string;parts:Part[]}[]};
 type Capture = {id:string;width:number;height:number;revision:string;at:string;taps?:number[][];jitter?:number};
 let csrf='';
@@ -153,12 +153,14 @@ function App(){
     if(dirty&&settings){draftVersion.current++;setValues(settings.values);setDirty(false);}
     setPage(next);
   }
+  const [advancedSetup,setAdvancedSetup]=useState(false);
+  const setupSteps=(setup?.steps??[]).map(s=>({...s,parts:s.parts.filter(p=>advancedSetup||!p.advanced)})).filter(s=>s.parts.length);
   function advance(){
     if(queue.length){setSelected(queue[0]);setQueue(queue.slice(1));}
-    else {const all=setup!.steps.flatMap(s=>s.parts);setSelected(all[(all.findIndex(p=>p.key===selected)+1)%all.length].key);}
+    else {const all=setupSteps.flatMap(s=>s.parts);if(all.length)setSelected(all[(all.findIndex(p=>p.key===selected)+1)%all.length].key);}
   }
   function beginSetup(missing:boolean){
-    const keys=setup!.steps.flatMap(s=>s.parts).filter(p=>!missing||(!p.configured&&!p.optional)).map(p=>p.key);
+    const keys=setupSteps.flatMap(s=>s.parts).filter(p=>!missing||(!p.configured&&!p.optional)).map(p=>p.key);
     if(!keys.length){setNotice('All required calibration parts are saved');return;}
     setSelected(keys[0]);setQueue(keys.slice(1));
   }
@@ -257,11 +259,12 @@ function App(){
       </div>)}</section>
     </>}
     {page==='Setup'&&<><div className="toolbar">
+      <label className="toggle"><input type="checkbox" checked={advancedSetup} onChange={e=>{setAdvancedSetup(e.target.checked);setQueue([]);setSelected('');}}/>Advanced</label>
       <button disabled={locked||!setup} onClick={()=>beginSetup(true)}>Calibrate missing</button>
       <button disabled={locked||!setup} onClick={()=>beginSetup(false)}>Calibrate all</button>
       {!!queue.length&&<button onClick={()=>setQueue([])}>Exit guided setup</button>}</div>
       <div className="setup"><section className="checklist">
-      {setup?.steps.map(s=><details open key={s.id}><summary>{s.label}</summary>{s.parts.map(p=><button key={p.key}
+      {setupSteps.map(s=><details open key={s.id}><summary>{s.label}</summary>{s.parts.map(p=><button key={p.key}
       className={selected===p.key?'selected':''} onClick={()=>{setSelected(p.key);setQueue([]);}}>
         <span className={p.configured?'complete':'missing'}>{p.configured?'✓':'○'}</span>{p.label}</button>)}</details>)}
       </section><section className="guide">{part&&<>
@@ -269,7 +272,7 @@ function App(){
         <div className="toolbar"><button className="primary" disabled={locked} onClick={()=>captureScreen(part)}>Capture screen</button>
         {part.key==='deploy_sequence'&&<button disabled={locked} onClick={()=>captureScreen(part,true)}>Pan and capture</button>}
         <button onClick={advance}>Skip</button>
-        <button disabled={locked} onClick={()=>attempt(async()=>{await api('backups','POST');await reload();setNotice('Calibration backed up');})}>Back up</button></div>
+        </div>
       </>}</section></div></>}
     {page==='Library'&&<>
       <div className="toolbar"><button disabled={locked} onClick={()=>attempt(async()=>{await api('backups','POST');await reload();})}>Back up calibration</button>
@@ -297,10 +300,10 @@ function App(){
         {delta<0?'Previous':'Next'}</button>)}</div>}
     </>}
     {page==='Diagnostics'&&<>
-      {(['buildings','research'] as const).map(kind=>{
+      {(['buildings','research','pets'] as const).map(kind=>{
         const report=status?.result?.upgrade_report&&status.result.kind===kind?status.result:null;
         return <section key={kind}>
-          <div className="toolbar"><span>{kind==='buildings'?'Building upgrades':'Army research'}</span>
+          <div className="toolbar"><span>{{buildings:'Building upgrades',research:'Army research',pets:'Pet upgrades'}[kind]}</span>
             <button disabled={locked} onClick={()=>command('upgrades/preview',{kind})}>Check upgrades</button>
             <button disabled={locked||report?.status!=='ready'||!report?.token} onClick={()=>{
               const item=report.selected;
@@ -309,7 +312,7 @@ function App(){
             }}>Start recommended upgrade</button></div>
           {report&&<div role="status">
             {report.message&&<p>{report.message}</p>}
-            {report.availability&&<p>{report.availability[0]} / {report.availability[1]} {kind==='buildings'?'builders':'research slots'} free</p>}
+            {report.availability&&<p>{report.availability[0]} / {report.availability[1]} {{buildings:'builders',research:'research slots',pets:'pet-upgrade slots'}[kind]} free</p>}
             {report.recommendations?.map((item:any,index:number)=><div className="setting" key={index}>
               <span>{item.name}</span><span>{item.cost.toLocaleString()} {item.currency.replaceAll('_',' ')} · {item.skip||'Eligible'}</span>
             </div>)}
@@ -346,7 +349,7 @@ function App(){
     </>}
     </main>
     {viewer&&<GameViewer close={()=>setViewer(false)}/>}
-    {live&&<LiveView close={()=>setLive(false)} active={!!status?.active} stop={()=>command('stop')}/>}
+    {live&&<LiveView close={()=>setLive(false)} active={!!status?.active} recovering={!!status?.platform?.busy} ready={status?.platform?.ready??true} stop={()=>command('stop')}/>}
     {capture&&<Editor key={capture.id+':'+editor?.key} capture={capture} part={editor} locked={locked} refresh={()=>captureScreen(editor)}
       close={()=>{setCapture(null);setEditor(null);}}
       save={async(selection,cols,rows,jitter)=>{const saved=await attempt(()=>api('setup','POST',{
@@ -355,7 +358,7 @@ function App(){
   </div>;
 }
 
-function LiveView({close,active,stop}:{close:()=>void;active:boolean;stop:()=>void}){
+function LiveView({close,active,recovering,ready,stop}:{close:()=>void;active:boolean;recovering:boolean;ready:boolean;stop:()=>void}){
   const dialog=useRef<HTMLElement|null>(null);useDialog(dialog,close);
   const video=useRef<HTMLVideoElement>(null);
   const socket=useRef<WebSocket|null>(null),gesture=useRef<{point:number[];pointer:number;token:string}|null>(null);
@@ -372,6 +375,14 @@ function LiveView({close,active,stop}:{close:()=>void;active:boolean;stop:()=>vo
   const [state,setState]=useState('Connecting…'),[error,setError]=useState('');
   const [fps,setFps]=useState<number|null>(null);
   const [retry,setRetry]=useState(0);
+  const runtimeWasRecovering=useRef(false);
+  useEffect(()=>{
+    if(recovering)runtimeWasRecovering.current=true;
+    else if(runtimeWasRecovering.current){
+      runtimeWasRecovering.current=false;
+      if(ready&&error)setRetry(x=>x+1);
+    }
+  },[recovering,ready,error]);
   useEffect(()=>{
     let disposed=false,failed=false,timer:ReturnType<typeof setInterval>,timeout:ReturnType<typeof setTimeout>;
     let frameTimer:ReturnType<typeof setInterval>,lastFrames=0,lastCheck=performance.now(),lastProgress=performance.now(),sampled=false;
@@ -433,7 +444,7 @@ function LiveView({close,active,stop}:{close:()=>void;active:boolean;stop:()=>vo
   return <div className="modal-backdrop"><section ref={dialog} className="modal" role="dialog" aria-modal="true" aria-label="Live view">
     <div className="toolbar"><h2>Live view</h2><span>{playing&&!error?`${token?'Live · You have control':'Live · View only'}${fps===null?'':` · ${fps} fps`}`:state}</span>
       <button disabled={!playing||!!error||(!token&&active)} onClick={()=>{gesture.current=null;setControlError('');send({type:token?'release_control':'take_control'});}}>{token?'Release control':'Take control'}</button>
-      <button className="danger" disabled={!active&&!token} onClick={()=>{gesture.current=null;stop();}}>Stop</button><button onClick={close}>Close</button></div>
+      <button className="danger" disabled={!active&&!token&&!recovering} onClick={()=>{gesture.current=null;stop();}}>Stop</button><button onClick={close}>Close</button></div>
     {controlError&&<div className="notice" role="alert">{controlError}</div>}
     {error&&<div className="notice" role="alert">{error}<button onClick={()=>setRetry(x=>x+1)}>Retry</button></div>}
     <video ref={video} hidden={!!error} className={'game live-video'+(token?' controlled':'')} autoPlay playsInline muted onPlaying={()=>{setPlaying(true);setState('Live');}}

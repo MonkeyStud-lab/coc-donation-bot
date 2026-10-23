@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import cv2
 import numpy as np
 from coc_bot.upgrades.policy import reason
-from coc_bot.upgrades.vision import Candidate, UpgradeReader, resource_amount
+from coc_bot.upgrades.vision import Candidate, UpgradeReader, resource_amount, pet_name
 from coc_bot.upgrades.runner import UpgradeRunner
 from coc_bot.upgrades.digits import read_digits,bank
 
@@ -20,6 +20,24 @@ def config(path):
 
 
 class UpgradePolicyTests(unittest.TestCase):
+    def test_pet_slot_reserves_identity_and_assignment(self):
+        c=config('.')
+        pet=Candidate('L.A.S.S.I',60_000,'dark_elixir',(10,10),False)
+        self.assertIsNone(reason(c,'pets',pet,{'dark_elixir':259_011},(1,1)))
+        for available in (None,(0,1),(2,5)):
+            self.assertIsNotNone(reason(c,'pets',pet,{'dark_elixir':259_011},available))
+        self.assertIsNotNone(reason(c,'pets',pet,{'dark_elixir':100_000},(1,1)))
+        for name,currency,assignment in [('Unknown Pet','dark_elixir',False),
+                                        ('L.A.S.S.I','gems',False),('L.A.S.S.I','dark_elixir',None),
+                                        ('L.A.S.S.I','dark_elixir',True),('Pet House','dark_elixir',False)]:
+            self.assertIsNotNone(reason(c,'pets',Candidate(name,60_000,currency,(1,1),assignment),
+                                        {'dark_elixir':259_011},(1,1)))
+        c.upgrade_pets_include_assigned=True
+        self.assertIsNone(reason(c,'pets',Candidate('Frosty',200_000,'dark_elixir',(1,1),True),
+                                 {'dark_elixir':259_011},(1,1)))
+        c.upgrade_excluded_names='L.A.S.S.I'
+        self.assertIsNotNone(reason(c,'pets',pet,{'dark_elixir':259_011},(1,1)))
+
     def test_protect_reserves_busy_slots_heroes_and_gems(self):
         c=config('.')
         bowler=Candidate('Bowler',360000,'dark_elixir',(10,10))
@@ -50,6 +68,59 @@ class UpgradePolicyTests(unittest.TestCase):
 class UpgradeImageTests(unittest.TestCase):
     """Only isolated game controls are stored, with no account or village data."""
     fixtures=Path(__file__).with_name('fixtures')/'upgrades'
+
+    def pet_frame(self):
+        frame=np.zeros((1048,1853,3),np.uint8)
+        frame[:,1350:]=cv2.imread(str(self.fixtures/'pet-menu-panel.png'))
+        return frame
+
+    def test_pet_menu_recognizes_slot_and_unassigned_rows(self):
+        reader=UpgradeReader();frame=self.pet_frame()
+        self.assertEqual(reader.menu_kind(frame),'pets')
+        self.assertEqual(reader.availability(frame,'pets'),(1,1))
+        rows,_=reader.pet_candidates(frame);pets={p.name:p for p in rows}
+        self.assertFalse(pets['L.A.S.S.I'].assigned)
+        self.assertEqual(pets['L.A.S.S.I'].cost,60_000)
+        self.assertTrue(pets['Frosty'].assigned)
+        self.assertEqual(pets['Mighty Yak'].cost,40_000)
+        self.assertEqual(pets['Poison Lizard'].cost,75_000)
+        self.assertNotIn('Greedy Raven',pets)  # Locked; no resource price.
+        self.assertIsNone(reader.menu_kind((frame.astype(float)*.60).astype(np.uint8)))
+
+    def test_pet_counter_prices_and_confirmation_use_strict_font_reads(self):
+        for name,expected in [('pet-dark-counter',259_011),('pet-elixir-counter',30_932_802),
+                              ('pet-yak-price',40_000),('pet-lizard-price',75_000)]:
+            self.assertEqual(resource_amount(cv2.imread(str(self.fixtures/(name+'.png')))),expected)
+        frame=cv2.imread(str(self.fixtures/'pet-confirmation-controls.png'))
+        reader=UpgradeReader()
+        self.assertIsNotNone(reader.confirmation(frame,Candidate('L.A.S.S.I',60_000,'dark_elixir',(1,1),False)))
+        for name,cost,currency in [('Frosty',60_000,'dark_elixir'),('L.A.S.S.I',6_000,'dark_elixir'),
+                                   ('L.A.S.S.I',60_000,'gems')]:
+            self.assertIsNone(reader.confirmation(frame,Candidate(name,cost,currency,(1,1),False)))
+
+    def test_new_pet_timer_and_busy_slot_are_recognized(self):
+        frame=np.zeros((1048,1853,3),np.uint8)
+        frame[:,1350:]=cv2.imread(str(self.fixtures/'pet-running-panel.png'))
+        reader=UpgradeReader()
+        self.assertEqual(reader.menu_kind(frame),'pets')
+        self.assertEqual(reader.availability(frame,'pets'),(0,1))
+        self.assertEqual(reader.active_names(frame,kind='pets'),['lassi'])
+        self.assertEqual(reader.active_names(self.pet_frame(),kind='pets'),[])
+        for value in ['L.A.S.5.]','L.A.5.5.1','L-A:S:S.1']:
+            self.assertEqual(pet_name(value),'L.A.S.S.I')
+
+    def test_pet_assignment_is_not_guessed_when_headings_are_missing(self):
+        reader=UpgradeReader();frame=self.pet_frame()
+        with patch.object(reader,'_headings',return_value=[]):
+            rows,_=reader.pet_candidates(frame)
+        self.assertTrue(rows)
+        self.assertTrue(all(p.assigned is None for p in rows))
+        reader.pet_candidates(frame) # Observe the real Unassigned heading.
+        with patch.object(reader,'_headings',return_value=[]):
+            rows,_=reader.pet_candidates(frame)
+        pets={p.name:p for p in rows}
+        self.assertFalse(pets['L.A.S.S.I'].assigned)
+        self.assertIsNone(pets['Frosty'].assigned)
 
     def test_small_free_builder_counter(self):
         counter=cv2.imread(str(self.fixtures/'builder-four-counter.png'))
@@ -84,6 +155,23 @@ class UpgradeImageTests(unittest.TestCase):
         # A truncated price or different resource must never authorize a tap.
         self.assertIsNone(reader.confirmation(frame,Candidate('Blacksmith',8_000_000,'elixir',(1,1))))
         self.assertIsNone(reader.confirmation(frame,Candidate('Blacksmith',18_000_000,'gold',(1,1))))
+
+    def test_shaded_building_confirmation_uses_strict_isolated_price(self):
+        frame=cv2.imread(str(self.fixtures/'builder-hut-gold-confirmation.png'))
+        reader=UpgradeReader()
+        candidate=Candidate("Builder's Hut",7_000_000,'gold',(1,1))
+        result=reader.confirmation(frame,candidate)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['cost'],7_000_000)
+        self.assertEqual(result['point'],(1301,916))
+        for name,price,resource in [("Builder's Hut",700_000,'gold'),
+                                    ("Builder's Hut",7_000_000,'gems'),
+                                    ("Builder's Hut",7_000_000,'elixir'),
+                                    ('Blacksmith',7_000_000,'gold')]:
+            self.assertIsNone(reader.confirmation(frame,Candidate(name,price,resource,(1,1))))
+        # A disagreeing raw price must never be replaced by the expected value.
+        with patch('coc_bot.upgrades.vision.amount',side_effect=[700_000,7_000_000]):
+            self.assertIsNone(reader.confirmation(frame,candidate))
 
 
 class UpgradeRunnerTests(unittest.TestCase):
@@ -121,6 +209,34 @@ class UpgradeRunnerTests(unittest.TestCase):
         self.assertEqual(self.runner.open_menu.call_args_list,[call('research'),call('buildings')])
         self.assertNotIn('pending',self.runner.state())
         self.assertEqual(self.runner.state()['last_completed']['name'],'Bowler')
+        self.runner.input.tap.assert_not_called()
+
+    def test_pending_pet_is_reconciled_on_pet_tab_before_buildings(self):
+        self.save_pending('pets','L.A.S.S.I',1)
+        self.runner.reader.active_names.return_value=['lassi']
+        self.runner.reader.availability.return_value=(0,1)
+        self.report.update(kind='buildings',recommendations=[])
+        self.assertEqual(self.runner.run('buildings')['status'],'nothing_eligible')
+        self.assertEqual(self.runner.open_menu.call_args_list,[call('pets'),call('buildings')])
+        self.runner.reader.active_names.assert_called_once_with('frame',kind='pets')
+        self.assertNotIn('pending',self.runner.state())
+        self.runner.input.tap.assert_not_called()
+
+    def test_unresolved_pet_outcome_blocks_other_upgrade_categories(self):
+        pending=self.save_pending('pets','L.A.S.S.I',1)
+        self.runner.reader.active_names.return_value=[]
+        self.runner.reader.availability.return_value=(0,1)
+        self.assertEqual(self.runner.run('research',execute=True)['status'],'needs_review')
+        self.assertEqual(self.runner.state()['pending'],pending)
+        self.runner.input.tap.assert_not_called()
+
+    def test_pet_assignment_change_after_preview_blocks_spending(self):
+        self.report.update(kind='pets')
+        self.item.update(name='L.A.S.S.I',cost=60_000,assigned=False)
+        changed=dict(self.report,recommendations=[dict(self.item,assigned=True)])
+        self.runner.reader.menu_kind.return_value='pets'
+        self.runner.inspect.side_effect=[dict(self.report),changed]
+        self.assertEqual(self.runner.run('pets',execute=True)['status'],'changed')
         self.runner.input.tap.assert_not_called()
 
     def test_pending_building_is_reconciled_before_research_preview(self):
@@ -210,6 +326,16 @@ class UpgradeRunnerTests(unittest.TestCase):
         points=[call.args for call in self.runner.input.tap.call_args_list]
         self.assertEqual(points,[(10,10),(50,50),(80,10)])
 
+    def test_pet_original_detail_can_be_closed_but_requires_busy_slot_and_name(self):
+        self.report.update(kind='pets')
+        self.item.update(name='L.A.S.S.I',cost=60_000,assigned=False)
+        self.runner.reader.menu_kind.return_value='pets'
+        self.runner.reader.detail_close.return_value=(80,10)
+        self.runner.reader.active_names.side_effect=[[],['lassi']]
+        self.runner.reader.availability.return_value=(0,1)
+        self.assertEqual(self.runner.run('pets',execute=True)['status'],'started')
+        self.assertEqual([c.args for c in self.runner.input.tap.call_args_list],[(10,10),(50,50),(80,10)])
+
     def test_corrupt_journal_blocks_further_spending(self):
         self.runner.path.parent.mkdir(parents=True)
         self.runner.path.write_text('')
@@ -261,6 +387,15 @@ class UpgradeSchedulingTests(unittest.TestCase):
             runner.return_value.run.assert_called_once_with('research',execute=True)
             self.assertFalse(bot._maybe_run_upgrades())
             runner.assert_called_once()
+
+    def test_pet_only_schedule_is_supported_and_can_be_disabled(self):
+        bot=self.make_bot();bot.config.upgrade_research_enabled=False;bot.config.upgrade_pets_enabled=True
+        with patch('coc_bot.upgrades.runner.UpgradeRunner') as runner:
+            runner.return_value.run.return_value={'status':'nothing_eligible'}
+            self.assertTrue(bot._maybe_run_upgrades())
+            runner.return_value.run.assert_called_once_with('pets',execute=True)
+        bot._next_upgrade_check=0;bot.config.upgrade_pets_enabled=False
+        self.assertFalse(bot._maybe_run_upgrades())
 
     def test_scheduler_recovers_research_before_buildings_even_if_research_disabled(self):
         for research_enabled in (True,False):

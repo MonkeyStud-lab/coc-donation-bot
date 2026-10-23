@@ -16,6 +16,29 @@ def compact(text):
     return re.sub(r"[^a-z]", "", text.lower())
 
 
+PET_NAMES = {compact(name): name for name in (
+    'L.A.S.S.I', 'Electro Owl', 'Mighty Yak', 'Unicorn', 'Frosty', 'Diggy',
+    'Poison Lizard', 'Phoenix', 'Spirit Fox', 'Angry Jelly', 'Sneezy', 'Greedy Raven',
+)}
+
+
+def _pet_ocr(value):
+    # The game's dotted L.A.S.S.I title has S/5 and I/1/bracket ambiguities.
+    # Correct only the complete known name, never prices or arbitrary words.
+    return re.sub(r'(?i)\bl[. :\-]*a[. :\-]*[s5][. :\-]*[s5][. :\-]*[i1l|!\]]','LASSI',value)
+
+
+def pet_name(value):
+    value=re.sub(r'(?i)\s+(?:[0-9Il|]+[dhwm]\s*)+$','',value.strip())
+    return PET_NAMES.get(compact(_pet_ocr(value)))
+
+
+def upgrade_heading(value, candidate):
+    if compact(candidate.name)=='lassi':
+        value=_pet_ocr(value)
+    return compact(value)
+
+
 def crop(frame, box):
     h, w = frame.shape[:2]
     a, b, c, d = box
@@ -89,6 +112,7 @@ class Candidate:
     cost: int
     currency: str
     point: tuple[int,int]
+    assigned: bool | None = None
 
     def public(self):
         return asdict(self)
@@ -97,6 +121,7 @@ class Candidate:
 class UpgradeReader:
     def __init__(self, stop=None):
         self.stop = stop
+        self._pet_empty_reference = None
 
     def label(self, frame, box):
         return text(crop(frame, box), stop=self.stop)
@@ -110,11 +135,14 @@ class UpgradeReader:
         hsv=cv2.cvtColor(close,cv2.COLOR_BGR2HSV)
         red=cv2.bitwise_or(cv2.inRange(hsv,(0,100,100),(10,255,255)),
                            cv2.inRange(hsv,(170,100,100),(180,255,255)))
-        if float(red.mean())/255 < .15:
+        white=cv2.inRange(hsv,(0,0,210),(180,65,255))
+        if float(red.mean())/255 < .15 or float(white.mean())/255 < .08:
             return None
         title = compact(self.label(frame, (.79,.012,.96,.05)))
         if title == "armyupgrades":
             return "research"
+        if title == "heropets":
+            return "pets"
         if title in ("buildingsheroes", "buildingheroes"):
             return "buildings"
         return None
@@ -136,18 +164,21 @@ class UpgradeReader:
     def running_detail(self, frame, candidate):
         heading=compact(self.label(frame,(.26,.035,.73,.095)))
         timer=compact(self.label(frame,(.79,.82,.895,.865)))
-        return (heading.startswith('upgrading'+compact(candidate.name)+'toleve')
+        return (upgrade_heading(heading,candidate).startswith('upgrading'+compact(candidate.name)+'toleve')
                 and timer=='timeleft' and self.detail_close(frame) is not None)
 
     def availability(self, frame, kind):
         from coc_bot.upgrades.digits import read_digits
-        box = (.739,.945,.788,.982) if kind == 'buildings' else (.808,.945,.854,.982)
+        box = {'buildings':(.739,.945,.788,.982),'research':(.808,.945,.854,.982),
+               'pets':(.944,.945,.987,.982)}.get(kind)
+        if box is None: return None
         raw = read_digits(crop(frame,box),fraction=True) or ''
         match = re.fullmatch(r'(\d)/(\d)',raw)
         if not match:
             return None
         free,total=map(int,match.groups())
-        return (free,total) if 0 <= free <= total <= 6 else None
+        maximum=6 if kind=='buildings' else 1
+        return (free,total) if 0 <= free <= total <= maximum and total>0 else None
 
     def balances(self, frame):
         return {key:resource_amount(crop(frame,box),self.stop) for key,box in {
@@ -176,7 +207,54 @@ class UpgradeReader:
                 top=int(word['top'])/2+round(h*.065)
                 bottom=(int(word['top'])+int(word['height']))/2+round(h*.065)
                 found.append((section+'upgrades',round(top),round(bottom)))
+            elif first in ('assigned','unassigned'):
+                top=int(word['top'])/2+round(h*.065)
+                bottom=(int(word['top'])+int(word['height']))/2+round(h*.065)
+                found.append((first,round(top),round(bottom)))
         return found
+
+    def pet_candidates(self, frame):
+        """Read pet rows, excluding locked/maxed entries without a real price.
+
+        Pet order is not a Suggested ranking. Visible section headings establish
+        assignment. A matching empty hero slot can carry verified unassigned
+        state across a scroll; missing evidence never means unassigned.
+        """
+        h,w=frame.shape[:2]
+        sections=sorted(((name,y0,y1) for name,y0,y1 in self._headings(frame)
+                         if name in ('assigned','unassigned')),key=lambda item:item[1])
+        top,bottom=round(h*.105),round(h*.89)
+        strip=frame[top:bottom,round(w*.800):round(w*.977)]
+        mask=cv2.inRange(cv2.cvtColor(strip,cv2.COLOR_BGR2HSV),(7,45,120),(30,190,220))
+        rows=(mask.mean(axis=1)/255>.30).astype(np.uint8)
+        found=[];start=None
+        for y,value in enumerate(np.append(rows,0)):
+            if value and start is None: start=y
+            if value or start is None: continue
+            a,b=top+start,top+y;start=None
+            if b-a<h*.045 or a<=top or b>=bottom: continue
+            height=b-a
+            title=frame[a+round(height*.04):a+round(height*.48),round(w*.802):round(w*.955)]
+            white=cv2.inRange(cv2.cvtColor(title,cv2.COLOR_BGR2HSV),(0,0,210),(180,75,255))
+            letters=cv2.copyMakeBorder(255-white,8,8,8,8,cv2.BORDER_CONSTANT,value=255)
+            name=pet_name(text(letters,stop=self.stop))
+            if not name: continue
+            price=resource_amount(frame[a+round(height*.46):b-round(height*.04),
+                               round(w*.85):round(w*.983)],self.stop)
+            resource=currency(frame[a+round(height*.30):b,round(w*.979):round(w*.996)])
+            if not price or resource!='dark_elixir': continue
+            preceding=[label for label,_,end in sections if end<a]
+            assigned=(preceding[-1]=='assigned') if preceding else None
+            slot=frame[a:b,round(w*.735):round(w*.765)]
+            slot=cv2.resize(slot,(56,56),interpolation=cv2.INTER_AREA)
+            if assigned is False:
+                self._pet_empty_reference=slot
+            elif assigned is None and self._pet_empty_reference is not None:
+                error=np.abs(slot.astype(float)-self._pet_empty_reference.astype(float))
+                if np.std(self._pet_empty_reference)>8 and error.mean()<8 and np.percentile(error,90)<20:
+                    assigned=False
+            found.append(Candidate(name,price,resource,(round(w*.86),(a+b)//2),assigned))
+        return found, False
 
     def candidates(self, frame):
         """Read only Suggested upgrades, never silently use Other upgrades."""
@@ -218,7 +296,7 @@ class UpgradeReader:
 
     def confirmation(self, frame, candidate):
         heading=self.label(frame,(.26,.035,.73,.095))
-        normalized=compact(heading)
+        normalized=upgrade_heading(heading,candidate)
         if not normalized.startswith('upgrade'+compact(candidate.name)+'toleve'):
             return None
         h,w=frame.shape[:2]
@@ -237,7 +315,10 @@ class UpgradeReader:
             label=text(cell[round(bh*.10):round(bh*.40),round(bw*.15):round(bw*.85)],stop=self.stop)
             # Eight-digit prices begin close to the left edge. Keep the whole
             # number while excluding the resource icon on the right.
-            price=amount(cell[round(bh*.48):round(bh*.91),round(bw*.03):round(bw*.80)],self.stop)
+            # The green button shades its white text differently from the list.
+            # Use the same strict contrast-isolated read as resource balances;
+            # conflicting raw/isolated prices still block spending.
+            price=resource_amount(cell[round(bh*.48):round(bh*.91),round(bw*.03):round(bw*.80)],self.stop)
             resource=currency(cell[round(bh*.35):round(bh*.95),round(bw*.79):round(bw*.99)])
             normalized=compact(label).replace('contirm','confirm')
             if not re.fullmatch(r'(?:ge)?(?:confirm|upgrade)',normalized):
@@ -247,15 +328,27 @@ class UpgradeReader:
                                 'name':candidate.name,'cost':price,'currency':resource})
         return targets[0] if len(targets)==1 else None
 
-    def active_names(self, frame):
+    def active_names(self, frame, kind=None):
         """Active upgrades use green progress rows above Suggested upgrades."""
         h,w=frame.shape[:2]
         headings=self._headings(frame)
-        bottom=next((y0 for label,y0,_ in headings if label=='suggestedupgrades'),None)
+        labels=('assigned','unassigned') if kind=='pets' else ('suggestedupgrades',)
+        bottom=next((y0 for label,y0,_ in headings if label in labels),None)
         if bottom is None: return []
         panel=frame[round(h*.07):bottom,round(w*.735):round(w*.998)]
         hsv=cv2.cvtColor(panel,cv2.COLOR_BGR2HSV)
         green=cv2.inRange(hsv,(35,60,65),(90,255,255))
+        if kind=='pets':
+            # One pet owns the slot. Its initial progress is a narrow green
+            # sliver, not the full title's bounds. Read the complete row above
+            # Assigned/Unassigned rather than cropping letters to that sliver.
+            if np.count_nonzero(green)<h*.023: return []
+            region=frame[round(h*.08):bottom-round(h*.004),round(w*.74):round(w*.93)]
+            if not region.size: return []
+            white=cv2.inRange(cv2.cvtColor(region,cv2.COLOR_BGR2HSV),(0,0,210),(180,75,255))
+            letters=cv2.copyMakeBorder(255-white,8,8,8,8,cv2.BORDER_CONSTANT,value=255)
+            name=pet_name(text(letters,stop=self.stop))
+            return [compact(name)] if name else []
         # Newly started upgrades have only a thin green sliver at the left edge.
         rows=(green.mean(axis=1)/255 > .003).astype(np.uint8)
         result=[]; start=None
@@ -268,6 +361,7 @@ class UpgradeReader:
                     hsv=cv2.cvtColor(region,cv2.COLOR_BGR2HSV)
                     mask=cv2.inRange(hsv,(0,0,220),(180,65,255))
                     letters=cv2.copyMakeBorder(255-mask,8,8,8,8,cv2.BORDER_CONSTANT,value=255)
-                    result.append(compact(text(letters,stop=self.stop)))
+                    value=text(letters,stop=self.stop)
+                    result.append(compact(pet_name(value) or value))
                 start=None
         return result

@@ -35,7 +35,7 @@ class Start(Payload):
 
 
 class UpgradeRequest(Payload):
-    kind: Literal['buildings','research']
+    kind: Literal['buildings','research','pets']
     token: str | None = Field(default=None,max_length=64)
 
 
@@ -99,10 +99,15 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
         if os.environ.get("COC_HOST_SOCKET") and scope is None:
             from coc_bot.control.platform import Platform
             service.platform = Platform()
+            from coc_bot.adb.capture_coordinator import set_failure_listener
+            set_failure_listener(service.capture_recovery.request)
             service.platform.start()
         try:
             yield
         finally:
+            if service.platform is not None:
+                from coc_bot.adb.capture_coordinator import set_failure_listener
+                set_failure_listener(None)
             logger.remove(sink)
             await asyncio.to_thread(service.close)
             simulation_stopped = True

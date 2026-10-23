@@ -82,8 +82,11 @@ gameplay or physical-hardware acceptance.
 
 ## Remaining limits
 
-- Fresh host installation from no Waydroid/calibration, unattended headless reboot,
-  and broader kernel/GPU/CPU combinations need dedicated acceptance.
+- Fresh-game installation/sign-in and broader kernel/GPU/CPU combinations need
+  dedicated acceptance. The isolated KVM follow-up completed blank-host
+  provisioning, APK installation, and headless service/profile restoration after
+  reboot, but Clash exited during native loading; this is not a fresh-game
+  acceptance pass.
 - Live video depends on Android encoding, browser/network paths, and permitted
   UDP traffic. One stream/controller is supported; multi-viewer service is not.
 - Recognition targets the inspected English landscape layouts. New UI versions,

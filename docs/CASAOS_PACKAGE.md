@@ -2,8 +2,9 @@
 
 CasaOS runs the browser dashboard in a container while Waydroid remains on the
 Linux host. The package is in use on an existing Ubuntu/Waydroid installation.
-Clean-host/headless installation and unattended reboot still need dedicated
-acceptance; this is not a universally tested one-click appliance.
+Isolated clean-host/headless provisioning and service reboot checks have passed,
+but the test VM's Clash launch still fails. Full fresh-game and physical-hardware
+acceptance remain open; this is not a universally tested one-click appliance.
 
 See the [README](../README.md) for the quick start and
 [verification and limits](#verification-and-remaining-limits) before migrating.
@@ -30,6 +31,52 @@ and working hardware graphics, initially AMD/Intel. CasaOS and Docker are
 prerequisites. Other GPUs, VMs, ARM, and alternative kernels need separate
 validation. The installer checks compatibility and does not silently replace
 the kernel. ARM-only game packages may require translation not supplied here.
+
+## Headless operation
+
+Ubuntu Server without GNOME, KDE, a display manager, or an attached monitor is a
+suitable deployment design. Fresh managed installation already creates a small
+Weston compositor, a dedicated Waydroid user/session, and the Android UI surface
+as systemd services. The browser dashboard is the user interface. Weston has a
+[headless backend](https://wayland.pages.freedesktop.org/weston/toc/running-weston.html)
+that renders without physical display/input devices.
+
+This still renders Android/game frames on a virtual display; it does not turn
+Clash into a command-line program or eliminate graphics work. Keep working GPU
+drivers/render-node permissions, Wayland, the user's runtime/D-Bus services, and
+[binder plus memfd/ashmem kernel support](https://docs.waydro.id/debugging/getting-essential-information).
+Waydroid itself is a container: CPU virtualization is required for our QEMU test
+VM, not for running Waydroid directly on a physical Linux server.
+
+The isolated Ubuntu Server guest had no GNOME/KDE packages or active display
+manager. Its headless services, Android rendering, screenshot capture and service
+reboot recovery passed. Its game-launch failure remains a separate compatibility
+limit; do not treat those checks as proof that Clash works on every headless host.
+
+An existing `--adopt-user` installation is different: it uses that user's
+existing Wayland desktop socket and needs that desktop session. Enabling user
+lingering alone does not create its compositor. Helper refresh preserves the
+adoption choice; it is not a conversion to headless operation.
+
+To convert an existing working machine, keep the current OS and first stage a
+reversible service migration:
+
+1. Stop automation/release manual control. Back up the bot profile and the actual
+   Android user data separately; calibration and APK backups do not include the
+   game account.
+2. Preserve the existing Waydroid user's UID, home and Android data path. Merely
+   changing to the fresh installer's dedicated user can create a different,
+   empty Android data directory.
+3. Test a dedicated offscreen compositor and managed session with that owner,
+   then switch the helper to the tested socket/service configuration. There is
+   no one-command adopted-to-headless conversion implemented yet.
+4. Verify the game, exact screenshot dimensions, calibration, browser video,
+   close/reopen and reboot without desktop login. Weston window decorations can
+   change the usable height; its
+   [kiosk shell](https://wayland.pages.freedesktop.org/weston/toc/kiosk-shell.html)
+   is an option to evaluate for consistent fullscreen output.
+5. Only after those checks, make desktop login optional. Removing the desktop
+   packages or reinstalling Linux is unnecessary for the initial migration.
 
 ## Data protection
 
@@ -280,14 +327,20 @@ retested there.
 The October 18 isolated Ubuntu VM completed fresh CasaOS/Waydroid provisioning,
 headless service creation, dashboard startup, authenticated ADB enrollment, and
 trusted APK archive import. The candidate passed 335 Linux tests (two skipped)
-and all 38 administrator-run package tests. Android framework instability in
-software CPU emulation still prevented a complete fresh-game acceptance result.
-See the [VM record](CASAOS_FRESH_INSTALL_TEST.md) for the iterative fixes and limits.
+and all 38 administrator-run package tests. A later blank-disk KVM run of
+`ddf04bb` completed provisioning, secure Android startup, APK import and game
+installation without code overrides. Clash exited during native-library loading
+in that VM, including a separate software-graphics trial. Full game/sign-in
+acceptance therefore remains open. A guest reboot restored the dashboard and
+headless Android services, preserved the test profile/ADB identity, and correctly
+reported the continuing game-launch failure. See the
+[VM record](CASAOS_FRESH_INSTALL_TEST.md) for exact checks and limits.
 
 Still separate acceptance work:
 
 - A clean supported host from no Waydroid/profile through APK import and sign-in.
-- Dedicated headless GPU/display startup and reboot without desktop login.
+- Physical-host headless GPU/display startup and reboot across supported drivers;
+  the isolated KVM guest's service/profile reboot checks passed.
 - Broader GPU/kernel/CPU/Android/browser combinations and sustained failure/soak tests.
 - Published image/app-store fresh installation, release updates, and rollback.
 - All new game layouts/languages, sceneries, capacities, and unknown army artwork.

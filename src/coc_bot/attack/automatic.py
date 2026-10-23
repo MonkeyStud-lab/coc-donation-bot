@@ -12,17 +12,28 @@ SIEGE_UNITS = {'wall_wrecker', 'battle_blimp', 'stone_slammer', 'siege_barracks'
 RAGE_UNITS = {'rage', 'rage_spell'}
 
 
+def supported_identity(card):
+    return (card.kind == 'troop' and card.unit_id == 'electro_dragon'
+            or card.kind == 'spell' and card.unit_id in RAGE_UNITS
+            or card.kind == 'siege' and card.unit_id in SIEGE_UNITS
+            or card.kind == 'hero' and bool(card.unit_id))
+
+
 def automatic_plan(cards):
     """Only stable identities/counts authorize this fixed, supported strategy.
 
     Known hero artwork may use a user-supplied name. Hero slot order never
-    establishes identity. Other troops/spells need a manually authored routine.
+    establishes identity. Extra/unknown cards are left unused; they cannot
+    veto a positively identified Electro Dragon army or authorize any tap.
     """
     if not cards:
         raise ValueError('Automatic attack skipped: no readable army cards')
     army = []
     seen = set()
     for card in cards:
+        if not supported_identity(card):
+            logger.info('Automatic attack: leaving extra card unused ({})', card.unit_id or card.slot)
+            continue
         if (not card.stable or not card.unit_id or type(card.quantity) is not int
                 or card.quantity < 1):
             raise ValueError('Automatic attack skipped: an army card or its quantity is uncertain')
@@ -36,9 +47,10 @@ def automatic_plan(cards):
             or card.kind == 'hero' and card.quantity == 1
         )
         if not supported:
-            raise ValueError('Automatic attack skipped: unsupported unit '+card.unit_id+
-                             '. Use Electro Dragons, optional Rage, siege and heroes.')
+            raise ValueError('Automatic attack skipped: invalid supported unit quantity: '+card.unit_id)
         army.append(ArmyEntry(card.unit_id, card.kind, card.quantity, True))
+    if not any(e.unit_id == 'electro_dragon' and e.kind == 'troop' for e in army):
+        raise ValueError('Automatic attack skipped: no verified Electro Dragons')
     if sum(e.kind == 'hero' for e in army) > 4 or sum(e.kind == 'siege' for e in army) > 1:
         raise ValueError('Automatic attack skipped: ambiguous hero or siege inventory')
     if sum(e.kind == 'spell' for e in army) > 1:
@@ -71,7 +83,8 @@ def scan_army(session, catalog):
     """Inspect both ends of the army bar, never selecting a unit or map point.
 
     Every page uses two fresh battle frames. Duplicate units across overlapping
-    pages are merged, never added; mismatching counts and unknown cards abort.
+    pages are merged, never added; mismatching counts of used units abort.
+    Unrecognized/extra cards are never selected or used as scroll anchors.
     The returned reference artwork is transient and cannot overwrite calibration.
     """
     stop = session.client.stop_check
@@ -94,9 +107,17 @@ def scan_army(session, catalog):
             raise ValueError('Automatic attack skipped: display size changed')
         last_shape = second.shape
         before = read_army(first, 'battle', catalog, stop_check=stop)
-        after = agree_cards(before, read_army(second, 'battle', catalog, stop_check=stop))
-        if not after or len(before) != len(after) or any(not c.stable for c in after):
-            raise ValueError('Automatic attack skipped: unreadable or changing army card')
+        observed = agree_cards(before, read_army(second, 'battle', catalog, stop_check=stop))
+        after = []
+        for card in observed:
+            if not supported_identity(card):
+                logger.debug('Automatic army: ignoring unused card {} ({})',card.slot,card.unit_id or 'unrecognized')
+                continue
+            if not card.stable:
+                raise ValueError('Automatic attack skipped: unreadable or changing army card: '+card.unit_id)
+            after.append(card)
+        if not after:
+            raise ValueError('Automatic attack skipped: unreadable supported army cards')
         if len({c.unit_id for c in after}) != len(after):
             raise ValueError('Automatic attack skipped: duplicate card identity on one page')
         catalog.add_references(second, after)

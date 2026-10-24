@@ -35,6 +35,7 @@ class InventoryParser:
         icon_matcher: IconMatcher | None = None,
     ) -> None:
         self.config = config
+        self.layout_session = None
         self.color_detector = SlotColorDetector(
             troop_color_bgr=config.colors.get("donatable_troop"),
             troop_grey_bgr=config.colors.get("disabled_troop"),
@@ -62,7 +63,7 @@ class InventoryParser:
         for bar_roi_key, _grid_key, default_category in self.BAR_CONFIGS:
             if roi_keys is not None and bar_roi_key not in roi_keys:
                 continue
-            if bar_roi_key not in self.config.rois:
+            if self.layout_session is None and bar_roi_key not in self.config.rois:
                 continue
             slots.extend(
                 self.parse_bar_slots(
@@ -87,7 +88,7 @@ class InventoryParser:
         stop_at_grey: bool = False,
         identify: bool = True,
     ) -> list[InventorySlot]:
-        if bar_roi_key not in self.config.rois:
+        if self.layout_session is None and bar_roi_key not in self.config.rois:
             return []
 
         if default_category is None:
@@ -99,9 +100,19 @@ class InventoryParser:
             else self.color_detector.is_donatable_spell
         )
         grid_key = "troop_bar" if bar_roi_key == "donation_troop_bar" else "spell_bar"
-        bar = crop_roi(frame, self.config.rois[bar_roi_key])
-        grid = self.config.grid.get(grid_key, {})
-        bar, x_off, y_off = self._crop_bar_to_grid(bar, grid)
+        origin = None
+        if self.layout_session is not None:
+            layout = self.layout_session.observe(frame)
+            geometry = layout.bar(bar_roi_key) if layout else None
+            if geometry is None:
+                return []
+            (x, y, w, h), grid = geometry
+            bar = frame[y:y+h, x:x+w]
+            origin, x_off, y_off = (x, y), 0, 0
+        else:
+            bar = crop_roi(frame, self.config.rois[bar_roi_key])
+            grid = self.config.grid.get(grid_key, {})
+            bar, x_off, y_off = self._crop_bar_to_grid(bar, grid)
         return self._walk_bar(
             bar,
             is_donatable,
@@ -113,6 +124,7 @@ class InventoryParser:
             bar_x_offset=x_off,
             bar_y_offset=y_off,
             identify=identify,
+            bar_origin=origin,
         )
 
     @staticmethod
@@ -131,10 +143,19 @@ class InventoryParser:
         y1 = max(y0 + 1, min(y1, bh))
         return bar[y0:y1, x0:x1].copy(), x0, y0
 
-    def bar_swipe_line(self, frame: np.ndarray, bar_roi_key: str) -> tuple[int, int, int, int]:
+    def bar_swipe_line(self, frame: np.ndarray, bar_roi_key: str) -> tuple[int, int, int, int] | None:
         """Return (x1, y, x2, y) to scroll the bar toward the right (reveal more units)."""
         fh, fw = frame.shape[:2]
-        bar_x, bar_y, bar_w, bar_h = denormalize_roi(ROI(*self.config.rois[bar_roi_key]), fw, fh)
+        if self.layout_session is not None:
+            layout = self.layout_session.observe(frame)
+            geometry = layout.bar(bar_roi_key) if layout else None
+            if geometry is None:
+                return None
+            (bar_x, bar_y, bar_w, bar_h), _ = geometry
+        else:
+            if bar_roi_key not in self.config.rois:
+                return None
+            bar_x, bar_y, bar_w, bar_h = denormalize_roi(ROI(*self.config.rois[bar_roi_key]), fw, fh)
         cy = bar_y + bar_h // 2
         x1 = bar_x + int(bar_w * 0.78)
         x2 = bar_x + int(bar_w * 0.22)
@@ -171,6 +192,7 @@ class InventoryParser:
         bar_x_offset: int = 0,
         bar_y_offset: int = 0,
         identify: bool = True,
+        bar_origin: tuple[int, int] | None = None,
     ) -> list[InventorySlot]:
         slots: list[InventorySlot] = []
         cols = int(grid.get("cols", 6 if default_category == "troop" else 4))
@@ -179,7 +201,10 @@ class InventoryParser:
         slot_h = int(grid.get("slot_height", bar.shape[0] // max(rows, 1)))
 
         fh, fw = frame.shape[:2]
-        bar_x, bar_y, _, _ = denormalize_roi(ROI(*self.config.rois[roi_key]), fw, fh)
+        if bar_origin is None:
+            bar_x, bar_y, _, _ = denormalize_roi(ROI(*self.config.rois[roi_key]), fw, fh)
+        else:
+            bar_x, bar_y = bar_origin
         bar_x += bar_x_offset
         bar_y += bar_y_offset
 

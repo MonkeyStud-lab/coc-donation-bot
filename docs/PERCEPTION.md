@@ -221,10 +221,64 @@ or expired capture cannot supply a proposal. Previewing issues no ADB input and
 saves no settings/templates. The user checks/edits the box and grid counts, then
 uses the existing transactional Save for that part, including its safety backup
 and ownership checks. Refresh creates a new editor selection rather than carrying
-old coordinates into the new frame. No batch auto-save or automatic navigation
-uses these proposals. Slot colors, the selected resource-state template, chat
-controls and other calibration remain manual. In particular, a located elixir
-button is never treated as proof that elixir mode is selected.
+old coordinates into the new frame. There is no batch auto-save. The donation
+executor can also use this localizer as described below, without saving its
+coordinates. The selected resource-state template, chat controls and other
+calibration remain separate. In particular, a located elixir button is never
+treated as proof that elixir mode is selected. Slot eligibility uses actual
+color saturation; legacy saved color swatches are not needed by that detector.
+
+### Automatic donation geometry
+
+`donation/layout.py` represents a supported panel in original screenshot pixels.
+At the start of each donation, the executor requires two matching observations
+before using automatic troop/spell grids and the elixir-button center. Those
+coordinates exist only for that request. They do not overwrite `calibrated.yaml`,
+reference images, or shared configuration. An unsupported initial layout keeps
+the existing calibrated workflow. A recognized panel that changes during the
+second observation is refused instead of falling through to saved coordinates.
+
+During an automatic donation, every slot tap gets a fresh capture. The executor
+checks the panel geometry, the separately calibrated selected-elixir indicator,
+and whether that slot is still colored before tapping its current center with
+zero jitter. Swipes also require a fresh matching layout. A lost panel, changed
+resolution/position, or failed resource verification invalidates the session;
+saved grid coordinates cannot take over midway. The next request starts a new
+check. Stop is checked after captures and before input.
+
+This removes the saved grid and elixir-button-coordinate dependency for the
+supported layout, not all calibration. It does not supply a selected-elixir
+reference or detect every possible overlay. Chat navigation, unsupported layouts,
+and the resource-state reference still need their existing setup. Readiness and
+the checklist retain the fallback calibration steps. The per-tap screenshot
+checks add capture latency. A successful executor return still reports that taps
+were sent, not independent proof of the amount donated; capacity-delta validation
+is a remaining step toward fully verified actions.
+
+The October 24 offline check used 230 distinct, hash-verified reviewed images:
+all six supported panels were localized and all 224 other screens were refused.
+No saved grid, color, or tap calibration was loaded into the parser. On the
+fresh request image, the only proposed taps were the available Electro Dragon
+and Ice Golem cards. Thirteen runtime tests cover two-frame agreement, missing
+resource calibration, resource changes, panel closure, stop during capture,
+resolution/position changes, unavailable slots, and calibrated fallback. This
+includes a simulated request that closes after the second tap. These results
+are offline evidence from one device/layout, including a reference-source image;
+they do not replace a live donation test or establish cross-device reliability.
+
+A subsequent isolated live test on October 24 verified this executor against an
+active request with saved grid areas, grid dimensions and elixir-button tap
+coordinates removed from the test's in-memory configuration. The existing
+selected-elixir reference remained required and was confirmed before every unit
+tap. An Electro Dragon and Ice Golem changed the request from 0/50 to 35/50 and
+then 50/50; after two troop-bar swipes, a Wall Wrecker donation closed the panel.
+No further input taps were sent. Gems stayed at 698; elixir decreased by 99,000
+and dark elixir by 360, matching the displayed unit costs. All 18 protected
+calibration/template files retained their hashes. The working CasaOS package was
+not replaced by this isolated test. Evidence remains private under
+`data/debug/donation-layout-live-20261024/`. This confirms one real request on the
+supported layout; it does not test spell donations or recovery from gem-selected
+mode in this live run.
 
 The October 19 proposal evaluation used a private fixed batch of 108 screenshots:
 five previously reviewed panels and 103 other screens, including eight new

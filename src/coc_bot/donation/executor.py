@@ -9,6 +9,7 @@ from coc_bot.adb.input import InputController
 from coc_bot.config import BotConfig
 from coc_bot.donation.capacity_parser import RequestCapacity
 from coc_bot.donation.inventory import InventoryParser, InventorySlot
+from coc_bot.donation.layout import DonationLayout, DonationLayoutSession
 from coc_bot.donation.request_parser import RequestKind
 from coc_bot.stop import interrupted_sleep
 from coc_bot.vision.matcher import TemplateMatcher
@@ -52,26 +53,59 @@ class DonationExecutor:
     def _stopping(self) -> bool:
         return bool(self.stop_check and self.stop_check())
 
+    def _prepare_layout(self, frame) -> bool:
+        """Choose geometry once per request; do not replace saved calibration."""
+        self.inventory_parser.layout_session = None
+        layout = DonationLayout.detect(frame)
+        if layout is None:
+            return True  # Unsupported variant: preserve the calibrated workflow.
+        if self._stopping():
+            return False
+        confirmed = DonationLayout.detect(self.capture.screenshot())
+        if self._stopping() or not layout.agrees(confirmed):
+            logger.info("Donation panel changed during automatic layout check — waiting for a stable panel")
+            return False
+        self.inventory_parser.layout_session = DonationLayoutSession(confirmed)
+        logger.info("Donation grids located automatically (7 columns, 2 troop rows, 1 spell row)")
+        return True
+
+    def _panel_visible(self, frame) -> bool:
+        session = self.inventory_parser.layout_session
+        if session is not None:
+            return session.observe(frame) is not None
+        return self.classifier.is_donation_panel(frame)
+
+    def _resource_panel_visible(self, frame) -> bool:
+        if self.inventory_parser.layout_session is not None:
+            return self._panel_visible(frame)
+        return self.classifier.classify(frame, mode=BotMode.DONATE) == ScreenType.DONATION_PANEL
+
     def _ensure_elixir_resource(self) -> bool:
         """Select elixir precisely and require visible confirmation before any donation."""
         from coc_bot.donation.resource_mode import elixir_is_selected
         if self._stopping():
             return False
+        session = self.inventory_parser.layout_session
         point = self.config.tap_points.get("donation_elixir_button")
-        if (not point or len(point) < 2 or self.config.frame_width <= 0
-                or self.config.frame_height <= 0
-                or not self.config.templates.get("donation_elixir_selected")
+        if (not self.config.templates.get("donation_elixir_selected")
                 or not self.config.rois.get("donation_elixir_selected")):
-            logger.warning("Donation skipped: calibrate Elixir resource button and Selected elixir indicator in Setup → Donation panel.")
+            logger.warning("Donation skipped: capture the Selected elixir indicator in Setup → Donation panel.")
+            return False
+        if session is None and (not point or len(point) < 2 or self.config.frame_width <= 0
+                                or self.config.frame_height <= 0):
+            logger.warning("Donation skipped: this layout needs an Elixir resource button tap in Setup → Donation panel.")
             return False
         frame = self.capture.screenshot()
-        if self.classifier.classify(frame, mode=BotMode.DONATE) != ScreenType.DONATION_PANEL:
+        if self._stopping() or not self._resource_panel_visible(frame):
             return False
         if elixir_is_selected(self.config, frame):
             return True
         h, w = frame.shape[:2]
-        x = round(point[0] * w / self.config.frame_width)
-        y = round(point[1] * h / self.config.frame_height)
+        if session is not None:
+            x, y = session.layout.elixir_center
+        else:
+            x = round(point[0] * w / self.config.frame_width)
+            y = round(point[1] * h / self.config.frame_height)
         if not (0 <= x < w and 0 <= y < h):
             logger.warning("Elixir tap lies outside the screen; recalibrate it.")
             return False
@@ -81,7 +115,7 @@ class DonationExecutor:
         confirmed = self.capture.screenshot()
         if self._stopping():
             return False
-        if (self.classifier.classify(confirmed, mode=BotMode.DONATE) == ScreenType.DONATION_PANEL
+        if (self._resource_panel_visible(confirmed)
                 and elixir_is_selected(self.config, confirmed)):
             return True
         logger.warning("Elixir selection could not be confirmed — donation skipped to avoid spending gems.")
@@ -100,7 +134,9 @@ class DonationExecutor:
         if self._stopping():
             return False
         frame = self.capture.screenshot()
-        if not self.classifier.is_donation_panel(frame):
+        if not self._prepare_layout(frame):
+            return False
+        if not self._panel_visible(frame):
             logger.warning(
                 "Not on donation panel, detected screen: {}",
                 self.classifier.classify(frame, mode=BotMode.DONATE).value,
@@ -162,7 +198,7 @@ class DonationExecutor:
         for bar_key in self.BAR_KEYS:
             if self._stopping():
                 return made
-            if bar_key not in self.config.rois:
+            if self.inventory_parser.layout_session is None and bar_key not in self.config.rois:
                 continue
             if self._clear_colored_current_view(bar_key):
                 made = True
@@ -171,7 +207,7 @@ class DonationExecutor:
         for bar_key in self.BAR_KEYS:
             if self._stopping():
                 return made
-            if bar_key not in self.config.rois:
+            if self.inventory_parser.layout_session is None and bar_key not in self.config.rois:
                 continue
             if self._scroll_and_clear_bar(bar_key):
                 made = True
@@ -189,7 +225,7 @@ class DonationExecutor:
             if self._stopping():
                 return made
             frame = self.capture.screenshot()
-            if not self.classifier.is_donation_panel(frame):
+            if self._stopping() or not self._panel_visible(frame):
                 return made
 
             slots = self.inventory_parser.parse_bar_slots(
@@ -203,8 +239,10 @@ class DonationExecutor:
                 bar_roi_key,
                 len(slots),
             )
-            self._tap_colored_slots(slots)
-            made = True
+            made = self._tap_colored_slots(slots) or made
+            session = self.inventory_parser.layout_session
+            if session is not None and not session.valid:
+                return made
             if interrupted_sleep(self.AFTER_TAP_BATCH_S, self.stop_check):
                 return made
         return made
@@ -212,9 +250,12 @@ class DonationExecutor:
     def _scroll_bar(self, bar_roi_key: str, *, scroll_i: int, max_scrolls: int) -> bool:
         """Swipe the bar right. Returns False if stop requested or panel is gone."""
         frame = self.capture.screenshot()
-        if not self.classifier.is_donation_panel(frame):
+        if self._stopping() or not self._panel_visible(frame):
             return False
-        x1, y1, x2, y2 = self.inventory_parser.bar_swipe_line(frame, bar_roi_key)
+        line = self.inventory_parser.bar_swipe_line(frame, bar_roi_key)
+        if line is None or self._stopping():
+            return False
+        x1, y1, x2, y2 = line
         logger.info(
             "Scrolling {} toward right ({}/{})",
             bar_roi_key,
@@ -263,6 +304,8 @@ class DonationExecutor:
         return made
 
     def _tap_colored_slots(self, slots: list[InventorySlot]) -> bool:
+        if self.inventory_parser.layout_session is not None:
+            return self._tap_automatic_slots(slots)
         if not slots:
             return False
         for slot in slots:
@@ -276,6 +319,39 @@ class DonationExecutor:
             if interrupted_sleep(self.BETWEEN_SLOTS_S, self.stop_check):
                 return True
         return True
+
+    def _tap_automatic_slots(self, slots: list[InventorySlot]) -> bool:
+        """Never reuse a batch of coordinates after the donation panel closes.
+
+        Return whether input was sent, not proof that capacity was filled.
+        Eligibility, current geometry and resource mode are rechecked per tap.
+        """
+        from coc_bot.donation.resource_mode import elixir_is_selected
+        made = False
+        session = self.inventory_parser.layout_session
+        for slot in slots:
+            for _ in range(slot.quantity):
+                if self._stopping():
+                    return made
+                frame = self.capture.screenshot()
+                if self._stopping() or not self._panel_visible(frame):
+                    return made
+                if not elixir_is_selected(self.config, frame):
+                    session.valid = False
+                    logger.warning("Donation stopped: selected elixir indicator is no longer confirmed")
+                    return made
+                key = 'donation_spell_bar' if slot.category == 'spell' else 'donation_troop_bar'
+                current = self.inventory_parser.parse_bar_slots(frame, key, identify=False)
+                target = next((s for s in current if s.unit_id == slot.unit_id), None)
+                if target is None:
+                    continue  # The request may have been filled by another donor.
+                if self._stopping():
+                    return made
+                self.input.tap(*target.center, jitter=0)
+                made = True
+                if interrupted_sleep(self.BETWEEN_SLOTS_S, self.stop_check):
+                    return made
+        return made
 
     def _finish_donation(self) -> None:
         """Close the donation panel, then leave Chat Groups if a miss opened it."""

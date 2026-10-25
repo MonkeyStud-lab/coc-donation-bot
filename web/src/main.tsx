@@ -202,7 +202,7 @@ function App(){
     value={password} onChange={e=>setPassword(e.target.value)} required/></label>
     <button className="primary" disabled={busy}>Sign in</button><p role="alert">{notice}</p></form></main>;
   const fields=settings?.fields.filter(f=>(!f.advanced||values.gui_dev_options)&&
-    (advanced||BASIC_SETTINGS.has(f.key)||f.key.startsWith('upgrade_')||f.key.startsWith('progression_'))&&
+    (advanced||BASIC_SETTINGS.has(f.key)||f.key.startsWith('upgrade_')||f.key.startsWith('progression_')||f.key.startsWith('builder_base_'))&&
     (f.label+' '+f.description).toLowerCase().includes(search.toLowerCase()))||[];
   return <div className="app"><aside><a className="brand" href="#" onClick={e=>e.preventDefault()}>CoC Bot</a>
     <nav>{['Dashboard','Accounts','Attacks','Settings','Setup','Library','Diagnostics'].map(p=><button key={p}

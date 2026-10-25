@@ -54,6 +54,16 @@ farm:
   battle_timeout_seconds: 210     # max wait from first deploy; confirmed results can return earlier
   retry_cooldown_seconds: 300     # only when farm fails before deploy (menu/matchmaking)
 
+builder_base:
+  collect_resources: false
+  research_enabled: false
+  elixir_reserve: 100000
+  attacks_enabled: false
+  upgrades_enabled: false
+  interval_seconds: 3600
+  builders_reserved: 0
+  gold_reserve: 100000
+
 progression:
   enabled: false
   rearrange: true

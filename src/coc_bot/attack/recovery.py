@@ -4,6 +4,7 @@ All callers must already own DeviceLease. A checkpoint write is mandatory before
 input: unlike optional diagnostics, an unwritable checkpoint blocks the action.
 """
 import json
+import hashlib
 import math
 import os
 from pathlib import Path
@@ -164,6 +165,85 @@ def accept_home_zoom_limit(session):
     marker.unlink()
     logger.warning('Home zoom limit verified. Automatic mapping may continue; '
                    'the legacy tap sequence remains blocked until its camera is restored.')
+    return True
+
+
+def accept_automatic_home_camera(session):
+    """Retire an unmatched reference only for automatic, freshly mapped attacks.
+
+    Two independently captured home views must establish a stationary world.
+    This does not confirm clan chat, complete the attack checkpoint, or grant
+    deployment permission. Fixed-coordinate recipes retain their original guard.
+    """
+    if getattr(session.config, 'farm_engine', 'sequence') != 'automatic':
+        return False
+    from coc_bot.attack.camera import compare_camera, compare_home_zoom
+    from coc_bot.vision.battle_menu import home_build_control_visible
+    root = session.config.data_dir / 'attack-planner'
+    marker = root / 'camera-pending.json'
+    if not marker.exists():
+        return False
+    state = json.loads(marker.read_text(encoding='utf-8'))
+    if state.get('device') != session.config.adb_device:
+        return False
+    original_path = root / 'camera-before.png'
+    original = cv2.imread(str(original_path))
+    if original is None:
+        return False
+    stop = session.client.stop_check
+    check_stop(stop)
+    before = session.capture.screenshot()
+    if before.shape != original.shape or not home_build_control_visible(before):
+        return False
+    session._sleep(.7)
+    check_stop(stop)
+    after = session.capture.screenshot()
+    check_stop(stop)
+    if after.shape != before.shape or not home_build_control_visible(after):
+        return False
+    evidence = compare_camera(before, after)
+    if not evidence.get('verified'):
+        evidence = compare_home_zoom(before, after)
+    if not (evidence.get('verified') or evidence.get('verified_zoom')):
+        return False
+    # Scale-only agreement cannot establish a stationary view. Require the
+    # verified transform, with small translation, rotation and scale change.
+    import numpy as np
+    matrix = np.asarray(evidence.get('transform'), dtype=float)
+    if matrix.shape != (2, 3) or not np.isfinite(matrix).all():
+        return False
+    scale = math.hypot(matrix[0, 0], matrix[1, 0])
+    rotation = math.degrees(math.atan2(matrix[1, 0], matrix[0, 0]))
+    h, w = after.shape[:2]
+    if (abs(scale - 1) >= .005 or abs(rotation) >= .3 or
+            abs(matrix[0, 2]) >= w*.005 or abs(matrix[1, 2]) >= h*.005):
+        return False
+    check_stop(stop)
+    legacy = root / 'camera-legacy-blocked.json'
+    if legacy.exists():
+        old = json.loads(legacy.read_text(encoding='utf-8'))
+        if (old.get('device') != session.config.adb_device or
+                cv2.imread(str(root / 'camera-legacy-before.png')) is None):
+            return False
+    else:
+        # The guard is written last; interrupted writes retain camera-pending.
+        with (root / 'camera-legacy-before.png').open('wb') as handle:
+            handle.write(original_path.read_bytes())
+            handle.flush()
+            os.fsync(handle.fileno())
+        atomic_json(legacy, dict(device=session.config.adb_device, at=time.time(),
+                                reason='automatic mode adopted a verified stable home camera'))
+    atomic_json(root / 'camera-remapped.json', {
+        'device': session.config.adb_device, 'at': time.time(),
+        'previous_reference_sha256': hashlib.sha256(original_path.read_bytes()).hexdigest(),
+        'reason': 'original reference unmatched; two stable home observations',
+        'evidence': evidence, 'legacy_sequence_blocked': True,
+        'battlefield_mapping_ready': False,
+    })
+    check_stop(stop)
+    marker.unlink()
+    logger.warning('Stable home camera confirmed for automatic mapping; the old '
+                   'fixed-tap sequence remains blocked. Clan chat must still be confirmed.')
     return True
 
 

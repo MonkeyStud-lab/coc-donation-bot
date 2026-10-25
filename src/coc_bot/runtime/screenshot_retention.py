@@ -31,14 +31,23 @@ def prune_attack_diagnostics(data_dir, *, policy=RetentionPolicy(), now=None, dr
     root = Path(data_dir)
     # Do not follow a replaced root/debug or family directory outside the profile.
     debug = root/'debug'
+    builder_marker = root/'builder_base/visit.json'
+    builder_pending = False
+    if builder_marker.exists():
+        try:
+            import json
+            builder_pending = bool(json.loads(builder_marker.read_text(encoding='utf-8')).get('phase'))
+        except (OSError, ValueError, AttributeError):
+            builder_pending = True
     if (root.is_symlink() or debug.is_symlink() or
+            builder_pending or
             (root/'attack-planner/attack-pending.json').exists() or
             (root/'attack-planner/camera-pending.json').exists()):
         return {'removed_groups': 0, 'removed_bytes': 0, 'skipped_pending': True}
     now = time.time() if now is None else now
     groups = []
     try:
-        for family in ('attack-surveys', 'attack-v2', 'attack-executions'):
+        for family in ('attack-surveys', 'attack-v2', 'attack-executions', 'builder-base'):
             folder = debug/family
             if folder.is_symlink() or not folder.is_dir():
                 continue
@@ -57,8 +66,11 @@ def prune_attack_diagnostics(data_dir, *, policy=RetentionPolicy(), now=None, dr
                     children = list(directory.iterdir())
                     # Only flat generated reports; never recurse into an
                     # unexpected directory, junction, symlink or retained copy.
+                    pattern = (r'\d{3}-(?:boat-not-found|battle-results|stage-view|unsupported-army|deployment-confirmed|slot-\d+-attempt-\d+)\.png'
+                               if family == 'builder-base' else
+                               r'(?:reference|before|after|mosaic|overlay|view-\d+)\.(?:png|json)|camera\.json')
                     if all(p.is_file() and not p.is_symlink() and
-                           re.fullmatch(r'(?:reference|before|after|mosaic|overlay|view-\d+)\.(?:png|json)|camera\.json', p.name)
+                           re.fullmatch(pattern, p.name)
                            for p in children):
                         items.append((directory, children))
             for directory, paths in items:

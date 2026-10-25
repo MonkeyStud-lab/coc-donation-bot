@@ -91,6 +91,10 @@ class BotConfig:
     builder_base_upgrades_enabled: bool = False
     builder_base_collect_resources: bool = False
     builder_base_research_enabled: bool = False
+    builder_base_elixir_reserve: int = 100_000
+    builder_base_interval_seconds: int = 3600
+    builder_base_builders_reserved: int = 0
+    builder_base_gold_reserve: int = 100_000
     farm_interval_seconds: int = 3600
     farm_interval_variance_seconds: int = 300
     farm_deploy_side: str = "left"
@@ -290,6 +294,7 @@ def load_config(
     farm = merged.get("farm", {})
     progression = merged.get('progression', {})
     upgrades = merged.get("upgrades", {})
+    builder_base = merged.get("builder_base", {})
     clan_limits = _load_clan_perks(root)
     deploy_side = str(farm.get("deploy_side", "left")).strip().lower()
     if deploy_side not in ("left", "right"):
@@ -348,6 +353,14 @@ def load_config(
         upgrade_elixir_reserve=max(0,int(upgrades.get('elixir_reserve',2_000_000))),
         upgrade_dark_elixir_reserve=max(0,int(upgrades.get('dark_elixir_reserve',50_000))),
         upgrade_excluded_names=str(upgrades.get('excluded_names','')),
+        builder_base_attacks_enabled=builder_base.get('attacks_enabled') is True,
+        builder_base_upgrades_enabled=builder_base.get('upgrades_enabled') is True,
+        builder_base_collect_resources=builder_base.get('collect_resources') is True,
+        builder_base_research_enabled=builder_base.get('research_enabled') is True,
+        builder_base_elixir_reserve=max(0,int(builder_base.get('elixir_reserve',100_000))),
+        builder_base_interval_seconds=max(300,int(builder_base.get('interval_seconds',3600))),
+        builder_base_builders_reserved=max(0,min(3,int(builder_base.get('builders_reserved',0)))),
+        builder_base_gold_reserve=max(0,int(builder_base.get('gold_reserve',100_000))),
         farm_interval_seconds=int(farm.get("interval_seconds", 3600)),
         farm_interval_variance_seconds=max(0, int(farm.get("interval_variance_seconds", 300))),
         farm_deploy_side=deploy_side,

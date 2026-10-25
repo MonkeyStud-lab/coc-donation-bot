@@ -322,6 +322,16 @@ owner checks this marker and the existing camera recovery marker. Recovery:
   attacks must still rebuild and verify their opponent map from fresh images.
   Attacks → Restore camera can attempt the preserved legacy reference. The regular
   3% camera-restoration tolerance and opponent geometry thresholds are unchanged.
+- If the old reference cannot be matched or restoration cannot converge,
+  automatic mode can instead accept two fresh, stable home observations. Both
+  must show the home Build control, retain the saved dimensions/device, and
+  establish a distributed world transform with less than 0.5% scale change,
+  0.3 degrees rotation and 0.5% translation. This sends no additional gestures.
+  It preserves the first legacy camera reference and blocks fixed-coordinate
+  sequences; `camera-remapped.json` records the evidence. The attack checkpoint
+  still requires a fresh clan-chat confirmation before it can clear. Missing,
+  corrupt or foreign references, unstable views and Stop cannot take this path.
+  The explicit **Restore camera** tool continues to require the old view.
 - Advances the farm interval once for a potentially fought battle. Its attack ID
   is persisted so a crash between saving the interval and clearing the checkpoint
   does not roll a second interval.

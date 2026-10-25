@@ -5,20 +5,28 @@ verification paths. The learned whole-screen classifier remains an optional
 observer: it reports predictions without changing navigation, input, purchases,
 or deployment decisions. Browser/CasaOS migration did not give it action authority.
 
-## Shop and Clash Pass recovery
+## Shop, Settings and Clash Pass recovery
 
-These two pages have explicit `shop` and `clash_pass` screen types. They can
+These pages have explicit `shop`, `settings` and `clash_pass` screen types. They can
 interrupt either the donation or attack flow, so they are checked before the
 older home, donation, and battle heuristics in every navigation mode.
 
 The detector in `vision/auxiliary.py` checks small, fixed parts of the header:
 
-- Shop: at least two of the building, army, and treasure navigation icons.
+- Shop: two of the current Shield, League and Treasure category icons. A selected
+  tab enlarges its icon, so the other two provide evidence. The earlier header
+  layout remains supported by its building, army and treasure templates.
+- Settings: the Settings heading together with Music and Sound Effects labels.
+  The Settings tab alone also appears on Inbox/Profile and is insufficient.
 - Clash Pass: both the “Pass Rewards” and “Hoggy Bank” headings.
 
 The small reference crops ship with the package in `vision/assets/`. No new
 calibration or OCR installation is needed. Account details, purchases, season
 names, reward contents, and currency balances are not part of these assets.
+The current Shop and Settings crops were taken from the privately reviewed
+`fresh_validation_20261024` development batch, resized to 960×540. They contain
+only fixed category icons, labels and the close button; complete screenshots and
+account details are not shipped with the application.
 Captures are normalized to a small landscape reference size for matching;
 the close button coordinates are converted back to the capture's actual size.
 Portrait and very wide layouts are deliberately unsupported.
@@ -26,11 +34,15 @@ Portrait and very wide layouts are deliberately unsupported.
 Recognizing a page does not automatically authorize a tap. A separate match
 must find its red close X in the upper right, with a bright white X. This rejects
 dimmed buttons underneath dialogs such as “Connection lost.” When the close
-button is obscured or unverified, recovery stops and logs that the covering
-dialog needs manual attention. It does not click offers or purchase buttons.
+button is obscured or unverified, recovery takes up to three observations without
+tapping, then logs that manual attention is needed. Conflicting page anchors
+produce an uncertain observation. It does not click offers or purchase buttons.
 
 `auxiliary_recovery.py` limits each recovery operation to three close attempts,
 checks Stop immediately before a tap, and uses zero tap jitter. Navigation
+treats Shop and Settings as provisional until the same page and close target
+appear on two separately captured frames. Reusing the same image, changing
+targets or persistent ambiguity cannot authorize input. Navigation
 takes a new screenshot after each attempt and verifies the next screen before
 opening chat or starting an attack. The same logic applies when returning from
 an attack and confirming that clan chat can open.
@@ -327,6 +339,245 @@ detector has been validated. The existing screen-label approval alone does not
 approve this separate object-training work.
 
 ## Offline checks
+
+### Comparing experiment batches
+
+Keep the current candidate unchanged while testing a new feature representation,
+data addition, or recognition rule. Hold out complete recording sessions and
+creators, and remove near-duplicate training frames before evaluating each fold.
+Do not randomly split adjacent video frames. Verify the UI visually: a recent
+upload can still contain old footage, comparisons, or edited mockups. Preserve
+the source URL, license evidence, timestamps, original dimensions, crop, and
+image hashes alongside each external batch.
+
+Compare candidates on the same images, labels, and session groups:
+
+```bash
+python scripts/compare_screen_evaluations.py \
+  --baseline previous/evaluation.json \
+  --candidate experiment/evaluation.json \
+  --baseline-data previous/dataset.json \
+  --candidate-data experiment/dataset.json \
+  --output experiment/regression-gate.json
+```
+
+Evaluation reports contain `predictions` with `id`, `session`, `expected`, and
+`predicted`. Dataset arrays contain `id`, `screen`, `session`, and `sha256`.
+IDs must be nonempty strings. The gate rejects changed benchmark identities,
+missing cases, and any previously correct case becoming incorrect. New cases
+are reported separately, so adding easier images cannot hide a regression.
+An abstention is not counted as correct. Exit status 0 means the comparison
+passed; it does not mean the candidate improved or is ready for deployment.
+Check `improves_without_regressions` for an actual improvement. Existing report
+files are never overwritten.
+
+Historical cases inspected during development are regression tests, not an
+untouched accuracy estimate. Also compare each revision against the last passing
+candidate, and reserve new sessions for a final independent audit. Screen-label
+approval does not approve object boxes or authorize gameplay actions.
+
+### Experimental text evidence
+
+`scripts/screen_text_evidence.py` is an **offline experiment**, not part of the
+running screen detector. Its `recognize(frame)` function accepts a BGR screenshot
+and returns optional screen evidence plus OCR diagnostics. It uses English
+Tesseract text and layout anchors together: army headers with an unambiguous
+Attack/Battle button, a logo with a Loading label, or a Connection lost dialog
+with its explanatory text. Missing, conflicting, or timed-out OCR evidence
+leaves the visual prediction unchanged. The helper does not receive filenames
+or expected labels and cannot tap, deploy troops, or spend resources.
+
+The October 24 offline experiment improved the fixed expanded development
+benchmark from 247/260 to 251/260, with no previously correct cases becoming
+incorrect. Three feature experiments and two data-addition experiments were
+rejected because they introduced regressions. A separate set of 30 current-UI
+frames from [Mythonz's October 18 video](https://www.youtube.com/watch?v=YHimtfaSq8c)
+improved from 22/30 to 24/30 with the text helper. Those frames were inspected
+before rule development, so that final result is not a blind validation score.
+Their labels are assistant-reviewed, with no completed object annotations.
+The source's displayed Creative Commons Attribution license and crop metadata
+are retained in the private review batch.
+
+OCR took a median 0.36 seconds and a 95th percentile of 0.68 seconds across 296
+images in the constrained evaluation container (two CPUs, one GB RAM,
+`OMP_THREAD_LIMIT=1`). That cost is additional to visual classification. The
+experiment remains offline; it needs fresh-session validation and bounded,
+selective invocation before any consideration for live use. The retained model,
+calibration, and live navigation were not replaced by these experiments.
+
+The subsequent October 24 live-server validation froze the helper and model
+before collecting 35 new captures. Labels were visually reviewed and frozen
+before inference. Both the visual model and the text-assisted candidate scored
+31/34 identifiable frames, with no regressions and no improvements. One fully
+black reload-transition frame was retained and marked unidentifiable before
+scoring. Both versions recognized the real donation panel and army confirmation,
+but missed two Shop layouts and classified Settings as a generic popup.
+
+After grouping near-duplicates within that batch, both scored 23/26. Restricting
+further to frames more than six perceptual-hash bits from the training set gave
+14/17 distinct cases. No exact training-image duplicates were present. This is
+one English-language device session, not broad validation; it includes no fresh
+battle/results, matchmaking, live-replay, or reward-screen positives. OCR added
+a median 0.39 seconds per frame. Deployment was held because this independent
+batch showed no gain and exposed unresolved screen distinctions. The private
+`fresh_validation_20261024` review batch preserves every image, hashes, frozen
+labels/code, predictions, duplicate analysis, and the decision. It is validation
+data, not automatically approved training data. If used to develop the next
+candidate, reserve another untouched session for that candidate's final audit.
+
+### Targeted recovery validation, 24 October 2026
+
+The missed Shop/Settings frames became development data for fixed-anchor fixes,
+not additional classifier training. The updated text-plus-anchor experiment
+retained 251/260 historical predictions and 24/30 external-creator predictions,
+with no correct-to-incorrect regressions; the 34 scorable development frames
+improved from 31/34 to 34/34. No false Shop/Settings close targets were found in
+those batches.
+
+A newly captured 14-frame session improved from 10/14 visual-only labels to
+13/14 with the first candidate. The remaining selected-Shield-tab miss prompted
+the two-of-three category check. Five further screenshots were then captured
+and labeled before inference, including Treasure and League Shop: the frozen
+second candidate scored 5/5 versus 2/5 visual-only. This small, same-device sample
+is a targeted regression check, not evidence of universal accuracy. It does not
+establish performance on new languages, accounts or battle layouts.
+
+Only the fixed menu recognition/recovery and home-camera recovery changes were
+deployed. The learned model weights are unchanged and retain no action authority;
+the experimental OCR combination remains offline. Real server tests verified
+two-observation closing of Shop and Settings, home/clan-chat recovery and a
+subsequent donation. The observed gem balance stayed at 698. Calibration and
+settings hashes were checked against a verified pre-deployment backup.
+
+Private evidence is retained under `recovery_validation_20261024` in the review
+library, with candidate hashes, label freezes, development versus final-test
+membership, regression reports and live-test logs. Full screenshots remain
+outside Git. None of these assistant-reviewed labels automatically authorizes
+adding the images to a training set.
+
+### Screen-model retraining, 24 October 2026
+
+After the targeted fixes, a separate offline run trained two new classifier
+candidates. The existing 266-image current-UI dataset was hash-verified and its
+247/260 session-held-out baseline reproduced before either candidate was scored.
+The data additions were fixed in advance: three recent Shop/Settings frames,
+then all 34 identifiable frames from the earlier live validation. The black
+transition frame was excluded. New labels remain assistant-reviewed; the user's
+training request does not turn them into independently human-verified labels.
+
+The 269-image menu candidate retained 247/260 historical cases. On the 19 reserved
+recovery captures it improved from 12/19 to 17/19, but newly confused the Inbox
+page with Settings. On 30 external-creator frames it improved from 22/30 to 24/30
+without a regression. The 300-image candidate improved recovery recognition to
+18/19 but regressed on four historical cases (three upgrades in progress and one
+popup), while fixing two others: the same historical cases fell to 245/260.
+External-creator recognition stayed at 22/30.
+
+Neither candidate passed all per-case regression checks, so neither replaced the
+retained model. These are learned-model scores without the experimental OCR or
+fixed-anchor overrides; do not compare them directly to the hybrid 251/260 score.
+Whole recording groups were held out during cross-validation, with training
+frames within six perceptual-hash bits of a held-out frame removed. All 49
+recovery/creator evaluation images stayed outside final model training.
+
+Those holdouts were previously inspected, and the recovery captures share a
+device/day with the added training data. They are not a new blind accuracy test.
+After excluding visually similar holdout frames, the menu candidate's recovery
+score was 7/9 versus 6/9 before; the broader candidate scored 5/6 versus 3/6 before.
+The differing denominators reflect different training sets, not deleted failures.
+
+Candidate weights, metadata, frozen input hashes, runner and per-image reports
+are stored privately under `data/models/screen_retrain_20261024`; screenshots and
+weights stay outside Git. The run used an isolated container limited to two CPUs
+and 1 GB RAM, with no network or write access to the live profile. No calibration,
+gameplay configuration, observer selection or live model was changed. The next
+training data should distinguish Settings from Inbox and upgrade confirmations
+from upgrades already in progress, across independent recording sessions.
+
+### Targeted collection and retraining, 24 October 2026
+
+A follow-up collected and visually labeled 51 current-UI screenshots on the live
+server. The first pass contains 34 captures, with 15 useful training examples
+selected before fitting; navigation frames and redundant captures are preserved
+but not automatically included. Examples distinguish Settings, Inbox/Social,
+upgrade confirmations, and upgrades already in progress. No upgrade, purchase,
+instant finish, or game-setting change was performed during collection.
+
+Three data additions were frozen before training. The selected `targeted_core`
+candidate uses 280 images: the existing 266, three earlier Shop/Settings captures,
+and 11 new targeted examples. It improved the same 260 historical cases from
+247 correct to 248, the 19 recovery cases from 12 to 18, and the 30 external-creator
+cases from 22 to 24. None of those checks introduced a correct-to-incorrect
+regression. Whole capture groups remain held out during cross-validation, and
+perceptually similar training frames are purged from each fold.
+
+After training inputs were frozen, a second pass collected 17 validation images,
+including a different hero preview and another Builder's Hut upgrade level.
+Their labels were frozen before inference and none entered training. The core
+candidate improved from 14/17 to 15/17 without regressions. Both remaining errors
+are More Settings pages. Among the 12 frames more than six perceptual-hash bits
+from that candidate's training set, both models scored 10/12. Thus the new pass
+supports a narrow menu improvement, not a demonstrated gain on visually distinct
+screens. It shares an account and capture day with training and does not establish
+accuracy across independent installations or battle layouts.
+
+The 284-image and 315-image alternatives each scored 17/17 on the new pass, but
+both regressed on historical and external-creator cases and were rejected. A
+perfect score on one small batch does not override failures on existing cases.
+All new labels are assistant-reviewed, not independently human-confirmed; this
+is screen classification, not completed bounding-box annotation.
+
+The selected candidate remains offline and observation-only. No live model or
+navigation rule was changed. The bot was resumed, and hashes of 21 calibration,
+configuration and template files matched their pre-collection values. Training,
+reload, observer isolation and regression-gate checks passed. Private images and
+labels are preserved under `data/labelstudio/review/targeted_training_20261024`;
+weights, frozen inputs, scripts and per-image reports are under
+`data/models/targeted_training_20261024`. These assets stay outside Git. Further
+work should target More Settings versus generic popups while retaining all
+existing regression checks and reserving a new capture session for final testing.
+
+### More Settings refinement, 24 October 2026
+
+The next collection added 36 visually reviewed screenshots across three passes:
+More Settings at multiple scroll positions, main Settings, Inbox, Social and
+navigation context. Nine first-pass examples were eligible for training. The
+three initial candidates used two, seven or nine of them. All unrestricted
+replacements introduced regressions, including a previously correct popup
+becoming `loading`, and were rejected.
+
+The retained experiment uses the previous 280-image `targeted_core` model as its
+baseline and the new 287-image `spread` model as an optional refinement.
+`scripts/screen_settings_refinement.py` permits only `popup` -> `settings` when
+the refinement predicts Settings. All other baseline decisions are preserved;
+an optional refinement failure also preserves the baseline. This constraint
+does not prevent a real popup from being mislabeled as Settings, so popup
+regression checks remain required. The wrapper is offline research code and is
+not connected to screen classification, navigation or automatic dismissal.
+
+Compared with `targeted_core`, the retained combination preserved every correct
+case in the expanded historical check (257/276), recovery check (18/19) and
+external-creator check (24/30). The earlier B pass improved from 15/17 to 17/17.
+A new D pass improved from 5/9 to 8/9; three repeated menu-end captures had been
+excluded before inference. One notification-settings view remained a popup.
+
+That failure was explicitly promoted to development/training data for one final
+candidate, ending D's status as untouched validation. The follow-up regressed
+an older popup and was rejected. A separate 12-frame E pass, captured after the
+models were frozen and labeled before inference, scored 12/12 for the retained
+combination versus 7/12 for `targeted_core`. Among eight E frames more than six
+perceptual-hash bits from its training set, recognition improved from 4/8 to
+8/8. The retained model still misses D009; the perfect small E score does not
+erase that known failure or establish reliability across accounts and languages.
+
+Sixteen training, regression-gate and refinement tests passed. The private
+`data/models/more_settings_20261024/retained_bundle` contains both model files,
+metadata, the wrapper and a prediction entry point; it is not a single drop-in
+`ScreenModel` file. Full candidate reports and rejected experiments are retained
+alongside it. The 36 images and labels are preserved under
+`data/labelstudio/review/more_settings_20261024`, outside Git. New labels remain
+assistant-reviewed with no object boxes. The live model was not replaced. The
+bot was resumed and all 21 protected configuration/template hashes matched.
 
 These checks do not issue ADB commands:
 

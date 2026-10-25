@@ -31,6 +31,12 @@ automation is stopped.
   Previewing and starting an upgrade are separate actions.
 - **Browser controls:** Start/Stop, farm and break countdowns, activity logs,
   responsive settings, themes, guided calibration, and calibration backups.
+- **Builder Base (experimental):** separate scheduled visits for an equipped
+  six-Night-Witch/Battle-Machine army, resource collection, supported Suggested
+  building upgrades, and Night Witch research. Handles both battle stages,
+  checks results, and returns to clan chat. Collection, attacks, building upgrades,
+  and research have independent switches in Settings; all default to off.
+  See [Builder Base setup and limitations](docs/BUILDER_BASE.md).
 - **Recovery:** records unfinished attack and upgrade actions so a restart can
   inspect the game instead of blindly repeating them.
 - **Development tools:** optional screenshot collection, labeling/export tools,

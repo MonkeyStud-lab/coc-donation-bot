@@ -51,8 +51,12 @@ def verify_recovery(frame, config):
     stopped = [False]
     recovery = AuxiliaryRecovery(classifier, inputs, lambda: stopped[0])
     for _ in range(3):
-        assert recovery.close(frame)
-    assert not recovery.close(frame)
+        if target.screen in ('shop', 'settings'):
+            assert recovery.close(frame.copy())
+        assert recovery.close(frame.copy())
+    if target.screen in ('shop', 'settings'):
+        assert recovery.close(frame.copy())
+    assert not recovery.close(frame.copy())
     assert inputs.tap.call_count == 3
     inputs.tap.assert_called_with(*target.close, jitter=0)
     inputs.back.assert_not_called()
@@ -65,13 +69,16 @@ def verify_recovery(frame, config):
     inputs.tap.assert_not_called()
     dim = (frame * 0.4).astype(np.uint8)
     assert classifier.auxiliary_page(dim).close is None
-    assert not AuxiliaryRecovery(classifier, inputs, lambda: False).close(dim)
+    obscured = AuxiliaryRecovery(classifier, inputs, lambda: False)
+    assert obscured.close(dim.copy())
+    assert obscured.close(dim.copy())
+    assert not obscured.close(dim.copy())
     inputs.tap.assert_not_called()
 
     home = np.zeros_like(frame)
     chat = np.ones_like(frame)
     capture = Mock()
-    capture.screenshot.side_effect = [frame, home, chat]
+    capture.screenshot.side_effect = ([frame, frame.copy(), home, chat] if target.screen == 'shop' else [frame, home, chat])
     nav = Navigator(config, capture, inputs)
     original = nav.classify
     nav.classify = lambda f, mode=None: (
@@ -80,7 +87,7 @@ def verify_recovery(frame, config):
     nav._sleep = lambda _: False
     nav.classifier._open_chat_icon_visible = lambda _: True
     nav.classifier._home_attack_chip_visible = lambda _: True
-    nav.classifier.is_global_chat = lambda _: False
+    nav.classifier.is_global_chat = lambda _, **kw: False
     nav._open_clan_chat = Mock()
     nav.navigate_to_donation_requests = Mock()
     assert nav.ensure_clan_chat(timeout=2)
@@ -91,7 +98,7 @@ def verify_recovery(frame, config):
     inputs.reset_mock()
     nav._open_clan_chat.reset_mock()
     capture.screenshot.side_effect = None
-    capture.screenshot.return_value = frame
+    capture.screenshot.side_effect = lambda: frame.copy()
     assert not nav.ensure_clan_chat(timeout=2)
     assert inputs.tap.call_count == 3
     nav._open_clan_chat.assert_not_called()
@@ -99,7 +106,7 @@ def verify_recovery(frame, config):
     # Farm readiness must not override a recognized page, even when the old
     # Attack! heuristic falsely reports the chip beneath that page.
     inputs.reset_mock()
-    capture.screenshot.side_effect = [frame, home]
+    capture.screenshot.side_effect = ([frame, frame.copy(), home] if target.screen == 'shop' else [frame, home])
     attack = AttackNavigator(config, capture, inputs, donation_navigator=nav)
     attack._sleep = lambda _: False
     attack.attack_button_visible = Mock(return_value=True)
@@ -108,7 +115,7 @@ def verify_recovery(frame, config):
     attack.attack_button_visible.assert_called_once_with(home)
 
     inputs.reset_mock()
-    capture.screenshot.side_effect = [frame, home]
+    capture.screenshot.side_effect = ([frame, frame.copy(), home] if target.screen == 'shop' else [frame, home])
     attack.classify = lambda f, mode=None: (
         ScreenType.HOME if f is home else ScreenType(target.screen)
     )
@@ -120,7 +127,7 @@ def verify_recovery(frame, config):
     attack._confirm_leave_via_clan_chat.assert_called_once()
 
     inputs.reset_mock()
-    capture.screenshot.side_effect = [frame, chat]
+    capture.screenshot.side_effect = ([frame, frame.copy(), chat] if target.screen == 'shop' else [frame, chat])
     attack = AttackNavigator(config, capture, inputs, donation_navigator=nav)
     attack._sleep = lambda _: False
     attack.classifier._clan_chat_anchor_visible = Mock(return_value=True)

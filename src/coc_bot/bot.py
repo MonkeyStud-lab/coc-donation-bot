@@ -149,7 +149,7 @@ class DonationBot:
 
     def _settings_stop_ready(self) -> bool:
         return (getattr(self, "_finish_action_requested", False)
-                and self._state not in ("open_donation", "donate", "farm"))
+                and self._state not in ("open_donation", "donate", "farm", "builder_base"))
 
     def request_farm_attack(self) -> None:
         """Queue one farm attack as soon as the loop is not mid-donation."""
@@ -274,6 +274,10 @@ class DonationBot:
             logger.error("ADB health check failed: {}", exc)
             raise
 
+        from coc_bot.builder_base.runner import BuilderBaseRunner, pending as builder_pending
+        if builder_pending(self.config):
+            BuilderBaseRunner(self.config,self.capture,self.nav_input,self.navigator,
+                              self.client,self.should_stop).recover()
         from coc_bot.attack.planned_farmer import context
         from coc_bot.attack.recovery import recover_attack, pending
         from coc_bot.runtime.screenshot_retention import prune_attack_diagnostics
@@ -337,7 +341,8 @@ class DonationBot:
         if self._stop_requested or self._settings_stop_ready():
             return
         from coc_bot.attack.recovery import pending
-        if pending(self.config):
+        from coc_bot.builder_base.runner import pending as builder_pending
+        if pending(self.config) or builder_pending(self.config):
             self._recover()
             return
         self._check_watchdog()
@@ -369,6 +374,10 @@ class DonationBot:
             self.tracker.tick()
             return
 
+        if self._maybe_run_builder_base():
+            self.tracker.tick()
+            return
+
         if not getattr(self.config,'donation_enabled',True):
             self.tracker.tick()
             self._state_entered = time.monotonic()
@@ -392,6 +401,31 @@ class DonationBot:
         self.tracker.tick()
         lo, hi = self.config.scan_interval_ms
         interrupted_sleep(random.uniform(lo, hi) / 1000.0, self.should_stop)
+
+    def _maybe_run_builder_base(self) -> bool:
+        if (self._state not in ('scan_chat','scroll_chat') or self.should_stop()
+                or self.config.dry_run or not (self.config.builder_base_attacks_enabled
+                                               or self.config.builder_base_upgrades_enabled
+                                               or getattr(self.config, 'builder_base_research_enabled', False)
+                                               or getattr(self.config, 'builder_base_collect_resources', False))):
+            return False
+        from coc_bot.builder_base.runner import BuilderBaseRunner, state
+        visit = state(self.config)
+        if time.time() < visit.get('next_visit_at',0):
+            return False
+        if self._has_donate_request(self.capture.screenshot()):
+            return False
+        self._set_state('builder_base')
+        self.game_state.transition(GameState.BUILDER_BASE,reason='scheduled visit')
+        runner = BuilderBaseRunner(self.config,self.capture,self.nav_input,self.navigator,
+                                   self.client,self.should_stop)
+        result = runner.run()
+        logger.info('Builder Base visit completed: {}',result)
+        self.set_mode(BotMode.DONATE)
+        self.game_state.transition(GameState.CLAN_CHAT,reason='Builder Base return verified')
+        self._set_state('scan_chat')
+        self._state_entered = time.monotonic()
+        return True
 
     def _maybe_run_upgrades(self) -> bool:
         if self._state not in ('scan_chat','scroll_chat') or self._stop_requested or self.config.dry_run:
@@ -762,6 +796,15 @@ class DonationBot:
 
         recorder.note_event("recovery", state=self._state)
         self.game_state.transition(GameState.RECOVERING, reason="watchdog/desync")
+        from coc_bot.builder_base.runner import BuilderBaseRunner, pending as builder_pending
+        if builder_pending(self.config):
+            BuilderBaseRunner(self.config,self.capture,self.nav_input,self.navigator,
+                              self.client,self.should_stop).recover()
+            self.set_mode(BotMode.DONATE)
+            self.game_state.transition(GameState.CLAN_CHAT,reason='Builder Base return verified')
+            self._set_state('scan_chat')
+            self._state_entered = time.monotonic()
+            return
         from coc_bot.attack.recovery import pending, recover_attack
         from coc_bot.attack.planned_farmer import context
         if pending(self.config):

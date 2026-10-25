@@ -692,7 +692,8 @@ class AttackNavigator:
                     return False
                 continue
 
-            if screen in (ScreenType.SHOP, ScreenType.CLASH_PASS, ScreenType.BUILD_MENU):
+            if (screen in (ScreenType.SHOP, ScreenType.SETTINGS, ScreenType.CLASH_PASS, ScreenType.BUILD_MENU)
+                    or (screen == ScreenType.UNKNOWN and self.classifier.auxiliary_page(frame) is not None)):
                 if not auxiliary_recovery.close(frame) or self._sleep(0.6):
                     return False
                 continue

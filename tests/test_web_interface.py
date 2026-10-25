@@ -179,7 +179,11 @@ class WebTests(TestCase):
         keys = [field['key'] for field in settings['fields']]
         self.assertEqual(len(keys), len(set(keys)))
         self.assertTrue({'farm_interval_seconds', 'donate_open_requests',
-                         'progression_enabled', 'progression_rearrange', 'progression_clear_obstacles'} <= set(keys))
+                         'progression_enabled', 'progression_rearrange', 'progression_clear_obstacles',
+                         'builder_base_collect_resources', 'builder_base_research_enabled',
+                         'builder_base_attacks_enabled', 'builder_base_upgrades_enabled',
+                         'builder_base_gold_reserve', 'builder_base_elixir_reserve',
+                         'builder_base_builders_reserved', 'builder_base_interval_seconds'} <= set(keys))
         self.assertEqual(len(settings["themes"]), 7)
         body = {"revision": settings["revision"], "values": {"farm_interval_seconds": 7200}}
         result = self.client.put("/api/settings", headers=self.headers, json=body)

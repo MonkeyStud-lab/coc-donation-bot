@@ -37,6 +37,10 @@ def _pair(lo_hi: tuple[int, int]) -> str:
 
 # Shared by browser validation and desktop settings persistence.
 UPGRADE_INTEGER_LIMITS = {
+    'builder_base_interval_seconds': (300, 86400),
+    'builder_base_builders_reserved': (0, 3),
+    'builder_base_gold_reserve': (0, 20_000_000),
+    'builder_base_elixir_reserve': (0, 20_000_000),
     'upgrade_interval_seconds': (60, 86400),
     'upgrade_builders_reserved': (0, 6),
     'upgrade_gold_reserve': (0, 100_000_000),
@@ -46,6 +50,14 @@ UPGRADE_INTEGER_LIMITS = {
 
 
 SETTINGS: list[SettingField] = [
+    SettingField('builder_base_collect_resources','Collect Builder Base resources','Collect verified mine/collector bubbles in both areas and defense rewards from the Elixir Cart. Works without attacks or upgrades.','bool',lambda c:c.builder_base_collect_resources,'Builder Base',('builder_base','collect_resources')),
+    SettingField('builder_base_research_enabled','Builder Base research','Upgrade the game’s recommended Night Witch using Builder Elixir. Other troop confirmation screens are not yet verified.','bool',lambda c:c.builder_base_research_enabled,'Builder Base',('builder_base','research_enabled')),
+    SettingField('builder_base_elixir_reserve','Builder Elixir to keep','Minimum Builder Elixir remaining after research.','int',lambda c:c.builder_base_elixir_reserve,'Builder Base',('builder_base','elixir_reserve')),
+    SettingField('builder_base_attacks_enabled','Builder Base attacks','Experimental: equip six Night Witches and Battle Machine first. Supports survivors and Battle Copter in stage two. Other starting armies are skipped. Returns home after one attack.','bool',lambda c:c.builder_base_attacks_enabled,'Builder Base',('builder_base','attacks_enabled')),
+    SettingField('builder_base_upgrades_enabled','Builder Base building upgrades','Start one eligible Suggested building upgrade paid with Builder Gold per visit. Excludes Builder Hall, heroes, walls, new construction, research, gems and items. Builder Elixir purchases are not supported yet.','bool',lambda c:c.builder_base_upgrades_enabled,'Builder Base',('builder_base','upgrades_enabled')),
+    SettingField('builder_base_interval_seconds','Builder Base visit interval (seconds)','Minimum time between completed visits. Donations take priority. Builder Base has its own schedule, separate from Home Village farming.','int',lambda c:c.builder_base_interval_seconds,'Builder Base',('builder_base','interval_seconds')),
+    SettingField('builder_base_builders_reserved','Builder Base builders to keep free','Only affects Builder Base builders.','int',lambda c:c.builder_base_builders_reserved,'Builder Base',('builder_base','builders_reserved')),
+    SettingField('builder_base_gold_reserve','Builder Gold to keep','Minimum Builder Gold remaining after an upgrade.','int',lambda c:c.builder_base_gold_reserve,'Builder Base',('builder_base','gold_reserve')),
     SettingField('progression_enabled','Village progression','Build new structures first, then improve the village and prepare farming armies from verified unlocks. Town Hall upgrades require a complete max-building check.','bool',lambda c:c.progression_enabled,'Upgrades',('progression','enabled')),
     SettingField('progression_rearrange','Search for building space','Move the new-building preview to find a valid spot before paying. Ordinary-obstacle clearing is a separate option.','bool',lambda c:c.progression_rearrange,'Upgrades',('progression','rearrange')),
     SettingField('progression_clear_obstacles','Clear ordinary obstacles','Allow verified gold/elixir removal of ordinary obstacles to create building space. Special obstacles and decorations stay in place.','bool',lambda c:c.progression_clear_obstacles,'Upgrades',('progression','clear_obstacles')),

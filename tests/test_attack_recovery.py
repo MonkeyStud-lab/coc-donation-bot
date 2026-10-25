@@ -14,7 +14,7 @@ import cv2
 
 from coc_bot.adb.client import AdbStopped
 from coc_bot.attack.recovery import (AttackCheckpoint, RecoveryRequired, atomic_json, recover_attack,
-                                     finish_attack, accept_home_zoom_limit)
+                                     finish_attack, accept_home_zoom_limit, accept_automatic_home_camera)
 from coc_bot.runtime.tracker import RuntimeTracker
 from coc_bot.config import load_config
 
@@ -241,3 +241,76 @@ class RecoveryTests(TestCase):
                 self.assertFalse(accept_home_zoom_limit(self.session))
         self.assertTrue((root/'camera-pending.json').exists())
         self.assertFalse((root/'camera-legacy-blocked.json').exists())
+
+    def prepare_remap(self):
+        self.session.config = replace(self.config, farm_engine='automatic')
+        root = self.config.data_dir/'attack-planner'
+        cv2.imwrite(str(root/'camera-before.png'), self.frame)
+        atomic_json(root/'camera-pending.json', {'device':'test'})
+        self.mocks[2].return_value = True
+        return root
+
+    def test_stable_automatic_camera_preserves_legacy_and_attack_guards(self):
+        root = self.prepare_remap()
+        with patch('coc_bot.attack.camera.compare_camera', return_value={
+                'verified':True, 'transform':[[1,0,0],[0,1,0]]}):
+            self.assertTrue(accept_automatic_home_camera(self.session))
+        self.assertFalse((root/'camera-pending.json').exists())
+        self.assertTrue((root/'camera-legacy-blocked.json').exists())
+        self.assertEqual((root/'camera-legacy-before.png').read_bytes(), (root/'camera-before.png').read_bytes())
+        self.assertTrue(self.checkpoint.path.exists())  # not yet confirmed chat
+        self.tracker.mark_farm_success.assert_not_called()
+        self.session.input.tap.assert_not_called()
+        self.session.input.swipe.assert_not_called()
+
+    def test_remap_rejects_moving_missing_foreign_and_nonautomatic_views(self):
+        root = self.prepare_remap()
+        for matrix in (None, [[1,0,30],[0,1,0]], [[1.02,0,0],[0,1.02,0]], [[float('nan'),0,0],[0,1,0]]):
+            with patch('coc_bot.attack.camera.compare_camera', return_value={'verified':True,'transform':matrix}):
+                self.assertFalse(accept_automatic_home_camera(self.session))
+        self.mocks[2].return_value = False
+        self.assertFalse(accept_automatic_home_camera(self.session))
+        self.mocks[2].return_value = True
+        atomic_json(root/'camera-pending.json', {'device':'other'})
+        self.assertFalse(accept_automatic_home_camera(self.session))
+        self.session.config = replace(self.config, farm_engine='sequence')
+        self.assertFalse(accept_automatic_home_camera(self.session))
+        self.assertTrue((root/'camera-pending.json').exists())
+        self.assertFalse((root/'camera-legacy-blocked.json').exists())
+
+    def test_stop_between_remap_observations_preserves_all_guards(self):
+        root = self.prepare_remap()
+        stopped = [False]
+        self.session.client.stop_check = lambda:stopped[0]
+        self.session._sleep.side_effect = lambda _: stopped.__setitem__(0, True)
+        with self.assertRaises(AdbStopped): accept_automatic_home_camera(self.session)
+        self.assertTrue((root/'camera-pending.json').exists())
+        self.assertTrue(self.checkpoint.path.exists())
+
+    def test_existing_legacy_reference_is_never_replaced(self):
+        root = self.prepare_remap()
+        cv2.imwrite(str(root/'camera-legacy-before.png'), self.frame+50)
+        old = (root/'camera-legacy-before.png').read_bytes()
+        atomic_json(root/'camera-legacy-blocked.json', {'device':'test','reason':'earlier reference'})
+        with patch('coc_bot.attack.camera.compare_camera', return_value={
+                'verified':True, 'transform':[[1,0,0],[0,1,0]]}):
+            self.assertTrue(accept_automatic_home_camera(self.session))
+        self.assertEqual((root/'camera-legacy-before.png').read_bytes(), old)
+        self.assertEqual(json.loads((root/'camera-legacy-blocked.json').read_text())['reason'], 'earlier reference')
+
+    def test_unmatched_restore_uses_fallback_but_explicit_legacy_restore_does_not(self):
+        self.prepare_remap()
+        # Use the real restore entry point, not setUp's orchestration mock.
+        self.patches[1].stop()
+        from coc_bot.attack.planned_farmer import restore_camera
+        with patch('coc_bot.attack.planned_farmer.compare_camera',return_value={'verified':False}), \
+                patch('coc_bot.attack.planned_farmer.compare_zoom',return_value={'verified_zoom':False}), \
+                patch('coc_bot.attack.planned_farmer.compare_home_zoom',return_value={'verified_zoom':False}), \
+                patch('coc_bot.adb.multitouch.Multitouch'), \
+                patch('coc_bot.attack.recovery.accept_automatic_home_camera',return_value=True) as accept:
+            self.assertTrue(restore_camera(self.session))
+            accept.assert_called_once_with(self.session)
+            accept.reset_mock()
+            with self.assertRaisesRegex(ValueError,'Could not match'):
+                restore_camera(self.session,legacy=True)
+            accept.assert_not_called()

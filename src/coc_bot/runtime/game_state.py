@@ -18,6 +18,7 @@ class GameState(str, Enum):
     UNKNOWN = "unknown"
     HOME = "home"
     UPGRADING = "upgrading"
+    BUILDER_BASE = "builder_base"
     CLAN_CHAT = "clan_chat"
     SCROLLING_CHAT = "scrolling_chat"
     OPENING_DONATION = "opening_donation"
@@ -176,6 +177,7 @@ _VALID_TRANSITIONS: dict[GameState, frozenset[GameState]] = {
 
 _ACTIVITY_BY_STATE: dict[GameState, str] = {
     GameState.UPGRADING: "Checking recommended upgrades",
+    GameState.BUILDER_BASE: "Visiting Builder Base",
     GameState.CLAN_CHAT: "Watching clan chat",
     GameState.SCROLLING_CHAT: "Scrolling clan chat",
     GameState.OPENING_DONATION: "Opening donation panel",
@@ -192,6 +194,10 @@ _ACTIVITY_BY_STATE: dict[GameState, str] = {
 
 _VALID_TRANSITIONS[GameState.UPGRADING] = frozenset({GameState.HOME,GameState.CLAN_CHAT,
                                                   GameState.RECOVERING,GameState.UNKNOWN})
+for _origin in (GameState.HOME, GameState.CLAN_CHAT, GameState.SCROLLING_CHAT):
+    _VALID_TRANSITIONS[_origin] = _VALID_TRANSITIONS[_origin] | {GameState.BUILDER_BASE}
+_VALID_TRANSITIONS[GameState.BUILDER_BASE] = frozenset({GameState.CLAN_CHAT, GameState.RECOVERING,
+                                                     GameState.UNKNOWN})
 
 
 def _log_activity_for_state(state: GameState, *, reason: str = "") -> None:

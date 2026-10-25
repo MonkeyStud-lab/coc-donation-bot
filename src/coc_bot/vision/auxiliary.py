@@ -21,7 +21,7 @@ class AuxiliaryPage:
     close: tuple[int, int] | None
 
 
-@lru_cache(maxsize=7)
+@lru_cache(maxsize=16)
 def _anchor(name: str) -> np.ndarray | None:
     path = Path(__file__).with_name("assets") / f"{name}.png"
     return cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
@@ -63,6 +63,26 @@ class AuxiliaryPageDetector:
         self._result = self._detect(frame)
         return self._result
 
+    @classmethod
+    def current_pages(cls, gray: np.ndarray) -> set[str]:
+        """Fixed current-menu anchors on a 960x540 grayscale observation."""
+        pages = set()
+        # Selection enlarges one tab icon; two of three unchanged categories
+        # remain independent evidence regardless of which tab is selected.
+        if sum(cls._find(gray, name, bounds) is not None for name, bounds in (
+            ('shop_shield_current', (350, 15, 445, 86)),
+            ('shop_medal_current', (430, 15, 528, 86)),
+            ('shop_resources_current', (270, 15, 365, 86)),
+        )) >= 2:
+            pages.add('shop')
+        if all(cls._find(gray, name, bounds) is not None for name, bounds in (
+            ('settings_title', (705, 25, 805, 65)),
+            ('settings_music', (300, 150, 385, 198)),
+            ('settings_sound', (545, 150, 700, 198)),
+        )):
+            pages.add('settings')
+        return pages
+
     def _detect(self, frame: np.ndarray) -> AuxiliaryPage | None:
         h, w = frame.shape[:2]
         # These full-screen menus use landscape layouts. Do not stretch portrait
@@ -79,17 +99,26 @@ class AuxiliaryPageDetector:
                 ("shop_treasure", (310, 10, 400, 83)),
             )
         ) >= 2
+        # Current UI moved the categories and replaced the old Army tab.
+        # Require independent fixed icons, never a seasonal offer or price card.
+        current = self.current_pages(gray)
+        shop = shop or 'shop' in current
+        settings = 'settings' in current
         season = (
             self._find(gray, "pass_rewards", (390, 5, 520, 65)) is not None
             and self._find(gray, "pass_bank", (775, 5, 895, 65)) is not None
         )
-        if not shop and not season:
+        if sum((shop, season, settings)) > 1:
+            # Conflicting page anchors never authorize a close target.
+            return AuxiliaryPage('unknown', None)
+        if not shop and not season and not settings:
             from coc_bot.upgrades.vision import UpgradeReader
             if UpgradeReader().menu_kind(frame) is not None:
                 return AuxiliaryPage('build_menu',(round(w*.984),round(h*.032)))
             return None
-        screen = "shop" if shop else "clash_pass"
-        button = self._find(gray, f"{'shop' if shop else 'pass'}_close", (890, 5, 960, 83))
+        screen = 'settings' if settings else ('shop' if shop else 'clash_pass')
+        button = self._find(gray, f"{'settings' if settings else ('pass' if season else 'shop')}_close",
+                            (815, 10, 870, 72) if settings else (890, 5, 960, 83))
         close = None
         if button is not None:
             x, y, bw, bh = button

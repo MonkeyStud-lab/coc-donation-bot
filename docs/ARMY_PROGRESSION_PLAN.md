@@ -4,13 +4,18 @@ Research date: **2026-10-24**. Scope: Home Village TH1–18 and Builder Base
 BH1–10. This is a proposed development plan, not a list of armies already
 supported by the app.
 
-Implementation status (2026-10-25): the candidate compositions are encoded and
-capacity-checked in `src/coc_bot/progression/profiles.py`, including verified-unlock,
-freshness and release gates. An opt-in Home Village pilot reads actual Town Hall,
-camp space and troop unlocks, prepares a supported farming army, and applies
-construction-first progression. The reference profiles remain unreleased as
-complete all-hall presets. The initial live target is TH2; see
-[Home progression](HOME_PROGRESSION.md) for tested behavior and limits.
+Implementation status (2026-10-24): bounded mine/collector/Elixir Cart collection,
+independent collection/research settings, 1–3 builder accounting, Night Witch
+research transactions and visit ordering are implemented. Collection and research
+were exercised live with calibration preserved. The 28 candidate compositions
+are encoded and capacity-checked in `src/coc_bot/progression/profiles.py`, including
+observed-unlock/freshness checks and a release gate. An opt-in Home Village pilot
+now reads actual Town Hall, camp space and troop unlocks, prepares a supported
+farming army, and applies construction-first progression. The reference profiles
+remain unreleased as complete all-hall presets: the pilot uses their troop ratios
+with independent live unlock and capacity checks, and does not yet edit spells.
+The initial live target is TH2, not certified all-hall automation. See
+[Home progression](HOME_PROGRESSION.md) and [Builder Base](BUILDER_BASE.md).
 
 The goal is dependable farming and continued upgrades with little user input.
 These are deliberately simple candidate armies, not claims about the strongest

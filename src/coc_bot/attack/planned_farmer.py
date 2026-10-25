@@ -99,6 +99,9 @@ def restore_camera(session, *, legacy=False):
                     # observation, not the gesture or the recovery hint.
                     session._sleep(1.)
                     continue
+                from coc_bot.attack.recovery import accept_automatic_home_camera
+                if not legacy and accept_automatic_home_camera(session):
+                    return True
                 raise ValueError('Could not match the original camera; restore it manually before using the old sequence')
             evidence=zoom
         scale=evidence['scale']
@@ -136,6 +139,9 @@ def restore_camera(session, *, legacy=False):
         if ((evidence.get('verified') or evidence.get('verified_zoom')) and
                 abs(evidence['scale']-1)<.03):
             pending.unlink();return True
+    from coc_bot.attack.recovery import accept_automatic_home_camera
+    if not legacy and accept_automatic_home_camera(session):
+        return True
     raise ValueError('Camera restoration did not converge; old sequence remains blocked')
 
 

@@ -7,6 +7,7 @@ import json
 import shutil
 import tempfile
 import yaml
+import cv2
 
 from coc_bot.accounts.store import AccountStore, backup, apply_roles, ROLES
 from coc_bot.config import load_config, project_root
@@ -15,6 +16,59 @@ from coc_bot.accounts.service import Accounts
 
 
 class AccountsTests(TestCase):
+    def test_reload_overlay_is_dismissed_before_visible_menu_anchors_can_be_used(self):
+        from coc_bot.accounts.navigation import AccountNavigator
+        nav=AccountNavigator.__new__(AccountNavigator)
+        nav.stop=lambda:False;nav.session=Mock();nav.frame=Mock();nav.button=Mock()
+        order=[]
+        def overlay(*args):order.append('overlay');return len(order)==1
+        def find(*args):order.append('anchor');return None if args[1]=='switch_heading' else (1,1)
+        with patch('coc_bot.progression.home.recover_home_overlay',side_effect=overlay),\
+             patch('coc_bot.accounts.navigation.find',side_effect=find),\
+             patch('coc_bot.accounts.navigation.interrupted_sleep',return_value=False):nav.menu()
+        self.assertEqual(order[:3],['overlay','overlay','anchor'])
+        nav.button.assert_not_called()
+
+    def test_tag_ocr_cannot_silently_drop_visible_characters(self):
+        from coc_bot.accounts.navigation import read_tag
+        from types import SimpleNamespace
+        fixtures=Path(__file__).parent/'fixtures/accounts'
+        for name,cyan in [('tag-white.png',False),('tag-cyan.png',True)]:
+            with self.subTest(name=name):
+                frame=cv2.imread(str(fixtures/name))
+                # Whole-line OCR drops the two 8 glyphs. Strict font evidence
+                # must account for each actual character, not insert a guessed 8.
+                with patch('coc_bot.runtime.processes.run_process',return_value=SimpleNamespace(stdout='#UGLRLYL',returncode=0)):
+                    self.assertEqual(read_tag(frame,(0,0,1,1),cyan=cyan),'#U8GL8RLYL')
+
+    def test_unknown_tag_glyph_and_stop_never_become_a_guessed_identity(self):
+        from coc_bot.accounts.navigation import read_tag
+        from types import SimpleNamespace
+        frame=cv2.imread(str(Path(__file__).parent/'fixtures/accounts/tag-white.png'))
+        with patch('coc_bot.runtime.processes.run_process',return_value=SimpleNamespace(stdout='',returncode=0)),\
+             patch('coc_bot.accounts.navigation._font_character',return_value=None):
+            self.assertIsNone(read_tag(frame,(0,0,1,1)))
+        with patch('coc_bot.runtime.processes.run_process') as process:
+            self.assertIsNone(read_tag(frame,(0,0,1,1),stop=lambda:True))
+            process.assert_not_called()
+
+    def test_identity_requires_two_stable_reads_on_each_independent_screen(self):
+        from coc_bot.accounts.navigation import AccountNavigator
+        import numpy as np
+        nav=AccountNavigator.__new__(AccountNavigator);nav.stop=lambda:False
+        nav.menu=Mock();nav.button=Mock();nav.frame=Mock(return_value=np.zeros((1048,1853,3),np.uint8))
+        a,b='#U8GL8RLYL','#PYLQG'
+        for readings in ([a,b],[a,a,b],[a,a,a,b]):
+            with self.subTest(readings=readings),\
+                 patch('coc_bot.accounts.navigation.read_tag',side_effect=readings),\
+                 patch('coc_bot.accounts.navigation.text',return_value='Example'),\
+                 patch('coc_bot.accounts.navigation.find',return_value=(1,1)):
+                with self.assertRaises(ValueError):nav.identity()
+        with patch('coc_bot.accounts.navigation.read_tag',side_effect=[a]*4),\
+             patch('coc_bot.accounts.navigation.text',return_value='Example'),\
+             patch('coc_bot.accounts.navigation.find',return_value=(1,1)):
+            self.assertEqual(nav.identity(),{'tag':a,'name':'Example'})
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

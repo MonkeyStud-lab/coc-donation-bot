@@ -46,9 +46,12 @@ class Accounts:
                         self.store.begin(action, target)
                         if action == 'add':
                             nav.chooser()
-                            return {'accounts': True, 'message': 'In Live view, choose Log in to Supercell ID. Sign in, return to the village, then Save loaded account.'}
+                            return {'accounts': True, 'message': 'Sign in through Live view, return to the home village, and release control. Then choose tasks and press Save and verify account.'}
                         identity = nav.switch(self.store.account(target))
                         self.store.complete(identity['tag'])
                     self.service._finished_generation = -1
-                    return {'accounts': True, 'message': 'Account verified. Settings now belong to '+self.store.account()['nickname']}
+                    account=self.store.account()
+                    message=(account['nickname']+' is saved and verified. No separate check is needed.' if action=='register'
+                             else 'Loaded account confirmed: '+account['nickname']+'.')
+                    return {'accounts': True, 'message': message+' The bot stays stopped until you press Start.'}
             self.service.job('accounts_'+action, execute)

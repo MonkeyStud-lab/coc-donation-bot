@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import cv2
@@ -25,6 +26,13 @@ def dialog_frame():
 
 
 class IdleDialogTests(unittest.TestCase):
+    def test_large_text_layout_requires_both_bright_text_anchors(self):
+        frame=cv2.imread(str(Path(__file__).parent/'fixtures/accounts/idle-large.png'))
+        self.assertIsNotNone(IdleDialogDetector().detect(frame))
+        self.assertIsNone(IdleDialogDetector().detect((frame*.4).astype(np.uint8)))
+        frame[375:400,320:410]=27
+        self.assertIsNone(IdleDialogDetector().detect(frame))
+
     def test_scaled_dialog_and_button_coordinates(self):
         frame = dialog_frame()
         baseline = IdleDialogDetector().detect(frame)

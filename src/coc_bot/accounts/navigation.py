@@ -9,6 +9,7 @@ import re
 import time
 import tempfile
 import cv2
+import numpy as np
 from coc_bot.accounts.store import tag
 from coc_bot.upgrades.vision import text, crop
 from coc_bot.stop import interrupted_sleep
@@ -39,9 +40,45 @@ def find(frame, name, bounds=(0, 0, 1, 1)):
     return round(x*frame.shape[1]/1853), round(y*frame.shape[0]/1048)
 
 
+@lru_cache(maxsize=1)
+def _tag_font():
+    with np.load(Path(__file__).with_name('assets')/'tag_glyphs.npz',allow_pickle=False) as archive:
+        return {key:archive[key] for key in archive.files}
+
+
+def _tag_parts(image, cyan):
+    hsv=cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
+    mask=cv2.inRange(hsv,(92,60,220),(108,255,255)) if cyan else cv2.inRange(hsv,(0,0,185),(180,100,255))
+    _,_,stats,_=cv2.connectedComponentsWithStats(mask)
+    boxes=sorted([(x,y,w,h) for x,y,w,h,area in stats[1:]
+                  if h>=image.shape[0]*.35 and area>=7],key=lambda b:b[0])
+    if not 6<=len(boxes)<=16:return None
+    # A tag is one distinct glyph row, not merged background or overlapping text.
+    if any(w>h*1.2 or w<h*.20 for x,y,w,h in boxes):return None
+    if any(a[0]+a[2]>=b[0] for a,b in zip(boxes,boxes[1:])):return None
+    if max(y+h for x,y,w,h in boxes)-min(y+h for x,y,w,h in boxes)>image.shape[0]*.18:return None
+    return mask,boxes
+
+
+def _font_character(glyph):
+    h,w=glyph.shape;shape=cv2.resize(glyph,(24,32),interpolation=cv2.INTER_AREA)/255
+    scores={}
+    for key,packed in _tag_font().items():
+        label=key.split('_')[0];label='#' if label=='hash' else label
+        reference=packed[:-1].reshape(32,24)
+        overlap=float(np.minimum(shape,reference).sum())/max(1,float(np.maximum(shape,reference).sum()))
+        score=overlap-min(.3,abs(w/h-float(packed[-1]))*.25)
+        scores[label]=max(scores.get(label,0),score)
+    ranked=sorted(scores.items(),key=lambda v:v[1],reverse=True)
+    return ranked[0][0] if len(ranked)>1 and ranked[0][1]>=.94 and ranked[0][1]-ranked[1][1]>=.06 else None
+
+
 def read_tag(frame, box, stop=None, *, cyan=False):
     from coc_bot.runtime.processes import run_process
     image = crop(frame, box)
+    parts=_tag_parts(image,cyan)
+    if parts is None or stop and stop():return None
+    mask,boxes=parts
     if cyan:
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         gray = cv2.bitwise_not(cv2.inRange(hsv, (92,80,200), (108,220,255)))
@@ -56,10 +93,26 @@ def read_tag(frame, box, stop=None, *, cyan=False):
         result = run_process(['tesseract',str(path),'stdout','--psm','7','-c',
                               'tessedit_char_whitelist=#0289PYLQGRJCUV'],
                              text=True, timeout=4, stop_check=stop)
-    raw = (result.stdout or '').strip().replace(' ', '')
-    # No O/0 or I/1 substitution: ambiguous identity must never be guessed.
-    match = re.fullmatch(r'#?([0289PYLQGRJCUV]{5,15})', raw)
-    return tag('#'+match[1]) if match else None
+        raw = (result.stdout or '').strip().replace(' ', '')
+        # Deleted characters cannot pass simply because the shortened tag is valid.
+        match = re.fullmatch(r'#?([0289PYLQGRJCUV]{5,15})', raw)
+        if match and len(match[1])+1==len(boxes):return tag('#'+match[1])
+        characters=[]
+        for x,y,w,h in boxes:
+            if stop and stop():return None
+            glyph=mask[y:y+h,x:x+w];label=_font_character(glyph)
+            if label is None:
+                isolated=cv2.copyMakeBorder(255-cv2.resize(glyph,None,fx=4,fy=4,interpolation=cv2.INTER_CUBIC),
+                                           24,24,24,24,cv2.BORDER_CONSTANT,value=255)
+                cv2.imwrite(str(path),isolated)
+                result=run_process(['tesseract',str(path),'stdout','--psm','10','-c',
+                                    'tessedit_char_whitelist=#0289PYLQGRJCUV'],text=True,timeout=4,stop_check=stop)
+                label=(result.stdout or '').strip()
+            if not re.fullmatch(r'[#0289PYLQGRJCUV]',label or ''):return None
+            characters.append(label)
+        raw=''.join(characters)
+    # No O/0, B/8 or I/1 substitution. Every visible character must be accounted for.
+    return tag(raw) if re.fullmatch(r'#[0289PYLQGRJCUV]{5,15}',raw) else None
 
 
 def picker_rows(frame, stop=None):
@@ -119,19 +172,24 @@ class AccountNavigator:
 
     def menu(self):
         frame = self.frame()
+        nav = self.session.navigator
+        # These dialogs can leave menu anchors visible underneath them. Recover
+        # them before any anchor can authorize a tab or identity read.
+        from coc_bot.progression.home import recover_home_overlay
+        from coc_bot.vision.battle_menu import home_build_control_visible
+        reloading=False
+        for _ in range(20):
+            if recover_home_overlay(nav,frame):reloading=True
+            elif not reloading or ((find(frame,'my_profile',(.1,.02,.24,.13)) and
+                                    find(frame,'menu_close',(.84,.02,.91,.14))) or home_build_control_visible(frame)):break
+            if interrupted_sleep(1,self.stop):self.check()
+            frame=self.frame()
+        else:raise ValueError('The game has not finished reloading. Return home in Live view and retry.')
         if find(frame, 'switch_heading', (.71, .30, 1, .48)):
             self.button('switch_close', (.94, 0, 1, .12))
             frame = self.frame()
         if find(frame, 'my_profile', (.1, .02, .24, .13)) and find(frame, 'menu_close', (.84, .02, .91, .14)):
             return
-        nav = self.session.navigator
-        # Reload/Welcome Back can appear before identity verification. Dismiss
-        # only those known non-spending controls, then still prove both tags.
-        from coc_bot.progression.home import recover_home_overlay
-        for _ in range(12):
-            if not recover_home_overlay(nav,frame):break
-            if interrupted_sleep(1,self.stop):self.check()
-            frame=self.frame()
         from coc_bot.vision.battle_menu import direct_match_button
         if direct_match_button(frame,stop_check=self.stop) is not None:
             self.tap((round(frame.shape[1]*.80),round(frame.shape[0]*.60)))
@@ -139,7 +197,6 @@ class AccountNavigator:
         if nav.classifier._clan_chat_anchor_visible(frame):
             nav.close_clan_chat(frame)
             frame = self.frame()
-        from coc_bot.vision.battle_menu import home_build_control_visible
         if not home_build_control_visible(frame) or not nav.classifier._open_chat_icon_visible(frame):
             raise ValueError('Return to your home village before changing accounts')
         self.tap((round(frame.shape[1]*100/1853), round(frame.shape[0]*112/1048)))
@@ -164,14 +221,16 @@ class AccountNavigator:
             first = read_tag(frame, (315/1853,309/1048,650/1853,345/1048), self.stop)
         if not first:
             raise ValueError('Own player tag could not be read')
+        if read_tag(self.frame(),(315/1853,309/1048,650/1853,345/1048),self.stop)!=first:
+            raise ValueError('Profile tag did not settle. Open the home village and try again.')
         name = text(crop(frame, (315/1853, 266/1048, 700/1853, 309/1048)), stop=self.stop)
         self.button('settings_tab', (.45, .02, .85, .13))
         frame = self.frame()
         if not find(frame, 'id_heading', (.16, .13, .36, .24)) or not find(frame, 'id_switch', (.62, .13, .70, .25)):
             raise ValueError('Link this village to Supercell ID in the game before adding it')
         second = read_tag(frame, (844/1853, 201/1048, 1170/1853, 235/1048), self.stop, cyan=True)
-        if first is None or first != second:
-            raise ValueError('Player-tag readings did not agree; no account was activated')
+        if first != second or read_tag(self.frame(),(844/1853,201/1048,1170/1853,235/1048),self.stop,cyan=True)!=first:
+            raise ValueError('Could not verify the same player tag on Profile and Settings. Return to the home village and try again.')
         name = text(crop(frame, (844/1853,155/1048,1170/1853,197/1048)), stop=self.stop)
         return {'tag': first, 'name': name.strip()}
 
@@ -213,7 +272,7 @@ class AccountNavigator:
         rows = picker_rows(self.chooser(), self.stop)
         matches = [r for r in rows if r['name'] == account.get('selector')]
         if len(matches) != 1:
-            raise ValueError('Saved account is not uniquely visible. Use Live view to choose it, then Verify current account.')
+            raise ValueError('Saved account card is not uniquely visible. Choose it in Live view, return home and release control, then retry in Accounts.')
         self.tap(matches[0]['point'])
         deadline = time.monotonic()+60
         while time.monotonic() < deadline:
@@ -228,7 +287,7 @@ class AccountNavigator:
                 self.button('menu_close', (.84, .02, .91, .14))
                 return identity
             interrupted_sleep(1, self.stop)
-        raise ValueError('Account did not finish loading; complete it in Live view, then verify')
+        raise ValueError('Account did not finish loading. Return to its home village in Live view, release control, then retry in Accounts.')
 
 
 def verify_session(session, stop=lambda: False):
@@ -241,5 +300,5 @@ def verify_session(session, stop=lambda: False):
         return
     nav = AccountNavigator(session, stop)
     if nav.identity()['tag'] != expected:
-        raise ValueError('Loaded account differs from the selected profile. Verify it in Accounts.')
+        raise ValueError('Loaded account differs from the selected profile. Open Accounts to finish adding or confirm the loaded account.')
     nav.button('menu_close', (.84, .02, .91, .14))

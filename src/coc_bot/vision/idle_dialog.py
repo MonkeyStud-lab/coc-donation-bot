@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 
 
-@lru_cache(maxsize=2)
+@lru_cache(maxsize=4)
 def _anchor(name: str) -> np.ndarray | None:
     return cv2.imread(str(Path(__file__).with_name("assets") / f"{name}.png"), cv2.IMREAD_GRAYSCALE)
 
@@ -40,24 +40,28 @@ class IdleDialogDetector:
         height = gray.shape[0]
         x0, y0 = 190, int(height * .22)
         crop = gray[y0:int(height * .80), x0:1090]
-        matches = []
-        for name in ("idle_title", "idle_reload"):
-            template = _anchor(name)
-            if template is None or any(a < b for a, b in zip(crop.shape, template.shape)):
-                return None
-            _, score, _, point = cv2.minMaxLoc(cv2.matchTemplate(crop, template, cv2.TM_CCOEFF_NORMED))
-            if score < .88:
-                return None
-            matches.append((x0 + point[0], y0 + point[1], template.shape[1], template.shape[0]))
-        tx, ty, tw, th = matches[0]
-        rx, ry, rw, rh = matches[1]
-        # Same left-aligned dialog, with a separate action below its message.
-        if abs(tx - rx) > 15 or not 10 <= ry - (ty + th) <= 120:
-            return None
-        # A dimmed underlying dialog must not authorize a reload tap.
-        action = small[ry:ry + rh, rx:rx + rw]
-        hsv = cv2.cvtColor(action, cv2.COLOR_BGR2HSV)
-        cyan = (hsv[:, :, 0] > 75) & (hsv[:, :, 0] < 110) & (hsv[:, :, 1] > 60) & (hsv[:, :, 2] > 170)
-        if float(cyan.mean()) < .04:
-            return None
-        return round((rx + rw / 2) / scale), round((ry + rh / 2) / scale)
+        # Android's larger text layout changes line spacing as well as size.
+        # Each inspected variant still requires its own title/message AND action.
+        for suffix in ('', '_large'):
+            matches = []
+            for name in ("idle_title", "idle_reload"):
+                template = _anchor(name+suffix)
+                if template is None or any(a < b for a, b in zip(crop.shape, template.shape)):
+                    break
+                _, score, _, point = cv2.minMaxLoc(cv2.matchTemplate(crop, template, cv2.TM_CCOEFF_NORMED))
+                if score < .88:
+                    break
+                matches.append((x0 + point[0], y0 + point[1], template.shape[1], template.shape[0]))
+            if len(matches)!=2:continue
+            tx, ty, tw, th = matches[0]
+            rx, ry, rw, rh = matches[1]
+            if abs(tx - rx) > 15 or not 10 <= ry - (ty + th) <= 120:
+                continue
+            # A dimmed underlying dialog must not authorize a reload tap.
+            action = small[ry:ry + rh, rx:rx + rw]
+            hsv = cv2.cvtColor(action, cv2.COLOR_BGR2HSV)
+            cyan = (hsv[:, :, 0] > 75) & (hsv[:, :, 0] < 110) & (hsv[:, :, 1] > 60) & (hsv[:, :, 2] > 170)
+            if float(cyan.mean()) < .04:
+                continue
+            return round((rx + rw / 2) / scale), round((ry + rh / 2) / scale)
+        return None

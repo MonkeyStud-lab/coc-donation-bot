@@ -243,7 +243,8 @@ function App(){
         <div className="log">{logs.filter(x=>debug||x.level!=='DEBUG').map(x=><div key={x.id}><time>{new Date(x.at).toLocaleTimeString()}</time> {x.text}</div>)}<div ref={logEnd}/></div></section>
     </>}
     {page==='Attacks'&&<AttackPlanner api={api} base={BASE} result={status?.result} locked={locked} operation={status?.operation} stop={()=>command('stop')}/>}
-    {page==='Accounts'&&<Accounts api={api} locked={locked} result={status?.result} live={()=>setLive(true)} onChanged={reload} stop={()=>command('stop')}/>}
+    {page==='Accounts'&&<Accounts api={api} locked={locked} result={status?.result} operation={status?.operation||null}
+      working={!!status?.active} jobError={status?.error||null} live={()=>setLive(true)} onChanged={reload} stop={()=>command('stop')}/>}
     {page==='Settings'&&<>
       <div className="toolbar"><input aria-label="Search settings" placeholder="Search settings" value={search} onChange={e=>setSearch(e.target.value)}/>
         <label className="toggle"><input type="checkbox" checked={advanced} onChange={e=>setAdvanced(e.target.checked)}/>Advanced</label>

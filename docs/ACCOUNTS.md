@@ -8,7 +8,9 @@ rotate between accounts on a schedule.
 
 1. Stop the bot and release Live view's manual control.
 2. Open your own home village. Link it to Supercell ID in the game if needed.
-3. Open **Accounts**, enter a nickname, choose roles, and press **Save loaded account**.
+3. Open **Accounts**, enter a nickname, choose roles, and press **Save and verify account**.
+
+Saving performs verification automatically; you do not need a separate check. Nicknames are optional and default to the village name.
 
 The first account keeps the installation's existing settings, calibration,
 timers, and histories. A checksum-verified backup is created before registration.
@@ -23,7 +25,7 @@ Names help locate a card; the player tag decides whether it is the right account
    **Log in to Supercell ID** and complete the game's sign-in. Enter email and
    verification codes directly in the game, never into bot settings.
 3. When the village loads, dismiss welcome notices and release manual control.
-4. Give the account a nickname, choose its roles, and select **Save loaded account**.
+4. Give the account a nickname, choose its roles, and select **Save and verify account**.
 
 Sign-in is required once per saved ID unless Supercell asks to authenticate
 again. The bot does not store login codes or email credentials. Its screenshot
@@ -65,9 +67,11 @@ check. This does not bypass identity verification or authorize unknown dialogs.
 
 Unknown screens, ambiguous names, missing/off-screen account cards, stopped
 operations, and mismatched tags leave automation blocked. Use Live view to
-finish loading the intended village, then **Verify current account**. For an
-unfinished switch, this must be the selected destination account. For an
-unfinished Add account, save the newly loaded village or verify a known village.
+finish loading the intended village, then **Check loaded account**. An unfinished
+switch instead shows **Finish switch** and requires the selected destination.
+For an unfinished Add account, use **Save and verify account** for the new village;
+it performs verification as part of saving. The recovery option below that form
+can confirm a village that was already saved in the app.
 Duplicate village names may require renaming in the game before learning cards.
 
 Managed-account automation must use the web app. Legacy desktop/CLI starts
@@ -96,7 +100,9 @@ context. Roles mask configuration, and explicit farm/upgrade routes enforce
 them too. Revisions include account identity to reject cross-account stale forms.
 
 `accounts/navigation.py` uses inspected menu anchors and two independent tag
-reads. Account setup runs under the existing device lease and cancellation
+reads, with two fresh readings on each screen. Every visible tag character must
+be accounted for; shortened OCR output cannot verify an account. Account setup
+runs under the existing device lease and cancellation
 event. A pending transition is persisted before opening the switcher, so a crash
 cannot silently resume automation on an unknown account. Startup verifies the
 loaded account before recording or performing automatic actions.

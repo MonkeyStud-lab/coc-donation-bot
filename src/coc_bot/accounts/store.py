@@ -233,7 +233,7 @@ class AccountStore:
             state = self.load()
             account = next((a for a in state['accounts'] if a['tag'] == tag(player_tag)), None)
             if not account:
-                raise ValueError('The loaded account has not been added; complete Add account first')
+                raise ValueError('This village is not saved yet. Choose its tasks and press Save and verify account in Accounts.')
             target = (state.get('pending') or {}).get('target')
             if target and target != account['id']:
                 raise ValueError('A different account loaded; automation remains paused')

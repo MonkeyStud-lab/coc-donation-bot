@@ -153,6 +153,8 @@ class DonationBot:
 
     def request_farm_attack(self) -> None:
         """Queue one farm attack as soon as the loop is not mid-donation."""
+        if self.config.account_tag and 'farming' not in self.config.account_roles:
+            raise ValueError('This account does not have the farming role')
         self._farm_requested = True
         logger.info("Farm attack requested — will run when not mid-donation")
 
@@ -255,6 +257,8 @@ class DonationBot:
         logger.info("CoC Donation Bot starting (dry_run={})", self.config.dry_run)
         if self.should_stop():
             return
+        from coc_bot.accounts.navigation import verify_session
+        verify_session(self, self.should_stop)
         self._start_recorder()
         try:
             self._run_inner()
@@ -291,7 +295,7 @@ class DonationBot:
                 raise RuntimeError("Could not reach clan chat on startup")
 
             self.set_mode(BotMode.DONATE)
-            self.game_state.transition(GameState.CLAN_CHAT, reason="startup")
+            self.game_state.transition(GameState.CLAN_CHAT if getattr(self.config,'donation_enabled',True) else GameState.HOME, reason="startup")
             self._set_state("scan_chat")
             self._last_anti_idle = time.monotonic()
 
@@ -365,6 +369,12 @@ class DonationBot:
             self.tracker.tick()
             return
 
+        if not getattr(self.config,'donation_enabled',True):
+            self.tracker.tick()
+            self._state_entered = time.monotonic()
+            interrupted_sleep(2, self.should_stop)
+            return
+
         if self._state == "scan_chat":
             self._do_scan_chat()
         elif self._state == "scroll_chat":
@@ -401,7 +411,11 @@ class DonationBot:
             self.set_mode(BotMode.HOME)
             self.game_state.transition(GameState.HOME,reason='leave chat for upgrade check')
             self.game_state.transition(GameState.UPGRADING,reason='Suggested upgrades')
-            runner=UpgradeRunner(self.config,self.capture,self.nav_input,self.navigator,self.should_stop)
+            if getattr(self.config,'progression_enabled',False):
+                from coc_bot.progression.runner import ProgressionRunner
+                runner=ProgressionRunner(self.config,self.capture,self.nav_input,self.navigator,self.should_stop)
+            else:
+                runner=UpgradeRunner(self.config,self.capture,self.nav_input,self.navigator,self.should_stop)
             for kind in kinds:
                 if self._stop_requested: break
                 result=runner.run(kind,execute=True)
@@ -414,7 +428,7 @@ class DonationBot:
             if not self._stop_requested:
                 frame=self.capture.screenshot()
                 verified=self.navigator.classifier._clan_chat_anchor_visible(frame)
-                self.game_state.transition(GameState.CLAN_CHAT if verified else GameState.RECOVERING,
+                self.game_state.transition(GameState.HOME if not getattr(self.config,'donation_enabled',True) else GameState.CLAN_CHAT if verified else GameState.RECOVERING,
                                            reason='upgrade check finished')
         return True
 
@@ -509,13 +523,15 @@ class DonationBot:
         self.set_mode(BotMode.DONATE)
         if not self._stop_requested:
             self.navigator.ensure_clan_chat(has_donate_request=self._has_donate_request)
-        self.game_state.transition(GameState.CLAN_CHAT, reason="farm done")
+        self.game_state.transition(GameState.CLAN_CHAT if getattr(self.config,'donation_enabled',True) else GameState.HOME, reason="farm done")
         self._set_state("scan_chat")
         self._last_anti_idle = time.monotonic()
         return True
 
     def _maybe_anti_idle(self) -> None:
         """Tiny chat-panel swipe so CoC does not disconnect for inactivity."""
+        if not getattr(self.config,'donation_enabled',True):
+            return
         interval = max(20, int(self.config.anti_idle_seconds))
         # Jitter so the nudge is not perfectly metronomic.
         due = interval + random.uniform(-8, 8)
@@ -548,6 +564,8 @@ class DonationBot:
         return self.config.donate_open_requests
 
     def _has_donate_request(self, frame) -> bool:
+        if not getattr(self.config,'donation_enabled',True):
+            return False
         request = self.chat_monitor.find_donate_request(frame)
         return request is not None and self._should_handle_request(request)
 
@@ -819,7 +837,9 @@ class DonationBot:
             return
         logger.debug("Loop state: {} -> {}", self._state, state)
         # Coarse "farm" is expanded by AttackFarmer into finer GameState steps.
-        if state != "farm":
+        if state in ('scan_chat','scroll_chat') and not getattr(self.config,'donation_enabled',True):
+            self.game_state.transition(GameState.HOME, reason='watching village')
+        elif state != "farm":
             self.game_state.note_loop_state(state)
         self._state = state
         self._state_entered = time.monotonic()

@@ -1,10 +1,12 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {AttackObservation} from './AttackObservation';
 import {AttackPlanner} from './AttackPlanner';
+import {Accounts} from './Accounts';
 import {createRoot} from 'react-dom/client';
 import './style.css';
 
 type Status = {active:boolean; state:string; operation:string|null; activity:string|null; result:any; error:string|null;
+  account?:{id:string;nickname:string;tag:string};account_pending?:boolean;
   timers:{farm_seconds:number|null;break_seconds:number|null}; manual_control:boolean;on_break:boolean;settings_update:string|null;
   platform:{stage:string;message:string;ready:boolean;busy:boolean;error:string|null;game_update?:string|null}|null};
 type Entry = {id:number; level:string; text:string; at:string};
@@ -200,17 +202,19 @@ function App(){
     value={password} onChange={e=>setPassword(e.target.value)} required/></label>
     <button className="primary" disabled={busy}>Sign in</button><p role="alert">{notice}</p></form></main>;
   const fields=settings?.fields.filter(f=>(!f.advanced||values.gui_dev_options)&&
-    (advanced||BASIC_SETTINGS.has(f.key)||f.key.startsWith('upgrade_'))&&
+    (advanced||BASIC_SETTINGS.has(f.key)||f.key.startsWith('upgrade_')||f.key.startsWith('progression_'))&&
     (f.label+' '+f.description).toLowerCase().includes(search.toLowerCase()))||[];
   return <div className="app"><aside><a className="brand" href="#" onClick={e=>e.preventDefault()}>CoC Bot</a>
-    <nav>{['Dashboard','Attacks','Settings','Setup','Library','Diagnostics'].map(p=><button key={p}
+    <nav>{['Dashboard','Accounts','Attacks','Settings','Setup','Library','Diagnostics'].map(p=><button key={p}
       className={page===p?'selected':''} onClick={()=>navigate(p)}>{p}</button>)}</nav>
     {FIRST_LAUNCH&&<button disabled={locked} onClick={()=>location.assign('/')}>Exit first-launch test</button>}
     {passwordRequired&&<button onClick={()=>attempt(async()=>{await api('logout','POST');expired();})}>Sign out</button>}</aside>
     <main>{FIRST_LAUNCH&&<div className="notice">First-launch test · changes are kept separate from your saved setup.</div>}
     <header><h1>{page}</h1><span className={'connection '+(online?'connected':'')}>
+      {status?.account&&<span>{status.account.nickname} · </span>}
       {online?'Connected':'Reconnecting'}</span></header>
     {notice&&<div className="notice" role="status">{notice}<button aria-label="Dismiss message" onClick={()=>setNotice('')}>×</button></div>}
+    {status?.account_pending&&page!=='Accounts'&&<div className="notice">Finish account setup before starting automation.<button onClick={()=>navigate('Accounts')}>Accounts</button></div>}
     {status?.platform&&!status.platform.ready&&<div className="notice" role="status">{status.platform.message}
       {!status.platform.busy&&<button disabled={locked} onClick={()=>command('runtime/retry')}>Retry startup</button>}
       {status.platform.stage==='needs_game'&&<label className="upload">Import Clash APK archive
@@ -239,6 +243,7 @@ function App(){
         <div className="log">{logs.filter(x=>debug||x.level!=='DEBUG').map(x=><div key={x.id}><time>{new Date(x.at).toLocaleTimeString()}</time> {x.text}</div>)}<div ref={logEnd}/></div></section>
     </>}
     {page==='Attacks'&&<AttackPlanner api={api} base={BASE} result={status?.result} locked={locked} operation={status?.operation} stop={()=>command('stop')}/>}
+    {page==='Accounts'&&<Accounts api={api} locked={locked} result={status?.result} live={()=>setLive(true)} onChanged={reload} stop={()=>command('stop')}/>}
     {page==='Settings'&&<>
       <div className="toolbar"><input aria-label="Search settings" placeholder="Search settings" value={search} onChange={e=>setSearch(e.target.value)}/>
         <label className="toggle"><input type="checkbox" checked={advanced} onChange={e=>setAdvanced(e.target.checked)}/>Advanced</label>

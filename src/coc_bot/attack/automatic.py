@@ -12,20 +12,24 @@ SIEGE_UNITS = {'wall_wrecker', 'battle_blimp', 'stone_slammer', 'siege_barracks'
 RAGE_UNITS = {'rage', 'rage_spell'}
 
 
-def supported_identity(card):
-    return (card.kind == 'troop' and card.unit_id == 'electro_dragon'
+def supported_identity(card, *, progression=False):
+    from coc_bot.progression.army import TROOPS
+    return (card.kind == 'troop' and (card.unit_id == 'electro_dragon' or progression and card.unit_id in TROOPS)
             or card.kind == 'spell' and card.unit_id in RAGE_UNITS
             or card.kind == 'siege' and card.unit_id in SIEGE_UNITS
             or card.kind == 'hero' and bool(card.unit_id))
 
 
-def automatic_plan(cards):
+def automatic_plan(cards, *, progression=False, deploy_line=None):
     """Only stable identities/counts authorize this fixed, supported strategy.
 
     Known hero artwork may use a user-supplied name. Hero slot order never
     establishes identity. Extra/unknown cards are left unused; they cannot
     veto a positively identified Electro Dragon army or authorize any tap.
     """
+    if progression:
+        from coc_bot.progression.army import farming_plan
+        return farming_plan(cards,deploy_line=deploy_line)
     if not cards:
         raise ValueError('Automatic attack skipped: no readable army cards')
     army = []
@@ -88,6 +92,7 @@ def scan_army(session, catalog):
     The returned reference artwork is transient and cannot overwrite calibration.
     """
     stop = session.client.stop_check
+    progression = getattr(session.config, 'progression_enabled', False)
     gate = BattleFrameGate(session.attack_nav.battlefield_ready)
     last_shape = None
     row = []
@@ -110,7 +115,7 @@ def scan_army(session, catalog):
         observed = agree_cards(before, read_army(second, 'battle', catalog, stop_check=stop))
         after = []
         for card in observed:
-            if not supported_identity(card):
+            if not supported_identity(card, progression=progression):
                 logger.debug('Automatic army: ignoring unused card {} ({})',card.slot,card.unit_id or 'unrecognized')
                 continue
             if not card.stable:

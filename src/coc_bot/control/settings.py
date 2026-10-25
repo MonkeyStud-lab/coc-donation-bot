@@ -19,7 +19,10 @@ class RevisionConflict(ValueError):
 
 def revision():
     path = user_settings_path()
-    return hashlib.sha256(path.read_bytes() if path.exists() else b"").hexdigest()
+    from coc_bot.accounts.store import selected_account
+    account = selected_account.get()
+    salt = account['id'].encode() if account else b''
+    return hashlib.sha256(salt + (path.read_bytes() if path.exists() else b"")).hexdigest()
 
 
 def settings_snapshot():

@@ -11,6 +11,9 @@ build/
 data/calibrated.yaml
 data/runtime_state.json
 data/upgrades/
+data/progression/
+data/accounts/
+data/account_backups/
 data/attack-planner/
 data/debug/
 data/calibration_backups/
@@ -35,6 +38,7 @@ data/.calibration.lock
 clash-apks*.zip
 logs/
 .setup_linux_stamp
+.test-tmp/
 
 # IDE
 .idea/

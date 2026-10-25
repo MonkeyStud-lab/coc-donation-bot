@@ -7,6 +7,13 @@ Automatic
 upgrades are off by default. This is an initial implementation for the inspected
 English, landscape game interface; an unreadable or changed screen blocks spending.
 
+**Village progression** is a separate opt-in mode. It scans the complete building
+list, builds new structures first, prioritizes offensive capacity, handles walls,
+and gates Town Hall upgrades on verified completion of the other available
+buildings. Its Laboratory ordering favors the prepared farming army. The
+Suggested-only rules below describe the normal mode; see
+[Home Village progression](HOME_PROGRESSION.md) for the new mode and its limits.
+
 ## Try a recommendation
 
 1. Stop the bot and close manual game controls.
@@ -47,8 +54,9 @@ The initial settings are:
 The reserve is the minimum balance **after** paying for an upgrade. It is a floor,
 not a daily budget. Availability, price, resource type, and remaining balance all
 have to pass before an upgrade starts. A busy laboratory is skipped. A building
-needs more free builders than the number reserved. The app skips excluded or
-unaffordable Suggested entries; it does not choose from **Other upgrades**.
+needs more free builders than the number reserved. The normal building method
+skips excluded or unaffordable Suggested entries. Village progression and
+its farming-priority research also inspect **Other upgrades**.
 
 Each resource reserve accepts values from 0 to 100,000,000 in both the browser
 and desktop settings. Builder reservations range from 0 to 6, and the check
@@ -78,7 +86,7 @@ layouts and future game changes still need testing.
 
 ## What is excluded
 
-The first version does not buy new buildings, upgrade the Town Hall, upgrade heroes
+Without Village progression, the app does not buy new buildings, upgrade the Town Hall, upgrade heroes
 or walls, manage equipment, or upgrade the Laboratory, Barracks, spell
 factories, Workshop, Hero Hall, or Pet House. Building names must match an explicit
 supported list. Laboratory research must appear in the verified Army upgrades tab.

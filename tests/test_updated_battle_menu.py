@@ -123,7 +123,7 @@ class UpdatedMenuTests(unittest.TestCase):
         cv2.rectangle(frame,(1450,900),(1810,980),(40,220,100),-1)
         with patch('coc_bot.vision.battle_menu._white_label',side_effect=['myarmy','cookbook','attack']):
             self.assertEqual(army_confirmation_button(frame),(1638,932))
-        for labels in (['home'], ['myarmy','other'], ['myarmy','cookbook','save']):
+        for labels in (['home',''], ['myarmy','other',''], ['myarmy','cookbook','save']):
             with patch('coc_bot.vision.battle_menu._white_label',side_effect=labels):
                 self.assertIsNone(army_confirmation_button(frame))
 

@@ -429,6 +429,10 @@ class DebugSession:
 
         stop: Callable[[], bool] | None = should_stop
         self.client.stop_check = stop
+        from coc_bot.accounts.navigation import verify_session
+        if self.config.account_tag and 'farming' not in self.config.account_roles:
+            raise ValueError('This account does not have the farming role')
+        verify_session(self, stop or (lambda: False))
         self.client.health_check()
         from dataclasses import replace
         config = replace(self.config, farm_engine='automatic') if automatic else self.config

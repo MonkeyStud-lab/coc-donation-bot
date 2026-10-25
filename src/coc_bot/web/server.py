@@ -71,6 +71,18 @@ class Rename(Payload):
     name: str = Field(max_length=80)
 
 
+class AccountAction(Payload):
+    action: Literal['register', 'add', 'verify', 'switch']
+    nickname: str = Field(default='', max_length=60)
+    roles: list[Literal['donating', 'farming', 'upgrading', 'builder_base']] = Field(default_factory=list, max_length=4)
+    target: str | None = Field(default=None, max_length=32)
+
+
+class AccountEdit(Payload):
+    nickname: str = Field(min_length=1, max_length=60)
+    roles: list[Literal['donating', 'farming', 'upgrading', 'builder_base']] = Field(max_length=4)
+
+
 class ArmyReview(Payload):
     revision: str = Field(max_length=64)
     corrections: list[dict] = Field(max_length=50)
@@ -80,6 +92,8 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
                scope=None, shared_auth=None, enable_simulation=True, password_required=False,
                shared_live_lock=None):
     service = service or ControlService()
+    from coc_bot.accounts.service import Accounts
+    accounts = service.accounts = Accounts(service, scope or project_root())
     auth = shared_auth or Authentication(auth_path or project_root() / "data/web-auth.json",
                                          password_required=password_required)
     if auth.password_required and not auth.path.is_file():
@@ -151,11 +165,8 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
                         return Response("Request too large", status_code=413)
                     chunks.append(chunk)
                 request._body = b"".join(chunks)
-        token = profile_root.set(scope)
-        try:
+        with accounts.store.scope():
             response = await call_next(request)
-        finally:
-            profile_root.reset(token)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = (
@@ -189,6 +200,19 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
         response.set_cookie("coc_session", token, httponly=True, samesite="strict",
                             secure=secure_cookie, max_age=auth.lifetime)
         return response
+
+    @app.get('/api/accounts')
+    def list_accounts():
+        return accounts.snapshot()
+
+    @app.post('/api/accounts/action')
+    def account_action(body: AccountAction):
+        accounts.action(body.action, body.nickname, body.roles, body.target)
+        return service.snapshot()
+
+    @app.put('/api/accounts/{ident}')
+    def account_edit(ident: str, body: AccountEdit):
+        return accounts.update(ident, body.nickname, body.roles)
 
     @app.get("/api/session")
     def session(request: Request):
@@ -537,7 +561,8 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
             while auth.session(ws.cookies.get("coc_session")):
                 history = service.events.since(cursor)
                 cursor = history["cursor"]
-                snapshot = await asyncio.to_thread(service.snapshot)
+                with accounts.store.scope():
+                    snapshot = await asyncio.to_thread(service.snapshot)
                 await ws.send_json({"status": snapshot, "events": history})
                 await asyncio.sleep(1)
             await ws.close(code=1008)
@@ -549,20 +574,14 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
     @app.websocket("/api/viewer/ws")
     async def viewer(ws: WebSocket):
         from coc_bot.web.viewer import run_viewer
-        token = profile_root.set(scope)
-        try:
+        with accounts.store.scope():
             await run_viewer(ws, service, auth, allowed_origins)
-        finally:
-            profile_root.reset(token)
 
     @app.websocket("/api/live/ws")
     async def live(ws: WebSocket):
         from coc_bot.web.live import run_live
-        token = profile_root.set(scope)
-        try:
+        with accounts.store.scope():
             await run_live(ws, auth, allowed_origins, live_lock, service)
-        finally:
-            profile_root.reset(token)
 
     if enable_simulation:
         import tempfile

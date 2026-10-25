@@ -54,6 +54,11 @@ farm:
   battle_timeout_seconds: 210     # max wait from first deploy; confirmed results can return earlier
   retry_cooldown_seconds: 300     # only when farm fails before deploy (menu/matchmaking)
 
+progression:
+  enabled: false
+  rearrange: true
+  clear_obstacles: false
+
 upgrades:
   buildings_enabled: false
   research_enabled: false

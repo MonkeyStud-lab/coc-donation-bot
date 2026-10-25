@@ -3,6 +3,7 @@ import json
 import math
 import threading
 import time
+from contextvars import copy_context
 
 from loguru import logger
 
@@ -40,7 +41,7 @@ class CaptureRecovery:
             options = service.controller.options
             platform.recovering = True
             platform.update('recovering', 'Checking stalled Android capture')
-            self.thread = threading.Thread(target=self._run, args=(config, resume, options),
+            self.thread = threading.Thread(target=copy_context().run, args=(self._run, config, resume, options),
                                            name='capture-recovery', daemon=True)
             self.thread.start()
 

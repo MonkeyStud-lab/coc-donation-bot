@@ -21,7 +21,7 @@ def context(farmer):
     def sleep(seconds):
         if farmer._sleep(seconds): raise AdbStopped('Attack stopped')
     return SimpleNamespace(config=farmer.config,capture=farmer.capture,input=farmer.input,
-                           client=farmer.input.client,attack_nav=farmer.attack_nav,_sleep=sleep)
+                           client=farmer.input.client,attack_nav=farmer.attack_nav,navigator=getattr(farmer,'donation_nav',None),_sleep=sleep)
 
 
 def remember_camera(session, home):
@@ -151,6 +151,13 @@ def run_planned_attack(farmer, *, automatic=False):
     farmer._set_mode(BotMode.HOME);farmer._gs(GameState.HOME,'prepare planned attack')
     if not farmer.attack_nav.leave_chat_for_home(): return FarmResult(False,'could not reach home')
     restore_camera(session)
+    prepared_catalog = None
+    if automatic and getattr(farmer.config,'progression_enabled',False):
+        from coc_bot.progression.preparation import ArmyPreparation
+        try:
+            prepared_catalog = ArmyPreparation(session).prepare()
+        except ValueError as exc:
+            return FarmResult(False,'Army preparation: '+str(exc))
     home=farmer.capture.screenshot()
     farmer._set_mode(BotMode.ATTACK)
     farmer._gs(GameState.ATTACK_MENU,'open unranked attack')
@@ -163,14 +170,20 @@ def run_planned_attack(farmer, *, automatic=False):
     remember_camera(session,home)
     failure=None
     try:
-        observed=survey(session)
+        observed=survey(session,compact=bool(automatic and getattr(prepared_catalog,'prepared_hall',None)==2))
         if observed['projection'] is None:
             raise ValueError('Deployment boundary coverage could not be verified; no deployment sent')
         if automatic:
             from coc_bot.attack.automatic import automatic_plan, scan_army
-            catalog=learned_catalog(farmer.config,use_saved_routine=False)
+            catalog=prepared_catalog or learned_catalog(farmer.config,use_saved_routine=False)
             cards=scan_army(session,catalog)
-            plan=automatic_plan(cards)
+            line=None
+            if observed['projection'].source=='observed_starter_envelope':
+                from coc_bot.progression.mapping import deployment_line
+                h,w=observed['reference'].shape[:2]
+                line=deployment_line(observed['projection'],w,h)
+                if line is None:raise ValueError('No clear visible starter deployment line')
+            plan=automatic_plan(cards, progression=getattr(farmer.config,'progression_enabled',False),deploy_line=line)
             # The current readings supply only this attack's artwork and counts.
             # Neither a saved routine nor manually confirmed corners are needed.
             catalog.references=[r for r in catalog.references if r[0] in {e.unit_id for e in plan.army}]
@@ -205,7 +218,7 @@ def run_planned_attack(farmer, *, automatic=False):
         if not chat:
             return FarmResult(False,'clan chat could not be confirmed',True)
         AttackCheckpoint(farmer.config).update('home_confirmed')
-        farmer._gs(GameState.CLAN_CHAT,'planned attack completed')
+        farmer._gs(GameState.CLAN_CHAT if getattr(farmer.config,'donation_enabled',True) else GameState.HOME,'planned attack completed')
         return FarmResult(bool(result and result.success and chat),
                           failure or (result.reason if result else 'attack was not executed'),True)
     except ValueError as exc:

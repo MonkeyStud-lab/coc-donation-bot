@@ -176,7 +176,10 @@ class WebTests(TestCase):
 
     def test_settings_revision_and_validation(self):
         settings = self.client.get("/api/settings").json()
-        self.assertEqual(len(settings["fields"]), 49)
+        keys = [field['key'] for field in settings['fields']]
+        self.assertEqual(len(keys), len(set(keys)))
+        self.assertTrue({'farm_interval_seconds', 'donate_open_requests',
+                         'progression_enabled', 'progression_rearrange', 'progression_clear_obstacles'} <= set(keys))
         self.assertEqual(len(settings["themes"]), 7)
         body = {"revision": settings["revision"], "values": {"farm_interval_seconds": 7200}}
         result = self.client.put("/api/settings", headers=self.headers, json=body)

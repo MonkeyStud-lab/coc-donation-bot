@@ -44,6 +44,7 @@ class ControlService:
         self.settings_update = None
         self._settings_cancel = None
         self.platform = None
+        self.accounts = None
         from coc_bot.control.capture_recovery import CaptureRecovery
         self.capture_recovery = CaptureRecovery(self)
 
@@ -88,6 +89,10 @@ class ControlService:
     def start(self, practice=False):
         with self.lock:
             self.idle()
+            if self.accounts:
+                account = self.accounts.store.require_ready()
+                if account and not account['roles']:
+                    raise ValueError('Choose at least one account role before starting automation')
             self.capture_recovery.cancel.clear()
             if self.platform is not None and not self.platform.snapshot()["ready"]:
                 raise BusyError("Finish Android and game setup before starting the bot.")
@@ -176,6 +181,8 @@ class ControlService:
     def job(self, name, function):
         with self.lock:
             self.idle()
+            if self.accounts and not name.startswith('accounts_') and name not in ('capture', 'health_check', 'classify_screen'):
+                self.accounts.store.require_ready()
             self.operation, self.result = name, None
             def finished(result):
                 with self.lock:
@@ -197,6 +204,8 @@ class ControlService:
         return session
 
     def farm(self):
+        if self.accounts:
+            self.accounts.store.require_ready('farming')
         with self.lock:
             if self.platform is not None and not self.platform.snapshot()["ready"]:
                 raise BusyError("Finish Android and game setup before farming.")
@@ -212,6 +221,8 @@ class ControlService:
             return "Farm started"
 
     def upgrade(self, kind, *, execute=False, token=None):
+        if self.accounts:
+            self.accounts.store.require_ready('upgrading')
         if kind not in ('buildings','research','pets'):
             raise ValueError('Unknown upgrade category')
         if execute and (not isinstance(token,str) or len(token)!=64):
@@ -220,7 +231,11 @@ class ControlService:
             from coc_bot.upgrades.runner import UpgradeRunner
             from coc_bot.runtime.device_lease import DeviceLease
             session=self.session(cancel)
+            if session.config.progression_enabled:
+                from coc_bot.progression.runner import ProgressionRunner as UpgradeRunner
             with DeviceLease(session.config.adb_device):
+                from coc_bot.accounts.navigation import verify_session
+                verify_session(session, cancel.is_set)
                 result=UpgradeRunner(session.config,session.capture,session.input,
                                      session.navigator,cancel.is_set).run(kind,execute=execute,expected=token)
                 return result|{'upgrade_report':True}
@@ -258,16 +273,22 @@ class ControlService:
         self.job(action, execute)
 
     def execute_attack_preview(self, ident, revision):
+        if self.accounts:
+            self.accounts.store.require_ready('farming')
         def execute(cancel):
             from coc_bot.runtime.device_lease import DeviceLease
             from coc_bot.control.attack_planner import execute_preview
             session=self.session(cancel)
             with DeviceLease(session.config.adb_device):
+                from coc_bot.accounts.navigation import verify_session
+                verify_session(session, cancel.is_set)
                 return execute_preview(session,ident,revision)
         self.job('planned_attack',execute)
 
     def automatic_attack(self):
         """One built-in attack, without editing settings or a saved routine."""
+        if self.accounts:
+            self.accounts.store.require_ready('farming')
         def execute(cancel):
             success, message = self.session(cancel).farm_one_shot(cancel.is_set, automatic=True)
             return {'automatic_attack': True, 'success': success, 'message': message}
@@ -317,6 +338,8 @@ class ControlService:
                         except ValueError:
                             pass
             return state | {"operation": self.operation, "result": self.result,
+                            "account": self.accounts.store.account() if self.accounts else None,
+                            "account_pending": bool(self.accounts and self.accounts.store.load().get('pending')),
                             "timers": dict(self._timer_snapshot),
                             "manual_control": self.manual_owner is not None,
                             "settings_update": self.settings_update,
@@ -340,5 +363,7 @@ class ControlService:
         from coc_bot.runtime.device_lease import DeviceLease
         with self.lock:
             self.idle()
+            if self.accounts:
+                self.accounts.store.require_ready()
             with DeviceLease(load_config().adb_device):
                 yield

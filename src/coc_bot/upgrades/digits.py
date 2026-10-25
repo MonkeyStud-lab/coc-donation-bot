@@ -50,9 +50,9 @@ def bank():
         return {key:archive[key] for key in archive.files}
 
 
-def read_digits(image, *, fraction=False):
+def read_digits(image, *, fraction=False, extra_templates=None):
     result=[]
-    templates=bank()
+    templates=bank() | (extra_templates or {})
     for shape,aspect in glyphs(image):
         scores={}
         for key,packed in templates.items():

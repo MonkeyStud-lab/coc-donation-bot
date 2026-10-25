@@ -810,6 +810,9 @@ class AttackNavigator:
 
         Returns: confirmed | failed | stopped
         """
+        if not getattr(self.config, 'donation_enabled', True) and self.donation_nav is not None:
+            from coc_bot.progression.home import ensure_home
+            return 'confirmed' if ensure_home(self.donation_nav, timeout) else ('stopped' if self._stopping() else 'unknown')
         if self.donation_nav is None:
             frame = self.capture.screenshot()
             if self.classifier.auxiliary_page(frame) is not None:

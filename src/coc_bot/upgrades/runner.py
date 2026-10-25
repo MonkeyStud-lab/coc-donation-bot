@@ -34,6 +34,9 @@ class UpgradeRunner:
     def stopped(self):
         return bool(self.stop and self.stop())
 
+    def eligibility(self, kind, candidate, balances, availability):
+        return reason(self.config, kind, candidate, balances, availability)
+
     def wait(self, seconds=.6):
         return interrupted_sleep(seconds,self.stop)
 
@@ -75,9 +78,11 @@ class UpgradeRunner:
                 raise ValueError('Could not establish home village and clan chat')
             frame=self.capture.screenshot()
             if self.stopped(): return None
-            if not self.nav.classifier._clan_chat_anchor_visible(frame):
+            donating = getattr(self.config, 'donation_enabled', True)
+            if donating and not self.nav.classifier._clan_chat_anchor_visible(frame):
                 raise ValueError('Clan-chat anchor is missing; upgrade navigation blocked')
-            self.nav.close_clan_chat(frame)
+            if donating:
+                self.nav.close_clan_chat(frame)
             if self.wait(): return None
             frame=self.capture.screenshot()
             from coc_bot.vision.battle_menu import home_build_control_visible
@@ -104,7 +109,7 @@ class UpgradeRunner:
         availability=self.reader.availability(frame,kind)
         balances=self.reader.balances(frame)
         rows,end=(self.reader.pet_candidates(frame) if kind=='pets' else self.reader.candidates(frame))
-        choices=[candidate.public()|{'skip':reason(self.config,kind,candidate,balances,availability)}
+        choices=[candidate.public()|{'skip':self.eligibility(kind,candidate,balances,availability)}
                  for candidate in rows]
         if kind=='pets': choices.sort(key=lambda c:c.get('assigned') is not False)
         return {'kind':kind,'availability':availability,'balances':balances,
@@ -210,6 +215,16 @@ class UpgradeRunner:
             frame=self.capture.screenshot()
             confirmation=self.reader.confirmation(frame,candidate)
             if not confirmation:
+                # One overwritten image makes a changed confirmation inspectable
+                # without accumulating another screenshot collection.
+                import cv2
+                import numpy as np
+                if isinstance(frame,np.ndarray):
+                    try:
+                        self.path.parent.mkdir(parents=True,exist_ok=True)
+                        cv2.imwrite(str(self.path.with_name('last-blocked-confirmation.png')),frame)
+                    except OSError:
+                        pass
                 return report|{'status':'blocked','message':'Upgrade confirmation name, price or resource could not be verified'}
             # A second independent screenshot must agree on the spending target.
             check=self.reader.confirmation(self.capture.screenshot(),candidate)

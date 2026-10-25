@@ -205,6 +205,8 @@ recalibrate changed parts.
 
 - **Dashboard:** Start, Stop, Farm now, practice mode, Live view, countdowns, and
   one activity log.
+- **Accounts:** save the current village, add another Supercell ID, switch saved
+  accounts, and choose each account's roles. See [Accounts](docs/ACCOUNTS.md).
 - **Attacks:** run an automatic attack or prepare, review, and edit a custom
   map-based routine.
 - **Settings:** donations, attack method/schedule, breaks, upgrades, themes,
@@ -305,6 +307,13 @@ results are recognized. See the [attack guide](docs/ATTACK_REBUILD.md) and
 [battle completion checks](docs/BATTLE_COMPLETION.md).
 
 ## Optional upgrades
+
+For a new village, **Settings → Upgrades → Village progression** adds construction
+before upgrades, army preparation from verified unlocks/camp space, farming-unit
+research priority, and a complete-building gate before Town Hall upgrades.
+This opt-in pilot is being validated from TH2; later halls and automatic spell
+editing are not fully validated. See [Home Village progression](docs/HOME_PROGRESSION.md)
+before enabling it on an account.
 
 Building/research/pet automation is **off by default**. First stop the bot and use
 **Diagnostics → Building upgrades / Army research / Pet upgrades → Check upgrades**. This reads

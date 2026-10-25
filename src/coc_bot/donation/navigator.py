@@ -63,6 +63,9 @@ class Navigator:
         timeout: float | None = None,
         has_donate_request: Callable[[np.ndarray], bool] | None = None,
     ) -> bool:
+        if not getattr(self.config, 'donation_enabled', True):
+            from coc_bot.progression.home import ensure_home
+            return ensure_home(self, min(timeout or 15, 30))
         timeout = timeout or self.config.state_watchdog_seconds
         deadline = time.time() + timeout
 

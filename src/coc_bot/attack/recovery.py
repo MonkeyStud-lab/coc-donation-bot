@@ -222,7 +222,8 @@ def recover_attack(session, *, tracker=None):
             if donation is None or not donation.ensure_clan_chat():
                 raise RecoveryRequired('Attack recovery could not confirm clan chat; automatic actions remain blocked')
             check_stop(stop)
-            if not nav.classifier._clan_chat_anchor_visible(session.capture.screenshot()):
+            if (getattr(session.config,'donation_enabled',True) and
+                    not nav.classifier._clan_chat_anchor_visible(session.capture.screenshot())):
                 raise RecoveryRequired('Attack recovery did not see the clan-chat anchor; automatic actions remain blocked')
             checkpoint.update('home_confirmed')
             finish_attack(session, tracker=tracker)

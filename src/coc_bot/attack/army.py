@@ -60,7 +60,7 @@ class UnitCatalog:
                                                  'siege' if path.stem in siege_ids else 'troop')
             self.templates.append((path.stem, kind, image[:,:,:3], alpha))
 
-    def add_references(self, frame, cards):
+    def add_references(self, frame, cards, *, picker=False):
         """Carry artwork identity across pages, never slot positions or quantities."""
         sift = cv2.SIFT_create(nfeatures=500)
         for card in cards:
@@ -73,7 +73,12 @@ class UnitCatalog:
             # Keep their crown/face landmarks too; counts and bottom levels are
             # still excluded for stacked troops and spells.
             top = .08 if card.kind == 'hero' else .24
-            mask[round(h*top):round(h*.78),round(w*.15):round(w*.85)] = 255
+            if picker:
+                # Picker cards share level/housing badges and Info controls.
+                # Only central facial artwork may establish troop identity.
+                mask[round(h*.25):round(h*.78),round(w*.32):round(w*.78)] = 255
+            else:
+                mask[round(h*top):round(h*.78),round(w*.15):round(w*.85)] = 255
             keys,descriptors = sift.detectAndCompute(cv2.cvtColor(image,cv2.COLOR_BGR2GRAY),mask)
             if descriptors is not None:
                 self.references.append((card.unit_id,card.kind,keys,descriptors,w,h))
@@ -232,7 +237,9 @@ def read_badge(cell, *, stop_check=None):
     # baseline are required, so hero levels cannot become army quantities.
     prefixes = []
     for x,y,w,h in components:
-        if not .65 < w/h < 1.3 or not (x<cell.shape[1]*.25 or x>cell.shape[1]*.50):
+        # Two-digit starter quantities can center the x prefix in the header.
+        # Its shape/baseline and top-only search establish the badge, not x.
+        if not .65 < w/h < 1.3:
             continue
         glyph = cv2.resize(white[y:y+h,x:x+w],(20,20),interpolation=cv2.INTER_NEAREST)>0
         yy,xx = np.indices((20,20))
@@ -257,6 +264,13 @@ def read_badge(cell, *, stop_check=None):
                 elif zero_glyph(glyph):
                     digit = '0'
                 else:
+                    from coc_bot.upgrades.digits import read_digits
+                    matched=read_digits(cv2.cvtColor(glyph,cv2.COLOR_GRAY2BGR))
+                    if matched is not None and re.fullmatch(r'\d',matched):
+                        # The outlined 8 can be read as 3 by single-character
+                        # OCR. Prefer the strict, margin-checked game-font bank.
+                        text+=matched;last=x+w
+                        continue
                     image=cv2.resize(255-glyph,None,fx=5,fy=5,interpolation=cv2.INTER_NEAREST)
                     image=cv2.copyMakeBorder(image,20,20,20,20,cv2.BORDER_CONSTANT,value=255)
                     cv2.imwrite(str(path),image)
@@ -272,7 +286,7 @@ def read_badge(cell, *, stop_check=None):
                 if not re.fullmatch(r'\d',digit):
                     text='';break
                 text+=digit;last=x+w
-            if text and int(text)<=300:
+            if text and int(text)<=352:
                 readings.append(int(text))
     # Different reads are ambiguity, not a reason to choose the larger number.
     return readings[0] if readings and len(set(readings)) == 1 else None
@@ -283,7 +297,7 @@ def card_boxes(frame, page):
     h,w = frame.shape[:2]
     outline_boxes=[]
     if page == 'army_confirmation':
-        x0,y0,x1,y1 = round(w*.43),round(h*.25),round(w*.99),round(h*.69)
+        x0,y0,x1,y1 = round(w*.28),round(h*.25),round(w*.99),round(h*.69)
     elif page == 'battle':
         # Deployed heroes/siege rise above the normal row to show a health bar.
         x0,y0,x1,y1 = round(w*.05),round(h*.79),round(w*.99),round(h*.995)
@@ -384,7 +398,7 @@ def read_army(frame, page, catalog, *, stop_check=None):
         check_stop(stop_check)
         x,y,bw,bh = box
         cell = frame[y:y+bh,x:x+bw]
-        if page == 'army_confirmation' and x < w*.43:
+        if page == 'army_confirmation' and x < w*.43 and bh > h*.40:
             unit_id,kind,score,margin = None,'hero',0.,0.
             quantity,source = 1,'single hero card; availability unverified'
         else:
@@ -441,14 +455,14 @@ def resolve_live_card(frame, catalog, unit_id, *, stop_check=None):
     return found[0]
 
 
-def resolve_just_depleted(frame, catalog, before, *, stop_check=None):
+def resolve_just_depleted(frame, catalog, before, *, stop_check=None, spent=1):
     """Check the last consumed card when its dark border no longer segments.
 
     A prior box is only a search area immediately after that unit's map tap.
     Current artwork must still identify the unit, be visibly depleted, and show
     x0 for stacked units. It never authorizes selecting a remembered position.
     """
-    if before.quantity!=1 or before.kind=='hero':
+    if type(spent) is not int or not 1<=spent<=5 or before.quantity!=spent or before.kind=='hero':
         raise ValueError('No verified empty card: '+before.unit_id)
     x,y,w,h=before.box;cell=frame[y:y+h,x:x+w]
     identity=catalog.identify_reference(cell,stop_check=stop_check)

@@ -65,7 +65,7 @@ def registered_segments(observation, to_reference, width, height):
     return result
 
 
-def survey(session, *, zoom=True, full_map=False):
+def survey(session, *, zoom=True, full_map=False, compact=False):
     """Caller owns the lease. Select no map points; at most twelve camera pans.
 
     The gesture can retain zoom in the game. The legacy engine is never resumed
@@ -77,18 +77,30 @@ def survey(session, *, zoom=True, full_map=False):
     if not battle_gate.accept(frame):
         raise ValueError('Find an opponent before mapping its village')
     h,w=frame.shape[:2]
+    evidence_dir=session.config.data_dir/'debug'/'attack-surveys'/uuid.uuid4().hex
+    evidence_dir.mkdir(parents=True,exist_ok=True)
     if session.client.wm_size()!=(w,h):
         raise ValueError('Input and screenshot sizes differ')
     before=frame.copy()
     if zoom:
         from coc_bot.adb.multitouch import Multitouch
         with Multitouch(session.client,(w,h)) as touch:
-            for _ in range(3):
+            for zoom_index in range(3):
                 check_stop(stop)
+                cv2.imwrite(str(evidence_dir/f'zoom-before-{zoom_index}.png'),before)
                 touch.pinch()
                 session._sleep(.5)
                 frame=session.capture.screenshot()
+                cv2.imwrite(str(evidence_dir/f'zoom-after-{zoom_index}.png'),frame)
                 measured=compare_camera(before,frame)
+                (evidence_dir/f'zoom-{zoom_index}.json').write_text(json.dumps(measured),encoding='utf-8')
+                if (not measured.get('verified') and frame.shape==before.shape and
+                        getattr(session.config,'progression_enabled',False)):
+                    # There is no deployment map yet. Discard the pre-pinch view
+                    # and build every boundary/coordinate from a fresh reference.
+                    # Never carry an unmeasured transform into the executor.
+                    logger.info('Starter survey: zoom transform unavailable; rebuilding from fresh boundary evidence')
+                    break
                 affine(measured)
                 # Keep a measured recovery hint: home retains the battle zoom.
                 # It can guide one correction, but never certify restoration.
@@ -102,10 +114,25 @@ def survey(session, *, zoom=True, full_map=False):
                 before=frame
     # The game can retain an active selection. Don't toggle a visible outline
     # off, and don't assume one click took effect while the card was moving.
+    if not battle_gate.accept(frame):
+        raise ValueError('Battle controls changed after zoom')
     reference=reveal_boundary(session,frame)
-    evidence_dir=session.config.data_dir/'debug'/'attack-surveys'/uuid.uuid4().hex
-    evidence_dir.mkdir(parents=True,exist_ok=True)
     cv2.imwrite(str(evidence_dir/'reference.png'),reference)
+    if compact:
+        from coc_bot.progression.mapping import compact_projection
+        previous=session.capture.screenshot();session._sleep(.2)
+        current=session.capture.screenshot()
+        if not battle_gate.accept(current):raise ValueError('Battle controls changed before starter mapping')
+        projection=compact_projection(previous,current)
+        cv2.imwrite(str(evidence_dir/'compact-previous.png'),previous)
+        cv2.imwrite(str(evidence_dir/'compact-reference.png'),current)
+        (evidence_dir/'compact.json').write_text(json.dumps(
+            projection.to_dict() if projection else {'blocked':'No complete stationary starter envelope'}))
+        if projection is None:raise ValueError('Starter deployment envelope could not be verified')
+        logger.info('Starter deployment envelope verified from the complete visible red outline')
+        return {'reference':current,'previous':previous,'current':current,'mosaic':current,
+                'projection':projection,'segments':[],'views':1,'captured_at':time.time(),
+                'mosaic_offset':[0,0],'mosaic_bounds':[0,0,w,h]}
     transform=np.eye(3);segments=[];views=[];projection=None
     # Move the village up/down, then across, returning through overlapping views.
     gestures=[(0,-.20),(0,.20),(0,.20),(0,-.20),(.16,0),(-.16,0),(-.16,0),(.16,0),

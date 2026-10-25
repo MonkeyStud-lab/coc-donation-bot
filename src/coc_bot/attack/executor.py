@@ -99,7 +99,7 @@ class VerifiedExecutor:
         with self.path.open('a',encoding='utf-8') as handle:
             handle.write(json.dumps({'at':time.time(),'event':event,**fields})+'\n')
             handle.flush()
-            if event in ('map_tap_intent','ability_intent','finished'):
+            if event in ('map_tap_intent','map_batch_intent','ability_intent','finished'):
                 os.fsync(handle.fileno())
         if event=='step':
             logger.info('Attack step {}/{}: {} {}',fields['number']+1,len(self.plan.steps),
@@ -274,6 +274,52 @@ class VerifiedExecutor:
         self.abilities.add(unit_id)
         self.note('ability_sent',unit_id=unit_id)
 
+    def deploy_batch(self, unit_id, points):
+        """A fresh troop selection, <=5 clear targets, one exact count delta."""
+        if unit_id not in ('barbarian','archer','giant','wall_breaker','wizard'):
+            raise ValueError('Only supported ground troops can use deployment batches')
+        if not 1<=len(points)<=5:raise ValueError('Invalid ground deployment batch')
+        if len(points)==1:return self.deploy(unit_id,points[0])
+        check_stop(self.stop)
+        frame,_=self.position(points[0]);frame,card=self.select(frame,unit_id)
+        if card.kind!='troop' or card.quantity is None or card.quantity<len(points):
+            raise ValueError('Ground batch troop availability is unverified')
+        h,w=frame.shape[:2]
+        targets=[tuple(round(v) for v in self.target(point)) for point in points]
+        if not all(input_area(*target,w,h) for target in targets):
+            # Nothing has been sent. Reposition and verify individual targets
+            # when this camera cannot safely show a whole batch.
+            for point in points:self.deploy(unit_id,point)
+            return
+        self.note('map_batch_intent',unit_id=unit_id,quantity_before=card.quantity,targets=targets)
+        check_stop(self.stop);sent_at=time.time()
+        from coc_bot.attack.recovery import AttackCheckpoint
+        checkpoint=AttackCheckpoint(self.session.config)
+        if checkpoint.load() is None:checkpoint.begin('deploying')
+        checkpoint.update('deploying',deployment_possible=True,first_attempt_at=
+                          checkpoint.load().get('first_attempt_at',sent_at),journal=self.path.name)
+        self.result.first_attempt_at=self.result.first_attempt_at or sent_at
+        self.result.uncertain_tap=True
+        cv2.imwrite(str(self.path.with_suffix('.before.png')),frame)
+        self.session.input.tap_many(targets)
+        for attempt in range(2):
+            self.session._sleep(.2);after_frame=self.frame()
+            cv2.imwrite(str(self.path.with_suffix('.after.png')),after_frame)
+            try:
+                after=self.resolve(after_frame,unit_id)
+            except ValueError:
+                try:after=resolve_just_depleted(after_frame,self.catalog,card,stop_check=self.stop,spent=len(points))
+                except ValueError:
+                    if attempt==0:continue
+                    raise
+            self.note('deployment_batch_observation',unit_id=unit_id,quantity=after.quantity)
+            if after.quantity==card.quantity-len(points):
+                self.result.uncertain_tap=False;self.result.verified_taps+=len(points)
+                self.result.first_deploy_at=self.result.first_deploy_at or sent_at
+                self.note('deployment_verified',unit_id=unit_id,quantity_after=after.quantity,batch_size=len(points))
+                return
+        raise ValueError('Ground batch count change was not confirmed; no taps will be replayed')
+
     def run(self):
         self.note('started',plan=self.plan.to_dict())
         try:
@@ -292,7 +338,12 @@ class VerifiedExecutor:
                 if step.action=='wait': self.session._sleep(step.seconds)
                 elif step.action=='ability': self.ability(step.unit_id)
                 else:
-                    for point in step_points(step): self.deploy(step.unit_id,point)
+                    points=step_points(step)
+                    if (getattr(self.session.config,'progression_enabled',False) is True and
+                            self.plan.strategy=='farming_ground' and step.action=='deploy_line'):
+                        for start in range(0,len(points),5):self.deploy_batch(step.unit_id,points[start:start+5])
+                    else:
+                        for point in points:self.deploy(step.unit_id,point)
             self.result.success,self.result.reason=True,'All planned deployments verified'
             if self.skipped_abilities:
                 self.result.reason+='; unavailable abilities skipped: '+', '.join(sorted(self.skipped_abilities))

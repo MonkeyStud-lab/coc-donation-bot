@@ -242,6 +242,36 @@ class BattleEvidenceTests(TestCase):
 
 
 class ExecutorTests(TestCase):
+    def test_ground_batch_requires_exact_count_delta_and_never_replays_partial_inputs(self):
+        for after,confirmed in ((5,True),(7,False),(10,False)):
+            with self.subTest(after=after),TemporaryDirectory() as root:
+                exe,session,frame=self.executor(root,quantity=10)
+                before=ArmyCard('0',(100,500,70,95),'barbarian','troop',10)
+                exe.select=Mock(return_value=(frame,before))
+                exe.resolve=Mock(return_value=replace(before,quantity=after))
+                if confirmed:exe.deploy_batch('barbarian',[MapPoint(.055,.5)]*5)
+                else:
+                    with self.assertRaisesRegex(ValueError,'no taps will be replayed'):
+                        exe.deploy_batch('barbarian',[MapPoint(.055,.5)]*5)
+                session.input.tap_many.assert_called_once()
+                session.input.tap.assert_not_called()
+                self.assertEqual(exe.result.verified_taps,5 if confirmed else 0)
+                self.assertEqual(exe.result.uncertain_tap,not confirmed)
+
+    def test_stop_before_ground_batch_sends_no_inputs(self):
+        with TemporaryDirectory() as root:
+            exe,session,_=self.executor(root)
+            exe.stop=lambda:True
+            with self.assertRaises(AdbStopped):exe.deploy_batch('barbarian',[MapPoint(.055,.5)]*2)
+            session.input.tap_many.assert_not_called()
+            session.input.tap.assert_not_called()
+
+    def test_air_troops_never_enter_ground_batch_path(self):
+        with TemporaryDirectory() as root:
+            exe,session,_=self.executor(root)
+            with self.assertRaises(ValueError):exe.deploy_batch('electro_dragon',[MapPoint(.055,.5)]*2)
+            session.input.tap_many.assert_not_called()
+
     def executor(self, root, quantity=2):
         session=Mock();session.config.data_dir=Path(root);session.client.stop_check=lambda:False
         session.config.adb_device='test'

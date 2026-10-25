@@ -50,6 +50,9 @@ class BotConfig:
     game_load_timeout_seconds: int
     state_watchdog_seconds: int
     frame_width: int = 0
+    donation_enabled: bool = True
+    account_tag: str | None = None
+    account_roles: tuple[str, ...] = ()
     frame_height: int = 0
     rois: dict[str, list[float]] = field(default_factory=dict)
     tap_points: dict[str, list[int]] = field(default_factory=dict)
@@ -70,6 +73,9 @@ class BotConfig:
     debug_save_frames: bool = False
     dry_run: bool = False
     farm_enabled: bool = False
+    progression_enabled: bool = False
+    progression_clear_obstacles: bool = False
+    progression_rearrange: bool = True
     farm_engine: str = 'sequence'
     upgrade_buildings_enabled: bool = False
     upgrade_research_enabled: bool = False
@@ -81,6 +87,10 @@ class BotConfig:
     upgrade_elixir_reserve: int = 2_000_000
     upgrade_dark_elixir_reserve: int = 50_000
     upgrade_excluded_names: str = ''
+    builder_base_attacks_enabled: bool = False
+    builder_base_upgrades_enabled: bool = False
+    builder_base_collect_resources: bool = False
+    builder_base_research_enabled: bool = False
     farm_interval_seconds: int = 3600
     farm_interval_variance_seconds: int = 300
     farm_deploy_side: str = "left"
@@ -278,6 +288,7 @@ def load_config(
     donation = merged.get("donation", {})
     clan = merged.get("clan", {})
     farm = merged.get("farm", {})
+    progression = merged.get('progression', {})
     upgrades = merged.get("upgrades", {})
     clan_limits = _load_clan_perks(root)
     deploy_side = str(farm.get("deploy_side", "left")).strip().lower()
@@ -286,7 +297,7 @@ def load_config(
 
     from coc_bot.host_bridge import managed_device
 
-    return BotConfig(
+    config = BotConfig(
         adb_device=managed_device() or os.environ.get("ADB_DEVICE", adb.get("device", "127.0.0.1:5555")),
         coc_package=adb.get("coc_package", "com.supercell.clashofclans"),
         template_threshold=vision.get("template_threshold", 0.82),
@@ -323,6 +334,9 @@ def load_config(
         clan_donation_limits=clan_limits,
         ocr_confidence_threshold=vision.get("ocr_confidence_threshold", 0.5),
         farm_enabled=bool(farm.get("enabled", False)),
+        progression_enabled=progression.get('enabled') is True,
+        progression_clear_obstacles=progression.get('clear_obstacles') is True,
+        progression_rearrange=progression.get('rearrange', True) is True,
         farm_engine=str(farm.get('engine','sequence')) if farm.get('engine','sequence') in ('sequence','planner','automatic') else 'sequence',
         upgrade_buildings_enabled=upgrades.get('buildings_enabled') is True,
         upgrade_research_enabled=upgrades.get('research_enabled') is True,
@@ -364,6 +378,8 @@ def load_config(
         data_dir=root / "data",
         templates_dir=root / "data" / "templates",
     )
+    from coc_bot.accounts.store import selected_account, apply_roles
+    return apply_roles(config, selected_account.get())
 
 
 def _normalize_gui_theme(gui: dict[str, Any]) -> str:

@@ -12,7 +12,12 @@ def compare_camera(before, after):
         return result | {'reason': 'capture dimensions changed'}
     h, w = before.shape[:2]
     mask = np.zeros((h, w), np.uint8)
-    mask[int(h*.18):int(h*.70), int(w*.18):int(w*.76)] = 255
+    # Sparse starter bases can have too little artwork in the central crop.
+    # Include distributed terrain landmarks, while excluding fixed combat HUD.
+    mask[int(h*.12):int(h*.80), int(w*.15):int(w*.85)] = 255
+    mask[:int(h*.29),:int(w*.28)] = 0
+    mask[:int(h*.23),int(w*.76):] = 0
+    mask[int(h*.70):,:int(w*.48)] = 0
     orb = cv2.ORB_create(nfeatures=5000)
     k2, d2 = orb.detectAndCompute(cv2.cvtColor(after, cv2.COLOR_BGR2GRAY), mask)
     if d2 is None or len(d2) < 2:

@@ -46,7 +46,10 @@ UPGRADE_INTEGER_LIMITS = {
 
 
 SETTINGS: list[SettingField] = [
-    SettingField('upgrade_buildings_enabled','Automatic building upgrades','Follow Suggested upgrades using spare builders. Town Hall, heroes, walls, new buildings and purchases are excluded.','bool',lambda c:c.upgrade_buildings_enabled,'Upgrades',('upgrades','buildings_enabled')),
+    SettingField('progression_enabled','Village progression','Build new structures first, then improve the village and prepare farming armies from verified unlocks. Town Hall upgrades require a complete max-building check.','bool',lambda c:c.progression_enabled,'Upgrades',('progression','enabled')),
+    SettingField('progression_rearrange','Search for building space','Move the new-building preview to find a valid spot before paying. Ordinary-obstacle clearing is a separate option.','bool',lambda c:c.progression_rearrange,'Upgrades',('progression','rearrange')),
+    SettingField('progression_clear_obstacles','Clear ordinary obstacles','Allow verified gold/elixir removal of ordinary obstacles to create building space. Special obstacles and decorations stay in place.','bool',lambda c:c.progression_clear_obstacles,'Upgrades',('progression','clear_obstacles')),
+    SettingField('upgrade_buildings_enabled','Automatic building upgrades','Use spare builders. Village progression adds new construction and full-building checks; otherwise follows Suggested upgrades.','bool',lambda c:c.upgrade_buildings_enabled,'Upgrades',('upgrades','buildings_enabled')),
     SettingField('upgrade_research_enabled','Automatic army research','Start the first eligible Suggested troop or spell research when the laboratory is free. Never spend gems or items.','bool',lambda c:c.upgrade_research_enabled,'Upgrades',('upgrades','research_enabled')),
     SettingField('upgrade_pets_enabled','Automatic pet upgrades','Upgrade an eligible unassigned pet when the pet-upgrade slot is free. Uses dark elixir while keeping your reserve. Never spends gems or items.','bool',lambda c:c.upgrade_pets_enabled,'Upgrades',('upgrades','pets_enabled')),
     SettingField('upgrade_pets_include_assigned','Allow upgrades of equipped pets','Also consider pets assigned to heroes after checking unassigned pets. A pet being upgraded may be unavailable for attacks. Off keeps equipped pets out of automatic upgrades.','bool',lambda c:c.upgrade_pets_include_assigned,'Upgrades',('upgrades','pets_include_assigned')),
@@ -196,7 +199,7 @@ SETTINGS: list[SettingField] = [
     ),
     SettingField(
         'farm_engine', 'Attack method',
-        'Automatic reads the army and builds an Electro Dragon attack without a saved routine. '
+        'Automatic reads the army and uses a farming routine without saved taps. Village progression also prepares troops from verified unlocks. '
         'Supports optional Rage, siege and recognized heroes; uncertain or unsupported armies are skipped. '
         'Planner uses a saved, live-tested routine. Sequence keeps your existing taps.',
         'choice', lambda c: c.farm_engine, 'Farm', ('farm','engine'),

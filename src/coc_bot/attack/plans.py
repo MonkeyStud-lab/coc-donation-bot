@@ -62,13 +62,13 @@ class AttackPlan:
     def validate(self):
         if type(self.schema_version) is not int or self.schema_version != 1:
             raise ValueError('Unsupported attack plan version')
-        if self.mode != 'unranked' or self.strategy != 'mass_electro_dragons':
-            raise ValueError('Only the unranked mass Electro Dragon routine is supported')
+        if self.mode != 'unranked' or self.strategy not in ('mass_electro_dragons', 'farming_ground', 'mass_dragons'):
+            raise ValueError('Unsupported unranked farming strategy')
         inventory = {}
         for entry in self.army:
             if (not isinstance(entry.unit_id, str) or not entry.unit_id.strip() or
                     entry.unit_id in inventory or entry.kind not in ('troop', 'hero', 'siege', 'spell') or
-                    type(entry.quantity) is not int or not 1 <= entry.quantity <= 300 or
+                    type(entry.quantity) is not int or not 1 <= entry.quantity <= 352 or
                     type(entry.confirmed) is not bool):
                 raise ValueError('Invalid or duplicate army entry')
             if entry.kind in ('hero', 'siege') and entry.quantity != 1:

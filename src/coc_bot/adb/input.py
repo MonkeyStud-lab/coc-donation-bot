@@ -109,6 +109,26 @@ class InputController:
             self.client.run_shell(f"input swipe {x1} {y1} {x2} {y2} {duration_ms}")
         self._sleep()
 
+    def tap_many(self, points) -> None:
+        """A bounded troop batch; caller must verify its total count change.
+
+        Coordinates are integers only, never browser-provided shell text.
+        Stop is checked before sending; at most five inputs can be in flight.
+        """
+        if not isinstance(points,(list,tuple)) or not 1<=len(points)<=5:
+            raise ValueError('A troop batch must contain one to five points')
+        if any(not isinstance(p,(list,tuple)) or len(p)!=2 or
+               any(type(v) is not int or not 0<=v<=100000 for v in p) for p in points):
+            raise ValueError('Troop batch coordinates must be nonnegative integers')
+        if self.client.stop_check and self.client.stop_check():raise AdbStopped('Stopped before troop batch')
+        targets=[self._to_touch(x,y) for x,y in points]
+        recorder.note_action('tap_batch',points=targets,dry_run=self.dry_run)
+        if self.dry_run:
+            logger.info('[DRY-RUN] troop batch ({} taps)',len(targets))
+        else:
+            self.client.run_shell(' && '.join(f'input tap {x} {y}' for x,y in targets))
+        self._sleep()
+
     def back(self) -> None:
         recorder.note_action("back", dry_run=self.dry_run)
         if self.dry_run:

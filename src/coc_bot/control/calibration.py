@@ -58,6 +58,9 @@ def browser_instruction(step_id, part):
 def calibration_revision():
     data = project_root() / "data"
     digest = hashlib.sha256()
+    from coc_bot.accounts.store import selected_account
+    if selected_account.get():
+        digest.update(selected_account.get()['id'].encode())
     path = data / "calibrated.yaml"
     if path.exists():
         digest.update(path.read_bytes())

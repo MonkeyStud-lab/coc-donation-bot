@@ -66,7 +66,7 @@ export function AttackPlanner({api,base,result,locked,stop,operation}:{api:(p:st
     </div>
     {result?.automatic_attack&&<p role="status">{result.message}</p>}
     {operation==='automatic_attack'&&locked&&<p role="status">Automatic attack running. Follow progress in Dashboard activity.</p>}
-    {!report&&<p>Automatic attack reads your army and uses a built-in Electro Dragon routine. For custom steps, choose Prepare opponent instead.</p>}
+    {!report&&<p>Automatic attack uses this account’s farming army. Village progression prepares troops from verified unlocks. For custom steps, choose Prepare opponent.</p>}
     {report&&<>
       <details open={!report.plan}><summary>Review army · {report.cards.filter((c:any)=>c.confirmed).length}/{report.cards.length} checked</summary>
         <AttackObservation report={report} base={base} save={async(id,revision,corrections)=>{const updated=await api('attack-observations/'+id,'PATCH',{revision,corrections});setReport(updated);setDirty(true);return updated;}}/>

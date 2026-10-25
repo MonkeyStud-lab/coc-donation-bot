@@ -36,6 +36,10 @@ def pet_name(value):
 def upgrade_heading(value, candidate):
     if compact(candidate.name)=='lassi':
         value=_pet_ocr(value)
+    if compact(candidate.name) in ('barracks','darkbarracks'):
+        # The inspected outlined heading can duplicate one R. Correct only the
+        # full known building word; never alter levels, prices or other names.
+        value=re.sub(r'(?i)\bbar{3}acks\b','Barracks',value)
     return compact(value)
 
 

@@ -25,9 +25,11 @@ def army_confirmation_button(frame, *, stop_check=None):
                         (30, 70, 100), (90, 255, 255))
     if float(green.mean())/255 < .25:
         return None
-    if "myarmy" not in _white_label(frame, (.13,.075,.29,.13), stop_check):
-        return None
-    if "cookbook" not in _white_label(frame, (.71,.075,.87,.13), stop_check):
+    regular = ("myarmy" in _white_label(frame, (.13,.075,.29,.13), stop_check)
+               and "cookbook" in _white_label(frame, (.71,.075,.87,.13), stop_check))
+    starter = (not regular and "myarmy" in _white_label(frame, (.40,.075,.61,.13), stop_check)
+               and "reinforcements" in _white_label(frame, (.31,.712,.51,.76), stop_check))
+    if not (regular or starter):
         return None
     if "attack" not in _white_label(frame, (.84,.86,.96,.92), stop_check):
         return None
@@ -141,7 +143,9 @@ def direct_match_button(frame, *, stop_check=None):
     """
     h, w = frame.shape[:2]
     x0, y0 = int(w*.035), int(h*.675)
-    crop = frame[y0:int(h*.86), x0:int(w*.31)]
+    # Starter accounts use a wider left card. Keep the full Find a Match text
+    # inside this crop while excluding the separate ranked card to its right.
+    crop = frame[y0:int(h*.86), x0:int(w*.41)]
     if not crop.size:
         return None
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)

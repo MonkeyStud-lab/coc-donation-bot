@@ -122,16 +122,21 @@ def _army_heading():
 def army_heading_visible(frame, stop=None):
     """A known heading can authorize closing even when capacity is unreadable."""
     if not isinstance(frame,np.ndarray):return False
-    for bounds in ((.40,.075,.61,.13),(.13,.075,.29,.13)):
-        if _white_label(frame,bounds,stop)=='myarmy':return True
-        reference=_army_heading()
-        if reference is not None:
-            scale=frame.shape[1]/1853
-            ref=cv2.resize(reference,None,fx=scale,fy=scale)
+    if stop and stop():return False
+    boxes=((.40,.075,.61,.13),(.13,.075,.29,.13))
+    reference=_army_heading()
+    if reference is not None:
+        scale=frame.shape[1]/1853
+        ref=cv2.resize(reference,None,fx=scale,fy=scale)
+        for bounds in boxes:
             region=crop(frame,bounds);rh,rw=ref.shape[:2]
             if region.shape[0]>=rh and region.shape[1]>=rw:
                 _,score,_,(x,y)=cv2.minMaxLoc(cv2.matchTemplate(region,ref,cv2.TM_CCOEFF_NORMED))
                 if score>=.97 and region[y:y+rh,x:x+rw].mean()>=ref.mean()*.85:return True
+    # Match the same native heading in either layout before starting OCR.
+    # Dimmed or changed artwork still has to satisfy the original OCR path.
+    for bounds in boxes:
+        if _white_label(frame,bounds,stop)=='myarmy':return True
     return False
 
 
@@ -340,7 +345,7 @@ class ArmyPreparation:
                 raise ValueError('Army edit proof is invalid')
         first=self.frame();second=self.frame()
         def visible(frame):
-            return (army_editor_close_button(frame,self.stop) or picker_editor_visible(frame,self.stop)) if expected_edit is not None else army_page(frame,self.stop)
+            return (picker_editor_visible(frame,self.stop) or army_editor_close_button(frame,self.stop)) if expected_edit is not None else army_page(frame,self.stop)
         if not visible(first) or not visible(second):
             raise ValueError('Army editor changed')
         a,b=capacity(first,self.stop),capacity(second,self.stop)

@@ -12,6 +12,13 @@ from coc_bot.progression.space import obstacle,SpaceMaker,home_gems,free_builder
 
 
 class ArmyRecoveryTests(TestCase):
+    def test_native_heading_precedes_ocr_and_still_obeys_stop(self):
+        from coc_bot.progression.preparation import army_heading_visible
+        frame=cv2.imread(str(Path(__file__).parent/'fixtures/progression/army-editor.png'))
+        with patch('coc_bot.progression.preparation._white_label',side_effect=AssertionError('native match must avoid OCR')):
+            self.assertTrue(army_heading_visible(frame))
+            self.assertFalse(army_heading_visible(frame,lambda:True))
+
     def test_one_edit_can_confirm_from_two_complete_card_tables_when_header_is_unreadable(self):
         from coc_bot.progression.preparation import ArmyPreparation
         from coc_bot.attack.army import ArmyCard
@@ -55,7 +62,8 @@ class ArmyRecoveryTests(TestCase):
         from coc_bot.attack.army import read_badge
         root=Path(__file__).parent/'fixtures/progression'
         for name,count in [('army-dimmed-165-175.png',134),('army-dimmed-161-175.png',130),
-                           ('army-dimmed-151-175.png',120),('army-dimmed-143-175.png',112)]:
+                           ('army-dimmed-151-175.png',120),('army-dimmed-143-175.png',112),
+                           ('army-dimmed-105-175.png',74)]:
             with self.subTest(name=name):
                 frame=cv2.imread(str(root/name))
                 self.assertEqual(read_badge(frame[278:429,804:952]),count)

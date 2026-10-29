@@ -375,7 +375,8 @@ class ArmyPreparation:
         if new:
             self.catalog.add_references(second,new)
             self.army_references.update(c.unit_id for c in new)
-        return second,troops,a
+        self._verified_army=(second,troops,a)
+        return self._verified_army
 
     def unlocked(self,frame,cards):
         if cards:
@@ -389,11 +390,11 @@ class ArmyPreparation:
                 raise ValueError('Empty army and its troop edit area were not verified')
             self.tap(point)
         frame=self.frame()
-        if not army_page(frame,self.stop):raise ValueError('Troop picker lost My Army')
+        if not picker_editor_visible(frame,self.stop):raise ValueError('Troop picker lost My Army')
         frame=self.learn_unlocks(frame)
         first=picker_unlocks(frame,self.catalog,self.stop)
         fresh=self.frame()
-        if not army_page(fresh,self.stop):raise ValueError('Troop picker changed during unlock verification')
+        if not picker_editor_visible(fresh,self.stop):raise ValueError('Troop picker changed during unlock verification')
         second=picker_unlocks(fresh,self.catalog,self.stop)
         result={u:v for u,v in second.items() if u in first and v['level']==first[u]['level']
                 and max(abs(a-b) for a,b in zip(v['point'],first[u]['point']))<=frame.shape[0]*.01}
@@ -420,7 +421,7 @@ class ArmyPreparation:
                 logger.debug('Troop Info rejected: expected level {}, first={}, second={}',level,first,second)
                 raise ValueError('Troop Info identity did not agree; no army edits sent')
             self.tap(first['close']);fresh=self.frame()
-            if not army_page(fresh,self.stop):raise ValueError('My Army did not return after troop Info')
+            if not picker_editor_visible(fresh,self.stop):raise ValueError('My Army did not return after troop Info')
             current=fresh[y:y+h,x:x+w]
             if picker_level(current)!=level or info_point(current) is None:
                 raise ValueError('Troop picker moved during identity inspection')
@@ -491,6 +492,10 @@ class ArmyPreparation:
         counts={c.unit_id:c.quantity for c in cards}
         if counts!=desired:
             self.adjust(desired,unlocked)
+            # Read the final capacity on the bright editor, outside the picker.
+            frame=self.frame()
+            if picker_editor_visible(frame,self.stop):
+                self.tap((round(frame.shape[1]*.50),round(frame.shape[0]*.17)))
             frame,cards,space=self.observe()
             if {c.unit_id:c.quantity for c in cards}!=desired:
                 raise ValueError('Prepared army does not match the farming composition')
@@ -502,7 +507,13 @@ class ArmyPreparation:
         return self.catalog
 
     def adjust(self,desired,unlocked):
-        verified=None
+        previous=getattr(self,'_verified_army',None)
+        # Opening the picker/Info does not edit troops. Re-establish its current
+        # full table from two new frames before the first quantity input.
+        if previous is not None:
+            _,cards,space=previous
+            verified=self.observe(expected_edit=({c.unit_id:c.quantity for c in cards},space))
+        else:verified=None
         for _ in range(704):
             # Reuse the pair captured immediately after the previous edit.
             # There has been no intervening input; every new edit still needs
@@ -526,8 +537,10 @@ class ArmyPreparation:
                 visible=picker_unlocks(frame,self.catalog,self.stop)
                 if unit not in visible:
                     frame=self.learn_unlocks(frame)
+                    frame,cards,space=self.observe(expected_edit=(current,space))
                     visible=picker_unlocks(frame,self.catalog,self.stop)
-                if unit not in visible or capacity(frame,self.stop)!=space:
+                fresh_capacity=capacity(frame,self.stop)
+                if unit not in visible or (fresh_capacity is not None and fresh_capacity!=space):
                     raise ValueError('Fresh unlocked troop position is not verified')
                 point=visible[unit]['point'];delta=1
             self.tap(point)

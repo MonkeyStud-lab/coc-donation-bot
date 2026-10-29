@@ -376,6 +376,26 @@ class ProgressionPolicyTests(TestCase):
             prep.adjust({'barbarian':12},{'barbarian':{'level':1,'point':(138,746)}})
         self.assertEqual(prep.tap.call_count,2);self.assertEqual(prep.observe.call_count,3)
 
+    def test_open_picker_revalidates_cached_army_before_an_edit_without_a_header(self):
+        from coc_bot.progression.preparation import ArmyPreparation
+        prep=ArmyPreparation.__new__(ArmyPreparation);prep.tap=Mock();prep.s=Mock();prep.catalog=Mock();prep.stop=None
+        def observation(n):return None,[ArmyCard('card',(0,0,100,150),'barbarian','troop',n,stable=True)],(n,30)
+        prep._verified_army=observation(10)
+        prep.observe=Mock(side_effect=[observation(10),observation(11)])
+        with patch('coc_bot.progression.preparation.picker_unlocks',return_value={'barbarian':{'level':1,'point':(138,746)}}),\
+             patch('coc_bot.progression.preparation.capacity',return_value=None):
+            prep.adjust({'barbarian':11},{'barbarian':{'level':1,'point':(138,746)}})
+        self.assertEqual(prep.observe.call_args_list[0].kwargs,{'expected_edit':({'barbarian':10},(10,30))})
+        prep.tap.assert_called_once_with((138,746))
+
+    def test_changed_picker_counts_prevent_first_edit(self):
+        from coc_bot.progression.preparation import ArmyPreparation
+        prep=ArmyPreparation.__new__(ArmyPreparation);prep.tap=Mock()
+        prep._verified_army=(None,[ArmyCard('card',(0,0,100,150),'barbarian','troop',10,stable=True)],(10,30))
+        prep.observe=Mock(side_effect=ValueError('counts changed'))
+        with self.assertRaisesRegex(ValueError,'counts changed'):prep.adjust({'barbarian':11},{})
+        prep.tap.assert_not_called()
+
     def test_new_army_card_needs_one_named_addition_and_exact_housing_change(self):
         from coc_bot.progression.preparation import ArmyPreparation
         prep=ArmyPreparation.__new__(ArmyPreparation);prep.stop=None;prep.catalog=Mock();prep.s=Mock()

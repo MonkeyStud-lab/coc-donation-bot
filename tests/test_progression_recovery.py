@@ -184,7 +184,7 @@ class ArmyRecoveryTests(TestCase):
         prep.frame=Mock(side_effect=[frame,picker,picker]);prep.learn_unlocks=Mock(return_value=picker)
         unlocks={'barbarian':{'level':1,'point':(123,456)}}
         with patch('coc_bot.progression.preparation._white_label',return_value=''),\
-             patch('coc_bot.progression.preparation.army_page',return_value=True),\
+             patch('coc_bot.progression.preparation.picker_editor_visible',return_value=True),\
              patch('coc_bot.progression.preparation.picker_unlocks',return_value=unlocks):
             self.assertEqual(prep.unlocked(frame,[]),unlocks)
         prep.tap.assert_called_once_with((1304,356))

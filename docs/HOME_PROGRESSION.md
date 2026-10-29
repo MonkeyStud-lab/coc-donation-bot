@@ -100,6 +100,12 @@ remembered card position. A hash mismatch invalidates cached artwork. These read
 never press the research, magic-item, or upgrade buttons inside Info.
 
 Every army edit must produce the expected troop count and housing-space change.
+Opening the troop picker dims the army header. If that header is unreadable,
+two fresh, complete card readings must still prove the exact expected counts
+against the previously verified camp limit. Any readable conflicting capacity
+rejects the edit. Initial and final army checks require a readable capacity;
+the final check dismisses the picker first. Safe picker navigation and closing
+use their own visible controls instead of depending on capacity text.
 Unknown cards, conflicting counts, missing controls, and unexpected edits stop
 preparation. The app does not purchase unlocks or fill missing space with gems.
 When a newly added troop's small army card differs from its picker artwork, its

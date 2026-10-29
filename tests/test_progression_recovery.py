@@ -12,6 +12,44 @@ from coc_bot.progression.space import obstacle,SpaceMaker,home_gems,free_builder
 
 
 class ArmyRecoveryTests(TestCase):
+    def test_one_edit_can_confirm_from_two_complete_card_tables_when_header_is_unreadable(self):
+        from coc_bot.progression.preparation import ArmyPreparation
+        from coc_bot.attack.army import ArmyCard
+        prep=ArmyPreparation.__new__(ArmyPreparation);prep.stop=None;prep.catalog=Mock();prep.army_references={'barbarian'}
+        frame=np.zeros((1048,1853,3),np.uint8);prep.frame=Mock(return_value=frame)
+        cards=[ArmyCard('card',(804,278,148,151),'barbarian','troop',19)]
+        with patch('coc_bot.progression.preparation.army_editor_close_button',return_value=(1792,95)),\
+             patch('coc_bot.progression.preparation.capacity',return_value=None),\
+             patch('coc_bot.progression.preparation.read_army',return_value=cards):
+            _,observed,space=prep.observe(expected_edit=({'barbarian':19},(19,30)))
+        self.assertEqual(space,(19,30));self.assertTrue(observed[0].stable)
+        self.assertEqual(prep.frame.call_count,2)
+        with patch('coc_bot.progression.preparation.army_page',return_value=False):
+            with self.assertRaisesRegex(ValueError,'editor changed'):prep.observe()
+
+    def test_edit_proof_never_repairs_a_wrong_missing_or_unidentified_card(self):
+        from coc_bot.progression.preparation import ArmyPreparation
+        from coc_bot.attack.army import ArmyCard
+        frame=np.zeros((1048,1853,3),np.uint8)
+        card=ArmyCard('card',(804,278,148,151),'barbarian','troop',19)
+        for values in ([card],[ArmyCard('card',card.box,'barbarian','troop',None)],
+                       [card,ArmyCard('extra',(952,278,148,151),None,'unknown',1)]):
+            prep=ArmyPreparation.__new__(ArmyPreparation);prep.stop=None;prep.catalog=Mock();prep.army_references={'barbarian'}
+            prep.frame=Mock(return_value=frame)
+            with self.subTest(values=values),\
+                 patch('coc_bot.progression.preparation.army_editor_close_button',return_value=(1792,95)),\
+                 patch('coc_bot.progression.preparation.capacity',return_value=None),\
+                 patch('coc_bot.progression.preparation.read_army',return_value=values):
+                with self.assertRaises(ValueError):prep.observe(expected_edit=({'barbarian':18},(18,30)))
+
+    def test_readable_capacity_still_vetoes_an_inconsistent_edit(self):
+        from coc_bot.progression.preparation import ArmyPreparation
+        prep=ArmyPreparation.__new__(ArmyPreparation);prep.stop=None;prep.catalog=Mock()
+        prep.frame=Mock(return_value=np.zeros((1048,1853,3),np.uint8))
+        with patch('coc_bot.progression.preparation.army_editor_close_button',return_value=(1792,95)),\
+             patch('coc_bot.progression.preparation.capacity',return_value=(20,30)):
+            with self.assertRaisesRegex(ValueError,'contradicts'):prep.observe(expected_edit=({'barbarian':19},(19,30)))
+
     @skipUnless(shutil.which('tesseract'),'Tesseract required for native army badges')
     def test_three_digit_badges_distinguish_two_from_four(self):
         from coc_bot.attack.army import read_badge

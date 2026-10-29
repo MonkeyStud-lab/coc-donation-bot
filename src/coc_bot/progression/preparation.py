@@ -331,17 +331,42 @@ class ArmyPreparation:
             self.s._sleep(.25)
         raise ValueError('My Army did not open')
 
-    def observe(self):
+    def observe(self, *, expected_edit=None):
+        if expected_edit is not None:
+            expected,space=expected_edit
+            if (not isinstance(expected,dict) or any(u not in HOUSING or type(n) is not int or n<1 for u,n in expected.items())
+                or not isinstance(space,(tuple,list)) or len(space)!=2 or any(type(n) is not int for n in space) or not 0<=space[0]<=space[1]<=352
+                or space[1]<1 or sum(HOUSING[u]*n for u,n in expected.items())!=space[0]):
+                raise ValueError('Army edit proof is invalid')
         first=self.frame();second=self.frame()
-        if not army_page(first,self.stop) or not army_page(second,self.stop):
+        def visible(frame):
+            return (army_editor_close_button(frame,self.stop) or picker_editor_visible(frame,self.stop)) if expected_edit is not None else army_page(frame,self.stop)
+        if not visible(first) or not visible(second):
             raise ValueError('Army editor changed')
         a,b=capacity(first,self.stop),capacity(second,self.stop)
-        if a!=b:raise ValueError('Army capacity changed')
-        cards=agree_cards(read_army(first,'army_confirmation',self.catalog,stop_check=self.stop),
-                          read_army(second,'army_confirmation',self.catalog,stop_check=self.stop))
+        if expected_edit is None:
+            if a is None or a!=b:raise ValueError('Army capacity changed')
+        else:
+            # The prior verified camp limit is conservative while editing.
+            # A missing header cannot invent a count: every card must below
+            # prove the exact expected delta twice. Any readable header vetoes
+            # a conflicting result. Fresh startup still needs real capacity.
+            if any(value is not None and value!=space for value in (a,b)):
+                raise ValueError('Army capacity contradicts the verified edit')
+            a=space
+        first_cards=read_army(first,'army_confirmation',self.catalog,stop_check=self.stop)
+        second_cards=read_army(second,'army_confirmation',self.catalog,stop_check=self.stop)
+        if expected_edit is not None:
+            for image,items in ((first,first_cards),(second,second_cards)):
+                if (any(c.kind!='troop' and c.box[1]<image.shape[0]*.46 and c.box[3]<image.shape[0]*.35 for c in items)
+                    or {c.unit_id:c.quantity for c in items if c.kind=='troop'}!=expected):
+                    raise ValueError('Army counts do not confirm the verified edit')
+        cards=agree_cards(first_cards,second_cards)
         troops=[c for c in cards if c.kind=='troop']
         if any(not c.stable or c.unit_id not in HOUSING or type(c.quantity) is not int for c in troops):
             raise ValueError('Army composition is uncertain')
+        if expected_edit is not None and {c.unit_id:c.quantity for c in troops}!=expected:
+            raise ValueError('Army counts do not confirm the verified edit')
         if sum(HOUSING[c.unit_id]*c.quantity for c in troops)!=a[0]:
             raise ValueError('Army cards do not match occupied camp space')
         # Counts change on every edit; the portrait does not. Keep one fresh
@@ -410,7 +435,7 @@ class ArmyPreparation:
         info=read_info(frame,self.stop)
         if info is not None:
             self.tap(info['close']);frame=self.frame()
-        if army_page(frame,self.stop):
+        if picker_editor_visible(frame,self.stop):
             self.tap((round(frame.shape[1]*.50),round(frame.shape[0]*.17)))
             frame=self.frame()
             # Counts may be unreadable while the drawer settles. Closing is a
@@ -512,7 +537,7 @@ class ArmyPreparation:
             expected_space=(space[0]+delta*HOUSING[unit],space[1])
             for attempt in range(3):
                 try:
-                    after_frame,after,after_space=self.observe()
+                    after_frame,after,after_space=self.observe(expected_edit=(expected,expected_space))
                     logger.debug('Army edit check: expected {} at {}, observed {} at {}',
                                  expected,expected_space,{c.unit_id:c.quantity for c in after},after_space)
                     if {c.unit_id:c.quantity for c in after}==expected and after_space==expected_space:

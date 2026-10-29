@@ -68,6 +68,14 @@ or closing a dimmed X. Cleanup dismisses the verified picker before closing the
 editor. Normal account handoffs have their own log message; actual worker failures
 write their traceback to the rotating bot log without dumping local variables.
 
+Within a verified army-edit session, an unreadable capacity header may use the
+previously verified camp limit only after both fresh frames show the complete,
+identified troop table with exactly the requested one-unit change. Missing or
+different counts, extra unknown troop cards, and any readable conflicting capacity
+reject the edit. Startup and the final army observation still require fresh
+capacity; no edit is replayed after an uncertain result. Dismissing the picker is
+a separate non-spending operation and does not require reading its quantities.
+
 Anti-idle swipes require fresh clan-chat evidence and are suppressed during
 pending upgrade/layout operations. Stop cancels the wait between the two swipes.
 Generic recovery cannot dismiss an unresolved Home upgrade payment; its receipt

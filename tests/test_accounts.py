@@ -253,8 +253,7 @@ class AccountsTests(TestCase):
              patch('coc_bot.accounts.navigation.interrupted_sleep',return_value=False),\
              patch('coc_bot.upgrades.vision.UpgradeReader',return_value=reader),\
              patch('coc_bot.progression.troop_info.read_info',return_value=None),\
-             patch('coc_bot.progression.preparation.picker_boxes',side_effect=lambda f:[(1,2,3,4)]*3 if f is picker else []),\
-             patch('coc_bot.progression.preparation.army_page',side_effect=lambda f,*_:f is picker),\
+             patch('coc_bot.progression.preparation.picker_editor_visible',side_effect=lambda f,*_:f is picker),\
              patch('coc_bot.progression.preparation.capacity',return_value=(0,250)),\
              patch('coc_bot.progression.preparation.army_editor_close_button',side_effect=lambda f,*_:(1792,95) if f is army else None),\
              patch('coc_bot.vision.battle_menu.direct_match_button',return_value=None),\

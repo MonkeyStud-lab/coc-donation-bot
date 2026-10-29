@@ -256,7 +256,7 @@ class AccountNavigator:
         # them before any anchor can authorize a tab or identity read.
         from coc_bot.progression.home import recover_home_overlay
         from coc_bot.vision.battle_menu import home_build_control_visible
-        from coc_bot.progression.preparation import army_editor_close_button,army_page,picker_boxes,capacity
+        from coc_bot.progression.preparation import army_editor_close_button,picker_editor_visible
         from coc_bot.vision.battle_menu import direct_match_button
         from coc_bot.upgrades.vision import UpgradeReader
         from coc_bot.progression.troop_info import read_info
@@ -268,10 +268,9 @@ class AccountNavigator:
                 if info_closed or read_info(self.frame(),self.stop)!=info:
                     raise ValueError('Troop Info did not settle before account recovery')
                 self.tap(info['close']);info_closed=True
-            elif isinstance(frame,np.ndarray) and len(picker_boxes(frame))>=3 and army_page(frame,self.stop):
+            elif picker_editor_visible(frame,self.stop):
                 second=self.frame()
-                if (picker_closed or len(picker_boxes(second))<3 or not army_page(second,self.stop)
-                    or capacity(second,self.stop)!=capacity(frame,self.stop)):
+                if picker_closed or not picker_editor_visible(second,self.stop):
                     raise ValueError('Troop picker did not settle before account recovery')
                 self.tap((round(frame.shape[1]*.50),round(frame.shape[0]*.17)))
                 picker_closed=True

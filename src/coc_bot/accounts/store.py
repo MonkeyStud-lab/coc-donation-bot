@@ -63,7 +63,7 @@ def backup(root):
     destination.mkdir(parents=True)
     manifest = {}
     for name in ('calibrated.yaml', 'user_settings.yaml', 'runtime_state.json', 'account.json',
-                 'templates', 'icons', 'attack-planner', 'upgrades', 'builder_base', 'accounts/registry.json',
+                 'templates', 'icons', 'attack-planner', 'upgrades', 'builder_base', 'layouts', 'reinforcements', 'visits', 'resources', 'clan', 'accounts/registry.json', 'accounts/rotation.json',
                  'progression/army.json', 'progression/picker-references', 'progression/army-references'):
         source = root/'data'/name
         if not source.exists():
@@ -115,9 +115,11 @@ class AccountStore:
         return state
 
     @contextmanager
-    def scope(self):
+    def scope(self, ident=None):
         from coc_bot.config import profile_root
-        account = self.account()
+        account = self.account(ident)
+        if ident is not None and account is None:
+            raise ValueError('Unknown account profile')
         token = profile_root.set(self.profile(account))
         identity = selected_account.set(account)
         try:
@@ -142,11 +144,18 @@ class AccountStore:
             raise ValueError('Account profile is outside its installation')
         return path
 
-    def require_ready(self, role=None):
+    def require_ready(self, role=None, *, allow_layout_recovery=False):
         state = self.load()
         if state.get('pending'):
             raise ValueError('Finish account setup or verify the current account before starting automation')
         account = self.account()
+        if account:
+            layouts=read(self.profile(account)/'data/layouts/state.json',{})
+            layout=layouts.get('pending')
+            if not layout and layouts.get('last_survey',{}).get('payment'):
+                layout=layouts['last_survey']
+            if layout and not (allow_layout_recovery and layout.get('account')==account['tag']):
+                raise ValueError('Finish or cancel the native layout edit before starting automation or switching accounts')
         scoped = selected_account.get()
         if scoped and account and scoped['id'] != account['id']:
             raise ValueError('Selected account changed; reload this page before continuing')
@@ -159,6 +168,7 @@ class AccountStore:
             state = self.load()
             if state.get('pending'):
                 raise ValueError('An account operation is unfinished; verify the current account first')
+            self.require_ready()
             if kind not in ('add', 'switch') or (kind == 'switch' and target not in {a['id'] for a in state['accounts']}):
                 raise ValueError('Invalid account operation')
             state['pending'] = {'kind': kind, 'target': target, 'previous': state['active']}
@@ -175,13 +185,14 @@ class AccountStore:
             existing = next((a for a in state['accounts'] if a['tag'] == player_tag), None)
             if existing:
                 # Registering a remembered identity must not overwrite its settings/roles.
-                return self.complete(player_tag)
+                return self.complete(player_tag,hall=identity.get('hall'))
             if (state.get('pending') or {}).get('target'):
                 raise ValueError('Unexpected account loaded during a switch')
             first = not state['accounts']
             backup_path = backup(self.root)
             account = {'id': uuid.uuid4().hex, 'tag': player_tag, 'nickname': nickname,
                        'selector': identity.get('selector', ''),
+                       'town_hall': identity.get('hall'),
                        'game_name': identity.get('name', ''), 'roles': selected_roles,
                        'original': first, 'backup': str(backup_path.relative_to(self.root))}
             destination = self.profile(account)
@@ -228,7 +239,7 @@ class AccountStore:
             account.update(nickname=nickname, roles=selected_roles)
             write(self.path, state)
 
-    def complete(self, player_tag):
+    def complete(self, player_tag, *, hall=None):
         with self.lock:
             state = self.load()
             account = next((a for a in state['accounts'] if a['tag'] == tag(player_tag)), None)
@@ -237,6 +248,12 @@ class AccountStore:
             target = (state.get('pending') or {}).get('target')
             if target and target != account['id']:
                 raise ValueError('A different account loaded; automation remains paused')
+            if type(hall) is int and 1<=hall<=18:
+                # The saved chooser can lag a completed upgrade. A verified
+                # player tag cannot lose Town Hall levels; keep the higher
+                # current-level observation made by progression/army checks.
+                previous=account.get('town_hall')
+                account['town_hall']=max(previous,hall) if type(previous) is int else hall
             state['active'] = account['id']; state['pending'] = None
             write(self.path, state)
             return account
@@ -249,12 +266,15 @@ def apply_roles(config, account):
     selected = set(roles(account['roles']))
     return replace(config,
         account_tag=account['tag'], account_roles=tuple(selected),
+        account_town_hall=account.get('town_hall'),
         donation_enabled='donating' in selected,
         farm_enabled=config.farm_enabled and 'farming' in selected,
         upgrade_buildings_enabled=config.upgrade_buildings_enabled and 'upgrading' in selected,
+        layouts_enabled=config.layouts_enabled and 'upgrading' in selected,
         upgrade_research_enabled=config.upgrade_research_enabled and 'upgrading' in selected,
         upgrade_pets_enabled=config.upgrade_pets_enabled and 'upgrading' in selected,
         builder_base_attacks_enabled=config.builder_base_attacks_enabled and 'builder_base' in selected,
         builder_base_upgrades_enabled=config.builder_base_upgrades_enabled and 'builder_base' in selected,
         builder_base_research_enabled=config.builder_base_research_enabled and 'builder_base' in selected,
+        builder_base_progression_enabled=config.builder_base_progression_enabled and 'builder_base' in selected,
         builder_base_collect_resources=config.builder_base_collect_resources and 'builder_base' in selected)

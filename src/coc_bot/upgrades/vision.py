@@ -40,7 +40,7 @@ def upgrade_heading(value, candidate):
         # The inspected outlined heading can duplicate one R. Correct only the
         # full known building word; never alter levels, prices or other names.
         value=re.sub(r'(?i)\bbar{3}acks\b','Barracks',value)
-    return compact(value)
+    return re.sub(r'^up+(?=grad)','up',compact(value))
 
 
 def crop(frame, box):
@@ -159,7 +159,7 @@ class UpgradeReader:
         white=cv2.inRange(hsv,(0,0,200),(180,65,255))
         if red.mean()/255 < .20 or white.mean()/255 < .08:
             return None
-        label=compact(self.label(frame,(.26,.035,.73,.095)))
+        label=re.sub(r'^up+(?=grad)','up',compact(self.label(frame,(.26,.035,.73,.095))))
         if not label.startswith(('upgrade','upgrading')) or 'toleve' not in label:
             return None
         h,w=frame.shape[:2]
@@ -185,11 +185,17 @@ class UpgradeReader:
         return (free,total) if 0 <= free <= total <= maximum and total>0 else None
 
     def balances(self, frame):
-        return {key:resource_amount(crop(frame,box),self.stop) for key,box in {
+        values={key:resource_amount(crop(frame,box),self.stop) for key,box in {
             'gold':(.56,.033,.679,.073),
             'elixir':(.56,.104,.679,.143),
             'dark_elixir':(.59,.17,.685,.217),
         }.items()}
+        from coc_bot.progression.reader import balance_amount
+        for key,box in (('gold',(.525,.035,.679,.072)),('elixir',(.525,.103,.679,.14))):
+            if values[key] is None:values[key]=balance_amount(crop(frame,box),self.stop)
+        if values['dark_elixir'] is None and currency(crop(frame,(.684,.16,.719,.22)))=='dark_elixir':
+            values['dark_elixir']=balance_amount(crop(frame,(.59,.17,.679,.217)),self.stop)
+        return values
 
     def _headings(self, frame):
         """Read section labels with their positions; never infer them from color."""
@@ -272,31 +278,15 @@ class UpgradeReader:
                 break
         if top is None or bottom is None:
             return [], False
-        # Colored card interiors delimit rows; artwork is excluded from the test strip.
-        strip=frame[top:bottom,round(w*.86):round(w*.90)]
-        hsv=cv2.cvtColor(strip,cv2.COLOR_BGR2HSV)
-        mask=cv2.inRange(hsv,(7,45,120),(30,190,220))
-        rows=(mask.mean(axis=1)/255 > .70).astype(np.uint8)
-        spans=[]; start=None
-        for y,value in enumerate(np.append(rows,0)):
-            if value and start is None:
-                start=y
-            if not value and start is not None:
-                if y-start > h*.045:
-                    spans.append((top+start,top+y))
-                start=None
-        found=[]
-        for y0,y1 in spans:
-            height=y1-y0
-            name=text(frame[y0+round(height*.04):y0+round(height*.48),
-                            round(w*.775):round(w*.953)],stop=self.stop)
-            price=amount(frame[y0+round(height*.46):y1-round(height*.04),
-                               round(w*.85):round(w*.983)],self.stop)
-            resource=currency(frame[y0+round(height*.30):y1,
-                                    round(w*.979):round(w*.996)])
-            if name and price and resource:
-                found.append(Candidate(name,price,resource,(round(w*.86),(y0+y1)//2)))
-        return found, bottom < round(h*.89)
+        # The narrow color strip can split a row at its white title and omit
+        # valid Suggested entries. Use the full-card reader, still restricted
+        # to the independently recognized Suggested section.
+        from coc_bot.progression.reader import ProgressionReader
+        candidates=[]
+        for row in ProgressionReader(self.stop).rows(frame):
+            if top<=row['point'][1]<=bottom and row['name'] and row['cost'] and row['currency']:
+                candidates.append(Candidate(row['name'],row['cost'],row['currency'],row['point']))
+        return candidates, bottom < round(h*.89)
 
     def confirmation(self, frame, candidate):
         heading=self.label(frame,(.26,.035,.73,.095))

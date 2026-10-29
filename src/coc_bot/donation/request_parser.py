@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from enum import Enum
+from pathlib import Path
+from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -41,6 +43,28 @@ class RequestParser:
         - hybrid: some icons plus open capacity remaining
         - open: capacity bars only (no unit icon row)
         """
+        # The current game explicitly labels chosen-unit requests "Requested:".
+        # Color alone also matches Donate buttons and neighboring replay cards.
+        if self.requested_caption(frame,donate_button):return RequestKind.SPECIFIC
+        return RequestKind.OPEN
+
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _caption_reference():
+        return cv2.imread(str(Path(__file__).parents[1]/'vision/assets/donation_requested_caption.png'),cv2.IMREAD_GRAYSCALE)
+
+    def requested_caption(self,frame,button):
+        reference=self._caption_reference()
+        if reference is None:return False
+        h,w=frame.shape[:2];cy=button.center[1]
+        region=frame[max(0,cy-round(h*.30)):max(0,cy-round(h*.07)),:button.x]
+        target=cv2.resize(reference,None,fx=w/1853,fy=w/1853)
+        rh,rw=target.shape[:2]
+        if region.shape[0]<rh or region.shape[1]<rw:return False
+        gray=cv2.cvtColor(region,cv2.COLOR_BGR2GRAY)
+        return float(cv2.matchTemplate(gray,target,cv2.TM_CCOEFF_NORMED).max())>=.97
+
+    def _legacy_classify(self,frame,donate_button,capacity=None):
         icon_cols, max_run, max_cluster, left_only = self._icon_strip_stats(frame, donate_button)
         # Left-edge-only color (sword/potion/siege glyphs) is capacity chrome, not unit icons.
         if left_only:
@@ -80,9 +104,13 @@ class RequestParser:
             return 0, 0, 0, False
 
         h, _w = region.shape[:2]
+        # Flood-filled dark chat backgrounds can join an earlier replay card.
+        # Only the final request-height band above Donate can contain its icons.
+        region=region[-min(h,round(frame.shape[0]*.28)):]
+        h=region.shape[0]
         # Unit icons sit above the capacity-bar block. Capacity bars occupy the lower
         # portion near Donate — scan a mid band and ignore pure left-edge chrome.
-        strip = region[int(h * 0.35) : int(h * 0.70), :]
+        strip = region[int(h * 0.35) : int(h * 0.70), :round(region.shape[1]*.65)]
         if strip.size == 0:
             return 0, 0, 0, False
 

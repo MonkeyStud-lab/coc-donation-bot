@@ -1,0 +1,488 @@
+[
+  {
+    "hall": 2,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://supercell.com/en/games/clashofclans/blog/news/quality-of-life-changes",
+    "link": null,
+    "method": "deferred",
+    "status": "Native copy workflow starts at Town Hall 4; leave this base unchanged"
+  },
+  {
+    "hall": 3,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://supercell.com/en/games/clashofclans/blog/news/quality-of-life-changes",
+    "link": null,
+    "method": "deferred",
+    "status": "Native copy workflow starts at Town Hall 4; leave this base unchanged"
+  },
+  {
+    "hall": 4,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_4/defence_136.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH4%3AHV%3AAAAAMAAAAAKEfiInD-Mi3fljUwS1UDpX",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 4,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_4/defence_135.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH4%3AHV%3AAAAAMAAAAAJ1FCK4SRDOJaM29EervwI0",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 4,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_4/defence_134.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH4%3AHV%3AAAAAMAAAAAJ1FF3w9JqhyekkpwxjTbc3",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 5,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_5/defence_148.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH5%3AHV%3AAAAAAgAAAAMd10RkjRLC8rN3PZ4X0txJ",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 5,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_5/defence_147.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH5%3AHV%3AAAAAAgAAAAMb56aghSrSP9MYowZCImIk",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 5,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_5/defence_146.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH5%3AHV%3AAAAAAgAAAAMQR98pP1InnuB3sNMNE8os",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 6,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_6/defence_175.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH6%3AHV%3AAAAABQAAAAL5UzXeR72s6edM4IX0l-bB",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 6,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_6/defence_174.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH6%3AHV%3AAAAABQAAAAL1XreuOsJPHHDicPPM00xw",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 6,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_6/defence_173.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH6%3AHV%3AAAAABQAAAAL1Xt0eBF1Qx6zW_as8Chbi",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 7,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_7/defence_250.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH7%3AHV%3AAAAAAQAAAAMgTae4qGk70S1lKaE3Xyce",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 7,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_7/defence_249.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH7%3AHV%3AAAAAAQAAAAMbEM6g96L5dqtdQLeb6XA9",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 7,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_7/defence_248.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH7%3AHV%3AAAAAAQAAAAMYWSfr6sgq4DHAdDqiKqSd",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 8,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_8/defence_292.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH8%3AHV%3AAAAACAAAAAL4OTG0cmCCra8lVXNKWIQB",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 8,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_8/defence_291.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH8%3AHV%3AAAAACAAAAALtYX3Yrb1gc6hvBNVpymg6",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 8,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_8/defence_290.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH8%3AHV%3AAAAACAAAAALlbrUtdMfvuXwjwz08O_ov",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 8,
+    "type": "defense",
+    "checked": "2026-10-25",
+    "source": "https://clashofclans-layouts.com/plans/th_8/defence/",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH8:HV:AAAACAAAAAKHMv095tzzn-4u5gjAZcqY",
+    "method": "native_import",
+    "status": "candidate; import not yet verified"
+  },
+  {
+    "hall": 9,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_9/defence_261.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH9%3AHV%3AAAAAKwAAAAKarrwLQvPmi32q0jzCkExg",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 9,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_9/defence_260.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH9%3AHV%3AAAAAKwAAAAKPWriIpNgEMjL9L4i5ze_6",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 9,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_9/defence_259.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH9%3AHV%3AAAAAKwAAAAKPW0weLSa4Es9gxkloKYkV",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 10,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_10/defence_282.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH10%3AHV%3AAAAASAAAAAIc5PxKvKzmROTVGMQQ9ECe",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 10,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_10/defence_281.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH10%3AHV%3AAAAASAAAAAIbTPlnQfZkkdA7Y9_hGdh9",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 10,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_10/defence_280.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH10%3AHV%3AAAAASAAAAAIZJcLNdQL4rfraBiZ56EVy",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 11,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_11/defence_139.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH11%3AHV%3AAAAAFwAAAAK98KcxqFwm3I3X9hkbCbYz",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 11,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_11/defence_138.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH11%3AHV%3AAAAAFwAAAAK79yJ2dod-DyKOzG3hApHC",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 12,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_12/defence_154.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH12%3AHV%3AAAAAMQAAAAKQo3tQ9s0-qDbj9b5XPdV_",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 12,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_12/defence_153.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH12%3AHV%3AAAAAMQAAAAKPTTKTA5X97JIvZ1vI3zIa",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 12,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_12/defence_152.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH12%3AHV%3AAAAAMQAAAAKLOj_-vWHWMDIxOF57w6mn",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 12,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://blueprintcoc.com/blogs/town-hall-12/new-th12-bases",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH12:HV:AAAAGAAAAAKKlnLtg_BUshqw-g_0v2un",
+    "method": "native_import",
+    "status": "candidate; native compatibility and defense performance unverified"
+  },
+  {
+    "hall": 12,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashbaselink.com/th12-base-layout/",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH12:HV:AAAAQwAAAAJMPr5QrgBHUSovf4AC8v95",
+    "method": "native_import",
+    "status": "candidate; native compatibility and defense performance unverified"
+  },
+  {
+    "hall": 12,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashloot.gg/coc/bases/th12-ranked-anti-3-star-th12-trophy-base-with-cake-a-pult-anti-3-star-asymmetric-compartment-push-layout-32179680-7091-4c10-b522-e00cac6d8dc9",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH12:HV:AAAATgAAAAIOoYZ5MQRPP4nthJiPfo-T",
+    "method": "native_import",
+    "status": "candidate; preview includes Hero Hall and Workshop; native completion required"
+  },
+  {
+    "hall": 12,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashloot.gg/coc/bases/th12-ranked-anti-2-star-th12-trophy-base-with-cake-a-pult-anti-2-star-symmetrical-diamond-trophy-push-layout-10fcd2d3-d39b-44db-97bc-caef3184fed6",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH12:HV:AAAATgAAAAIOoYfSsVaADcUJ-wzKNK_0",
+    "method": "native_import",
+    "status": "candidate; native compatibility and defense performance unverified"
+  },
+  {
+    "hall": 13,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_13/defence_152.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH13%3AHV%3AAAAADgAAAALrEaUl25FDe2_-P2EkzY2r",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 13,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_13/defence_151.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH13%3AHV%3AAAAADgAAAALlTq6XB_NYnXl9lircHDHP",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 13,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_13/defence_150.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH13%3AHV%3AAAAADgAAAALkDq6KXLF6ZnjspBHakgky",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 14,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_14/defence_104.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH14%3AHV%3AAAAAQAAAAAJeNZ9M5FStt8NnW3rg_0ZO",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 14,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_14/defence_103.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH14%3AHV%3AAAAAQAAAAAJeM68GU96sB-lnlToI9IGs",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 14,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_14/defence_102.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH14%3AHV%3AAAAAQAAAAAJeMiXrmwpB2vs7bYmClnYj",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 15,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_15/defence_100.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH15%3AHV%3AAAAARQAAAAJReRgPsI1jH8Oaveg1pODw",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 15,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_15/defence_99.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH15%3AHV%3AAAAARQAAAAJQaCsOUKDj8TtIw8ORivVX",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 15,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_15/defence_98.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH15%3AHV%3AAAAARQAAAAJOZeKKxYBdizw9fgX4Z8NF",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 16,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_16/defence_86.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH16%3AHV%3AAAAAEAAAAALkf2xGesbNVQGjNdVlGlsD",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 16,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_16/defence_85.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH16%3AHV%3AAAAAEAAAAALjjXM2iPYmsj2_mFch0ogX",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 16,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_16/defence_84.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH16%3AHV%3AAAAAEAAAAALjQGnTFi4mBe9Mxeh9LRPE",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 17,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_17/defence_85.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH17%3AHV%3AAAAAWAAAAAH68onPASb3PgRk_wHUT6Uc",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 17,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_17/defence_84.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH17%3AHV%3AAAAAWAAAAAH2tK3pA1Blww5DJzFBFKGc",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 17,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_17/defence_83.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH17%3AHV%3AAAAAWAAAAAH6vSDV2z3ulRKbiaLE7HrV",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 18,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_18/defence_95.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH18%3AHV%3AAAAAVwAAAAH7FtW3jr_jeLSy_boTEu__",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 18,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_18/defence_94.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH18%3AHV%3AAAAAVwAAAAH7Eii12GMBLOUNoGDSldVg",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 18,
+    "type": "defense",
+    "checked": "2026-10-25",
+    "source": "https://clashofclans-layouts.com/plans/th_18/defence_92.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH18:HV:AAAAVwAAAAH6Tyu58rMeUGhm7u-y7jgG",
+    "method": "native_import",
+    "status": "candidate; import not yet verified"
+  },
+  {
+    "hall": 18,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_18/defence_1.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH18:HV:AAAAVwAAAAHoFrH1PNk1G5kTWuzdAhFB",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 18,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_18/defence_2.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH18:HV:AAAAVwAAAAHZozLoe56HTHZakxcsItOJ",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  },
+  {
+    "hall": 16,
+    "type": "defense",
+    "checked": "2026-10-26",
+    "source": "https://clashofclans-layouts.com/plans/th_16/defence_1.html",
+    "link": "https://link.clashofclans.com/en/?action=OpenLayout&id=TH16:HV:AAAAVwAAAAGzLN0N4pThO4xlT7vNQZgt",
+    "method": "native_import",
+    "status": "copy link found on source; native compatibility unverified"
+  }
+]

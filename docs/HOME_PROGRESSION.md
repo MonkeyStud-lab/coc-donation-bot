@@ -1,7 +1,51 @@
 # Home Village progression
 
+Wall upgrades use the native **Upgrade More** selector when its controls can be
+verified. The bot adds one wall at a time and checks the count and total price
+after every change. With no reserve, it previews one unaffordable wall and removes
+one; with a configured reserve, it stops at the reserve-safe maximum. It never
+uses gems, wall rings, or other items. Unknown controls stop the batch.
+
+The selected count, unit price, total price, currency and before balance are
+saved before requesting payment. The dedicated **Upgrade Walls** dialog must
+name the exact total and gold/elixir currency on two fresh frames. Confirmation
+is attempted once. Two complete inventories must then show the expected wall
+queue reduction and matching resource deduction. Interrupted receipts reconcile
+without buying another batch. A single-wall fallback remains for recognized
+panels without Upgrade More.
+
+The Laboratory is the first building priority when an eligible upgrade is
+available. New construction follows, then other buildings and walls. The Town
+Hall still requires a complete, readable, unfiltered inventory proving all
+available buildings are finished; unaffordable rows do not count as maxed.
+
+Defensive/trophy references for Town Halls 4–18 are kept in
+`src/coc_bot/layouts/catalog.json`, with multiple official copy links per Hall.
+References are candidates, not a promise of defensive performance or compatibility
+with a later game update. Exact copy links are restricted to the official domain
+and the saved account's Hall. TH2/3 stay unchanged until the native editor unlocks.
+
+**Automatic defensive layouts** is a separate account setting. It first clears
+permitted obstacles throughout the build zone using an inactive native editor.
+Only after that survey finishes does it test imported layouts against the actual
+owned inventory. Complete native fits take priority; after testing candidates,
+at most six verified leftover items may be placed with native green-floor and
+inventory receipts. Large merge/inventory mismatches need another reference,
+not mass placement or automatic merging. Activation requires
+all owned buildings to be placed, followed by an independent match between the
+active preview and two actual Home screenshots. Seasonal clearing and replacement
+of occupied inactive slots each need their own enabled option. Gems and shovels
+are excluded, and the original active slot is kept until its replacement is ready.
+
+State and payment receipts are account-scoped at `data/layouts/state.json`.
+Bounded visits can save and resume incomplete drafts, and unresolved edits or
+payments block switching. Default-terrain registration and native editor support
+are required; TH2/3 do not yet have an automatic native-copy path. See
+[automatic layouts](AUTOMATIC_LAYOUTS.md) for settings, geometry, checkpoint and
+recovery behavior. Profile backups do not back up native game layout slots.
+
 Village progression is an opt-in extension to automatic farming and building
-upgrades. Enable **Settings → Upgrades → Village progression** on the selected
+upgrades. Enable **Settings â†’ Upgrades â†’ Village progression** on the selected
 account. The account also needs the Farming and/or Upgrading role, the relevant
 automatic schedules, and suitable resource reserves. A role alone does not turn
 on a schedule. Settings and transaction history remain separate for each account.
@@ -17,6 +61,28 @@ Before an automatic attack, the app reads the Town Hall's next-level badge in th
 Build list on two screenshots. It uses that to establish the current level without
 opening a Town Hall purchase. It then opens My Army, checks the occupied and total
 camp space, and identifies the current troop cards twice.
+An empty army is supported: the wide empty layout must show zero occupied camp
+space and the exact troop-row **Tap to edit** prompt on two fresh frames before
+the troop picker opens. An empty Clan Castle area does not qualify. The bot then
+reads unlocked troop levels and Info panels before adding any troops.
+The native picker font includes higher-level digit shapes as well as starter
+level 1. Gray cards without a verified level remain locked. A dropped Info
+level 1 can be resolved only from its separate visible yellow numeral, not from
+the expected picker value alone.
+
+After a battle, the blue **Star Bonus received!** reward can cover the village
+while its Build and Battle buttons remain visible behind it. Its exact title,
+Treasury-delivery message and enabled **Okay** control must match on two fresh
+frames before acknowledgment. Home confirmation continues after that window
+closes; it cannot itself complete the attack checkpoint.
+An uncertain first badge or a slightly moving row gets a bounded wait for two
+consecutive matching rows and levels. Saved account metadata never fills an
+unreadable level, and conflicting readings still block preparation.
+The complete badge must account for every visible digit; an observed level
+below the verified saved account level is rejected. The first-use Battle Menu
+instruction can be dismissed after its exact caption and speech-bubble corners
+match twice, before Edit Army is used. Other dimmed or unknown instructions do
+not authorize army input.
 
 Only verified unlocked troops qualify. A gray troop portrait alone does not prove
 an unlock: the troop picker must show a readable level badge and matching artwork
@@ -66,15 +132,22 @@ edges, camera movement, or unclear battle controls still block deployment. This
 path is restricted to a freshly verified TH2 army; other accounts retain the
 normal multi-view mapper.
 
+If a verified Dragon or Electro Dragon army lacks a recognized filler troop,
+army preparation can retain the mass-air family and leave spare camp space
+empty. It never assumes an unrecognized filler is unlocked. Fresh troop
+identities, quantities and actual housing must still agree before deployment.
+
 ## Building order and Town Hall gate
 
 The progression reader scans the complete unfiltered building list, including
-Other upgrades. It gives new gold/elixir buildings priority over existing upgrades.
+Other upgrades. The Laboratory takes first priority; new gold/elixir buildings
+then take priority over other existing upgrades.
 New construction applies a resource filter before selecting its fresh row, so
 gem-only purchases are removed from the candidate list. Existing upgrades favor
 offensive capacity and storage; walls are handled as instant upgrades. Exact
-payment must accompany either the selected wall's level increase or a two-frame,
-one-wall decrease in the queue at the same verified target level and price.
+payment must accompany either the selected wall's level increase or a two-frame
+decrease by the purchased wall count in the queue at the same verified target
+level and unit price.
 When the final wall leaves that queue, two complete readable inventories must
 confirm its absence; a missing row on a scrolled page is insufficient.
 
@@ -107,11 +180,13 @@ a bounded set of positions. A stable green checkmark and matching red cancel
 control are required before paying. Positions scale with the observed controls,
 including zoomed and tall-building previews.
 
-**Clear ordinary obstacles** is a separate opt-in. It runs only when placement
-searches fail, and only for a recognized ordinary tree, trunk, bush, mushroom,
-stone, rock, or log with matching gold/elixir removal prices on two screenshots.
-It respects reserves and free-builder requirements. Special obstacles, decorations,
-gem charges, and unknown names are left alone. The next construction check retries
+**Clear ordinary obstacles** is a separate opt-in. It runs when placement searches
+fail and recognizes ordinary trees, trunks, bushes, mushrooms, stones, rocks, and
+logs. **Remove seasonal obstacles** separately permits other named obstacles with
+the same verified Remove command and gold/elixir price on two screenshots.
+Both respect reserves and free builders, journal the payment, and check the
+matching resource deduction and no gem loss. Gem charges, shovels, storage actions,
+and unreadable names/prices remain excluded. The next construction check retries
 after clearing finishes.
 
 This version does not repack the whole base or move existing buildings. If bounded
@@ -142,7 +217,18 @@ Calibration is not rewritten by progression. Back up the persistent profile volu
 before a new-account trial, and keep its schedules disabled until a supervised
 attack and upgrade check succeed.
 
-## Supervised TH2 pilot, October 24–25, 2026
+Sparse starter battlefields use the complete visible footprint outline to build
+an enclosing deployment envelope. Short stepped fragments are retained, but both
+diagonal directions, clear screen boundaries, and two stationary observations
+remain required. Missing or moving outlines never authorize troop inputs.
+Small white starter resource counters use the inspected capacity/price font
+variants with the usual strict matching thresholds. Conflicting readings still
+block spending.
+An inspected My Army heading also handles an observed OCR error without guessing
+troop counts. Its heading and close control can recover a failed army read before
+an account handoff; unknown or covered controls do not authorize input.
+
+## Supervised TH2 pilot, October 24â€“25, 2026
 
 The live pilot built an Elixir Collector, Gold Mine, Cannon, and Archer Tower,
 then started and reconciled the Army Camp level-2 upgrade. Resource deductions
@@ -180,7 +266,37 @@ timer fallback, and recorded its next randomized farming interval. The normal
 loop then resumed building checks.
 
 These observations do not certify later Town Halls, automatic whole-base
-rearrangement, obstacle removal, or Laboratory progression. Obstacle and Laboratory
-spending still need their own supervised trials on suitable targets. The final-wall
+rearrangement, or Laboratory progression. Laboratory spending still needs its
+own supervised trial on a suitable target. The final-wall
 complete-inventory check is covered by regression tests; the pilot has not yet
 reached the last wall in its queue.
+
+A separate supervised high-Town-Hall test removed anniversary cakes for 14 gold
+each and a Curious Stump for 2,026 elixir, with matching deductions and an unchanged
+gem balance. Seasonal removal required its own enabled setting. The inspected
+low/high Home builder counters and the later Dark Elixir/gem HUD rows have
+regression examples; unverified availability or prices still block removal.
+Copied defensive layouts remain inactive drafts until all existing buildings are
+placed and the game accepts the layout. Missing buildings keep empty footprints;
+saving an incomplete draft does not make it a valid active village.
+
+Upgrade passes give buildings, Laboratory, and pets a turn, then revisit building
+upgrades after each confirmed start to fill remaining available builders. Each
+attempt rereads resources, availability, and confirmation details. A pass is
+bounded to ten attempts and stops for an uncertain payment or a waiting donation
+request. Remaining work is revisited on later checks. Farming troops retain
+Laboratory priority; other verified research can follow once those priorities
+are finished. Resource reserves, explicit exclusions, locked facilities, and
+unreadable screens can legitimately leave a slot idle.
+
+If automatic attack mapping cannot verify a deployment boundary before any
+deployment attempt, it uses the verified End Battle control and confirms Home
+instead of waiting through the match timer. A durable recovery marker preserves
+this intent across restart. Once deployment may have occurred, normal battle-end
+recognition and conservative recovery still apply.
+
+Affordable new structures retain priority after the Laboratory. If a named new
+structure is unaffordable or unsupported, independently verified affordable existing
+upgrades can keep other builders working. The incomplete construction queue still
+blocks Town Hall advancement. An unreadable price on a named existing structure
+is skipped individually; unknown construction identities remain a blocker.

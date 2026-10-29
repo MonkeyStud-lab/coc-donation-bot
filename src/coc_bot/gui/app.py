@@ -1808,51 +1808,9 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         self._refresh_farm_status()
 
     def _farm_timer_text(self) -> str:
-        if self._farm_oneshot_running():
-            self._farm_timer_frozen_text = None
-            return "running"
         config = load_config()
-        if not config.farm_enabled:
-            self._farm_timer_frozen_text = None
-            return "off"
-        if not config.farm_calibrated:
-            self._farm_timer_frozen_text = None
-            return "—"
-        from coc_bot.config import normalize_farm_deploy_sequence
-
-        if not normalize_farm_deploy_sequence(config.farm_deploy_sequence).get("taps"):
-            self._farm_timer_frozen_text = None
-            return "—"
-
-        bot = self._bot
-        running = self._bot_running() and bot is not None
-        if running:
-            self._farm_timer_frozen_text = None
-            if getattr(bot, "farm_queued", False):
-                return "due"
-            tracker = bot.tracker
-        else:
-            from coc_bot.runtime.tracker import RuntimeTracker
-
-            tracker = RuntimeTracker(config)
-            # Ensure the persisted farm clock is frozen while stopped (idempotent).
-            tracker.pause_farm_clock()
-
-        since = tracker.seconds_since_last_farm()
-        interval = tracker.effective_farm_interval_seconds()
-        if since is None:
-            text = "due"
-        else:
-            remaining = max(0.0, interval - since)
-            text = "due" if remaining <= 0 else format_countdown(remaining)
-
-        if not running:
-            if text != "due":
-                text = f"{text} · paused"
-            self._farm_timer_frozen_text = text
-        else:
-            self._farm_timer_frozen_text = None
-        return text
+        if not config.farm_enabled:return "off"
+        return f"refill below {config.farm_resource_start_percent}% → {config.farm_resource_target_percent}%"
 
     def _break_status(self) -> tuple[bool, float]:
         """Return ``(on_break, remaining_seconds)``.

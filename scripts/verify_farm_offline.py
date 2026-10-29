@@ -36,6 +36,9 @@ def main() -> int:
     farm_keys = {f.key for f in SETTINGS if f.section == "Farm"}
     assert "farm_enabled" in farm_keys
     assert "farm_deploy_side" in farm_keys
+    assert "farm_resource_start_percent" in farm_keys
+    assert "farm_resource_target_percent" in farm_keys
+    assert "farm_interval_seconds" not in farm_keys
     assert "farm_edrag_deploy_taps" not in farm_keys
     assert "farm_deploy_siege" not in farm_keys
 

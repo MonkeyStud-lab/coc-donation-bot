@@ -276,10 +276,17 @@ def recover_attack(session, *, tracker=None):
     previous_at = 0.
     returning = state['phase'] in ('returning_home', 'home_confirmed')
     logger.warning('Recovering interrupted attack ({}) — deployment will not be replayed', state['phase'])
+    if state['phase']=='aborting_unstarted' and not state.get('deployment_possible'):
+        from coc_bot.attack.abort import leave_unstarted_opponent
+        leave_unstarted_opponent(session)
     while time.monotonic() < deadline:
         check_stop(stop)
         frame = session.capture.screenshot()
         check_stop(stop)
+        from coc_bot.progression.home import recover_home_bonus
+        if donation is not None and recover_home_bonus(donation,frame):
+            session._sleep(.6)
+            continue
         if donation is not None and nav.classifier._clan_chat_anchor_visible(frame):
             home = True
             if (session.config.data_dir/'attack-planner/camera-pending.json').exists():

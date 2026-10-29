@@ -56,14 +56,6 @@ class ControlService:
         config = load_config()
         state = load_runtime_state(config.data_dir / "runtime_state.json")
         farm = None
-        if config.farm_enabled and state.last_farm_at:
-            try:
-                last = datetime.fromisoformat(state.last_farm_at)
-                paused = datetime.fromisoformat(state.farm_paused_at) if state.farm_paused_at else last
-                farm = max(0, (state.next_farm_interval_seconds or config.farm_interval_seconds)
-                           - (paused-last).total_seconds())
-            except (TypeError, ValueError):
-                pass
         self._timer_snapshot = {"farm_seconds": farm,
             "break_seconds": max(0, (state.next_session_limit_seconds or config.session_limit_seconds)
                                  - state.active_seconds)}
@@ -90,7 +82,7 @@ class ControlService:
         with self.lock:
             self.idle()
             if self.accounts:
-                account = self.accounts.store.require_ready()
+                account = self.accounts.store.require_ready(allow_layout_recovery=True)
                 if account and not account['roles']:
                     raise ValueError('Choose at least one account role before starting automation')
             self.capture_recovery.cancel.clear()
@@ -101,9 +93,16 @@ class ControlService:
             if not config.calibrated:
                 raise ValueError("Finish the required Setup parts first.")
             self.operation, self.result = "bot", None
-            if not self.controller.start(RunOptions(dry_run=practice)):
+            if not self._start_bot(RunOptions(dry_run=practice)):
                 raise BusyError("Bot is stopping. Try again when it has stopped.")
             self.events.append("INFO", "Bot starting")
+
+    def _start_bot(self, options):
+        if self.accounts:
+            from coc_bot.accounts.rotation import RotationStore,AccountFleet
+            if RotationStore(self.accounts.store).load()['enabled'] and not options.dry_run:
+                return self.controller.start(options,factory=lambda o:AccountFleet(self.accounts.store,o))
+        return self.controller.start(options)
 
     def stop(self):
         with self.lock:
@@ -127,6 +126,7 @@ class ControlService:
         from coc_bot.control.settings import validate_settings, save_settings
         values = deepcopy(values)
         with self.lock:
+            if self.accounts:self.accounts.store.require_ready()
             validate_settings(values, expected_revision)
             if self.settings_update or self.manual_owner or any(
                 p.controller.snapshot().active or p.manual_owner or p.settings_update for p in self.peers
@@ -160,6 +160,7 @@ class ControlService:
                     raise BusyError("Settings update canceled. The bot will not restart.")
                 if state.error:
                     raise RuntimeError("Bot failed before settings could be applied: " + state.error)
+                if self.accounts:self.accounts.store.require_ready()
                 self.settings_update = "Applying settings and restarting"
                 # Recheck the revision after waiting; never overwrite another editor.
                 from coc_bot.config import load_config
@@ -167,7 +168,7 @@ class ControlService:
                 with DeviceLease(load_config().adb_device):
                     result = save_settings(values, expected_revision)
                 self._finished_generation = -1
-                if not self.controller.start(options):
+                if not self._start_bot(options):
                     raise RuntimeError("Settings saved, but the bot could not restart.")
                 self.events.append("INFO", "Settings saved — bot restarting")
                 return result | {"restarted": True}
@@ -314,16 +315,18 @@ class ControlService:
                     "scrolling_chat": "Checking requests", "opening_donation": "Opening donation",
                     "donating": "Donating", "attack_menu": "Opening attack", "matchmaking": "Finding opponent",
                     "in_battle": "In battle", "battle_results": "Leaving battle", "returning_home": "Returning home",
-                    "recovering": "Recovering", "on_break": "On break"}.get(phase)
+                    "recovering": "Recovering", "on_break": "On break", "layouts":"Arranging layout"}.get(phase)
                 tracker = getattr(bot, "tracker", None)
                 if tracker is not None:
-                    since = tracker.seconds_since_last_farm()
                     self._timer_snapshot = {
-                        "farm_seconds": max(0, tracker.effective_farm_interval_seconds() - since)
-                        if since is not None and bot.config.farm_enabled else None,
+                        "farm_seconds": None,
                         "break_seconds": max(0, tracker.peek_remaining_seconds()),
                     }
                     self._break_active = False
+                    from coc_bot.accounts.rotation import AccountFleet
+                    if isinstance(bot,AccountFleet):
+                        self._timer_snapshot['farm_seconds']=bot.farm_remaining_seconds
+                        if bot.activity.startswith('Switching to '):activity=bot.activity
                     until_text = getattr(getattr(tracker, "state", None), "break_until", None)
                     if until_text:
                         from datetime import datetime, timezone
@@ -337,10 +340,19 @@ class ControlService:
                                 self._timer_snapshot["break_seconds"] = remaining
                         except ValueError:
                             pass
+            from coc_bot.accounts.store import read
+            from coc_bot.config import load_config
+            config=(getattr(bot,'config',None) if bot is not None and state['active'] else None) or load_config()
+            resource=read(config.data_dir/'resources/home.json',{})
+            farming={'enabled':config.farm_enabled,'start_percent':config.farm_resource_start_percent,
+                     'target_percent':config.farm_resource_target_percent,'status':resource.get('status','unchecked'),
+                     'message':resource.get('message'),'observation':resource.get('observation'),
+                     'observed_at':resource.get('observed_at')}
             return state | {"operation": self.operation, "result": self.result,
                             "account": self.accounts.store.account() if self.accounts else None,
                             "account_pending": bool(self.accounts and self.accounts.store.load().get('pending')),
                             "timers": dict(self._timer_snapshot),
+                            "resource_farming": farming,
                             "manual_control": self.manual_owner is not None,
                             "settings_update": self.settings_update,
                             "platform": self.platform.snapshot() if self.platform is not None else None,

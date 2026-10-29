@@ -18,6 +18,7 @@ class GameState(str, Enum):
     UNKNOWN = "unknown"
     HOME = "home"
     UPGRADING = "upgrading"
+    LAYOUTS = "layouts"
     BUILDER_BASE = "builder_base"
     CLAN_CHAT = "clan_chat"
     SCROLLING_CHAT = "scrolling_chat"
@@ -40,6 +41,7 @@ LOOP_STATE_TO_GAME: dict[str, GameState] = {
     "open_donation": GameState.OPENING_DONATION,
     "donate": GameState.DONATING,
     "ensure_chat": GameState.CLAN_CHAT,
+    "layouts": GameState.LAYOUTS,
 }
 
 # Frequent chat idle chatter — log at debug when expected.
@@ -176,6 +178,7 @@ _VALID_TRANSITIONS: dict[GameState, frozenset[GameState]] = {
 
 
 _ACTIVITY_BY_STATE: dict[GameState, str] = {
+    GameState.LAYOUTS: "Arranging village layout",
     GameState.UPGRADING: "Checking recommended upgrades",
     GameState.BUILDER_BASE: "Visiting Builder Base",
     GameState.CLAN_CHAT: "Watching clan chat",
@@ -194,8 +197,10 @@ _ACTIVITY_BY_STATE: dict[GameState, str] = {
 
 _VALID_TRANSITIONS[GameState.UPGRADING] = frozenset({GameState.HOME,GameState.CLAN_CHAT,
                                                   GameState.RECOVERING,GameState.UNKNOWN})
+_VALID_TRANSITIONS[GameState.LAYOUTS] = frozenset({GameState.HOME,GameState.CLAN_CHAT,
+                                                GameState.RECOVERING,GameState.UNKNOWN})
 for _origin in (GameState.HOME, GameState.CLAN_CHAT, GameState.SCROLLING_CHAT):
-    _VALID_TRANSITIONS[_origin] = _VALID_TRANSITIONS[_origin] | {GameState.BUILDER_BASE}
+    _VALID_TRANSITIONS[_origin] = _VALID_TRANSITIONS[_origin] | {GameState.BUILDER_BASE,GameState.LAYOUTS}
 _VALID_TRANSITIONS[GameState.BUILDER_BASE] = frozenset({GameState.CLAN_CHAT, GameState.RECOVERING,
                                                      GameState.UNKNOWN})
 

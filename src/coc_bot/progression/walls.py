@@ -8,11 +8,17 @@ from coc_bot.vision.battle_menu import _white_label
 
 
 def wall_panel(frame, stop=None):
-    title=selected_title(frame,(.255,.640,.47,.697),stop)
+    title=selected_title(frame,(.24,.640,.50,.697),stop)
     match=re.fullmatch(r'walllevel(\d{1,2})',re.sub(r'[^a-z0-9]','',title.lower()))
     if not match:return None
     level=int(match[1])
     if not 1<=level<=30:return None
+    from coc_bot.progression.bulk_walls import payments
+    candidates=payments(frame,stop)
+    candidate=next((v for v in candidates if v['currency']=='gold'),next(iter(candidates),None))
+    if candidate:
+        return {'level':level,'cost':candidate['price'],'currency':candidate['currency'],
+                'upgrade':True,'point':candidate['pay']}
     import cv2
     button_label=crop(frame,(.489,.808,.572,.857))
     mask=cv2.inRange(cv2.cvtColor(button_label,cv2.COLOR_BGR2HSV),(0,0,205),(180,70,255))
@@ -25,6 +31,47 @@ def wall_panel(frame, stop=None):
 
 class WallUpgrade:
     def __init__(self,runner):self.r=runner
+
+    def recover(self, state):
+        pending=state.get('pending',{})
+        remaining,target=pending.get('remaining_before'),pending.get('target_level')
+        before,cost=pending.get('balance_before'),pending.get('cost')
+        count=pending.get('count',1)
+        unit_cost=pending.get('unit_cost',cost)
+        if (pending.get('kind')!='wall' or any(type(v) is not int for v in (remaining,target,before,cost))
+            or remaining<1 or cost<=0 or type(count) is not int or not 1<=count<=remaining
+            or type(unit_cost) is not int or unit_cost*count!=cost
+            or pending.get('currency') not in ('gold','elixir')):
+            return {'status':'needs_review','message':'Wall receipt lacks an independent before observation'}
+        r=self.r
+        if 'unit_cost' in pending:
+            from coc_bot.progression.bulk_walls import confirmation
+            frame=r.capture.screenshot()
+            point=confirmation(frame,cost,pending['currency'],r.stop)
+            if point:
+                if pending.get('confirmation_attempts',0)>=1:
+                    return {'status':'needs_review','message':'Bulk wall confirmation was already sent; no repeated payment'}
+                if r.stopped() or confirmation(r.capture.screenshot(),cost,pending['currency'],r.stop)!=point:
+                    return {'status':'needs_review','message':'Bulk wall payment confirmation changed'}
+                pending.update(phase='paying',confirmation_attempts=1)
+                write_json(r.path,state)
+                if r.stopped():return {'status':'needs_review'}
+                r.input.tap(*point,jitter=0)
+                if r.wait(.8):return {'status':'needs_review'}
+        for _ in range(2):
+            if r.stopped():return {'status':'stopped'}
+            r.close();frame=r.open_menu('buildings')
+            if frame is None:return {'status':'stopped'}
+            inventory=r.scan(frame)
+            balance=inventory.get('balances',{}).get(pending['currency'])
+            if (not inventory.get('complete') or not inventory.get('unfiltered') or inventory.get('unknown')
+                or type(balance) is not int or not before-cost<=balance<before
+                or queue_count(inventory['rows'],pending|{'cost':unit_cost},target,complete=True)!=remaining-count):
+                return {'status':'needs_review','message':'Wall level queue and payment could not both be verified'}
+        state['last_completed']=state.pop('pending')|{'phase':'confirmed','level_after':target,
+                                                     'receipt_method':'two_complete_wall_queues'}
+        write_json(r.path,state)
+        return {'status':'recovered','message':'Previous wall upgrade independently confirmed; no payment repeated'}
 
     def run(self,row):
         if row.get('currency') not in ('gold','elixir'):
@@ -53,6 +100,9 @@ class WallUpgrade:
         counts=[queue_count(r.reader.rows(f),row,target) if r.reader.menu_kind(f)=='buildings' else None
                 for f in (first_frame,second_frame)]
         remaining=counts[0] if counts[0]==counts[1] else None
+        from coc_bot.progression.bulk_walls import control,BulkWalls
+        if type(remaining) is int and control(second_frame,'upgrade_more') is not None:
+            return BulkWalls(r).run(row,first,remaining,before)
         state['pending']={'kind':'wall','name':'Wall','cost':row['cost'],'currency':row['currency'],
                           'level_before':first['level'],'balance_before':before,'phase':'confirming','at':time.time(),
                           'remaining_before':remaining,'target_level':target}
@@ -75,6 +125,11 @@ class WallUpgrade:
             # Instant upgrades deselect the wall. In that layout, independently
             # verify that exactly one wall left this target-level/price queue.
             confirmed=self.confirm_queue(row,target,remaining,frame,before-row['cost'])
+        if not confirmed and balance==before-row['cost'] and type(remaining) is int:
+            # Instant upgrades can close the sidebar and deselect the wall.
+            # Reopen only the verified Build menu and read complete inventories.
+            result=self.recover(state)
+            if result['status']=='recovered':return result
         if not confirmed:
             return {'status':'needs_review','message':'Instant wall upgrade was not independently confirmed; repeat spending blocked'}
         state['last_completed']=state.pop('pending')|{'phase':'confirmed','level_after':target}

@@ -68,7 +68,7 @@ class PlannedLifecycleTests(TestCase):
         farmer.attack_nav.leave_chat_for_home.assert_not_called()
         farmer.input.tap.assert_not_called()
 
-    def test_failed_mapping_finishes_match_and_restores_camera(self):
+    def test_failed_mapping_abandons_without_timer_and_restores_camera(self):
         farmer = self.farmer()
         calls = []
         farmer.attack_nav.wait_for_battle_end.side_effect = lambda **kw: calls.append(('wait', kw))
@@ -78,13 +78,14 @@ class PlannedLifecycleTests(TestCase):
                 patch('coc_bot.attack.planned_farmer.remember_camera'), \
                 patch('coc_bot.attack.planned_farmer.restore_camera', side_effect=lambda s: calls.append(('restore', {}))), \
                 patch('coc_bot.attack.planned_farmer.survey', return_value={'projection': None}), \
+                patch('coc_bot.attack.abort.leave_unstarted_opponent',side_effect=lambda s:calls.append(('abandon',{})) or True), \
                 patch('coc_bot.attack.planned_farmer.VerifiedExecutor') as executor:
             result = run_planned_attack(farmer)
         self.assertFalse(result.success)
         self.assertTrue(result.counts_toward_interval)
         executor.assert_not_called()
-        self.assertEqual([c[0] for c in calls], ['restore', 'wait', 'home', 'restore', 'chat'])
-        self.assertEqual(calls[1][1]['timeout'], 225)
+        self.assertEqual([c[0] for c in calls], ['restore', 'abandon', 'restore', 'chat'])
+        farmer.attack_nav.wait_for_battle_end.assert_not_called()
 
     def test_uncertain_tap_uses_attempt_time_and_never_replays_plan(self):
         farmer = self.farmer()

@@ -37,6 +37,9 @@ class UpgradeRunner:
     def eligibility(self, kind, candidate, balances, availability):
         return reason(self.config, kind, candidate, balances, availability)
 
+    def payment_receipt(self,kind,candidate,confirmation,report,frame):
+        return {}
+
     def wait(self, seconds=.6):
         return interrupted_sleep(seconds,self.stop)
 
@@ -139,6 +142,18 @@ class UpgradeRunner:
         if kind not in ('buildings','research','pets'): raise ValueError('Unknown upgrade category')
         if self.stopped(): return {'status':'stopped'}
         state=self.state()
+        if (type(self) is UpgradeRunner and kind=='buildings' and not state.get('pending')
+            and getattr(self.config,'upgrade_lab_priority',False)):
+            frame=self.open_menu(kind)
+            if frame is None:return {'status':'stopped'}
+            available=self.reader.availability(frame,kind)
+            if available and available[0]>self.config.upgrade_builders_reserved:
+                from coc_bot.progression.runner import ProgressionRunner
+                runner=ProgressionRunner(self.config,self.capture,self.input,self.nav,self.stop)
+                preview=runner.run(kind,execute=False)
+                if preview.get('status')=='ready' and compact(preview['selected']['name'])=='laboratory':
+                    return runner.run(kind,execute=True,expected=expected) if execute else preview
+                if self.stopped():return {'status':'stopped'}
         recovery_kind=kind
         if 'pending' in state:
             pending=state['pending']
@@ -234,6 +249,7 @@ class UpgradeRunner:
                      'free_before':report['availability'][0],'phase':'confirming',
                      'active_before':active_before,
                      'at':datetime.now(timezone.utc).isoformat()}
+            pending.update(self.payment_receipt(kind,candidate,confirmation,report,frame))
             state['pending']=pending
             write_json(self.path,state) # durable intent BEFORE the spending tap
             if self.stopped():

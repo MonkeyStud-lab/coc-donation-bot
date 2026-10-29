@@ -28,7 +28,8 @@ class IconMatcher:
             scale_range=[0.7, 0.85, 1.0, 1.15, 1.3],
         )
         root = Path(__file__).resolve().parents[3]
-        self.icons_dir = icons_dir or (root / "data" / "icons")
+        self.icons_dir = icons_dir or next((p for p in (config.data_dir/'icons',root/'data/icons',Path.cwd()/'data/icons')
+                                            if p.exists() and any(p.rglob('*.webp'))),config.data_dir/'icons')
         self.units = load_units()
         self._templates: dict[str, np.ndarray] | None = None
 
@@ -54,6 +55,11 @@ class IconMatcher:
             if img is None or img.size == 0:
                 continue
             templates[unit_id] = img
+        # Native donation portraits differ from the standalone game artwork.
+        # Inspected cropped references preserve a strict matching threshold.
+        for path in (Path(__file__).parents[1]/'vision/assets').glob('donation_unit_*.png'):
+            img=cv2.imread(str(path))
+            if img is not None:templates[path.stem.removeprefix('donation_unit_')]=img
 
         logger.info("Loaded {} unit icons from {}", len(templates), self.icons_dir)
         self._templates = templates
@@ -72,6 +78,7 @@ class IconMatcher:
 
         best_id: str | None = None
         best_conf = -1.0
+        second_conf = -1.0
         for unit_id, template in templates.items():
             stats = self.units.get(unit_id)
             if preferred_categories and stats is not None:
@@ -89,10 +96,13 @@ class IconMatcher:
                 continue
             match = self.matcher.find(cell, scaled)
             if match is not None and match.confidence > best_conf:
+                second_conf = best_conf
                 best_conf = match.confidence
                 best_id = unit_id
+            elif match is not None:
+                second_conf=max(second_conf,match.confidence)
 
-        if best_id is None:
+        if best_id is None or best_conf-second_conf<.03:
             return None
         return best_id, best_conf
 

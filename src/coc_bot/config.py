@@ -52,6 +52,7 @@ class BotConfig:
     frame_width: int = 0
     donation_enabled: bool = True
     account_tag: str | None = None
+    account_town_hall: int | None = None
     account_roles: tuple[str, ...] = ()
     frame_height: int = 0
     rois: dict[str, list[float]] = field(default_factory=dict)
@@ -75,9 +76,13 @@ class BotConfig:
     farm_enabled: bool = False
     progression_enabled: bool = False
     progression_clear_obstacles: bool = False
+    progression_clear_seasonal_obstacles: bool = False
     progression_rearrange: bool = True
+    layouts_enabled: bool = False
+    layouts_replace_inactive: bool = False
     farm_engine: str = 'sequence'
     upgrade_buildings_enabled: bool = False
+    upgrade_lab_priority: bool = True
     upgrade_research_enabled: bool = False
     upgrade_pets_enabled: bool = False
     upgrade_pets_include_assigned: bool = False
@@ -91,12 +96,15 @@ class BotConfig:
     builder_base_upgrades_enabled: bool = False
     builder_base_collect_resources: bool = False
     builder_base_research_enabled: bool = False
+    builder_base_progression_enabled: bool = False
     builder_base_elixir_reserve: int = 100_000
     builder_base_interval_seconds: int = 3600
     builder_base_builders_reserved: int = 0
     builder_base_gold_reserve: int = 100_000
     farm_interval_seconds: int = 3600
     farm_interval_variance_seconds: int = 300
+    farm_resource_start_percent: int = 75
+    farm_resource_target_percent: int = 95
     farm_deploy_side: str = "left"
     farm_pan_swipes: float = 3.0
     farm_deploy_jitter_px: int = 6
@@ -341,9 +349,13 @@ def load_config(
         farm_enabled=bool(farm.get("enabled", False)),
         progression_enabled=progression.get('enabled') is True,
         progression_clear_obstacles=progression.get('clear_obstacles') is True,
+        progression_clear_seasonal_obstacles=progression.get('clear_seasonal_obstacles') is True,
         progression_rearrange=progression.get('rearrange', True) is True,
+        layouts_enabled=(merged.get('layouts') or {}).get('enabled') is True,
+        layouts_replace_inactive=(merged.get('layouts') or {}).get('replace_inactive') is True,
         farm_engine=str(farm.get('engine','sequence')) if farm.get('engine','sequence') in ('sequence','planner','automatic') else 'sequence',
         upgrade_buildings_enabled=upgrades.get('buildings_enabled') is True,
+        upgrade_lab_priority=upgrades.get('lab_priority',True) is True,
         upgrade_research_enabled=upgrades.get('research_enabled') is True,
         upgrade_pets_enabled=upgrades.get('pets_enabled') is True,
         upgrade_pets_include_assigned=upgrades.get('pets_include_assigned') is True,
@@ -357,12 +369,15 @@ def load_config(
         builder_base_upgrades_enabled=builder_base.get('upgrades_enabled') is True,
         builder_base_collect_resources=builder_base.get('collect_resources') is True,
         builder_base_research_enabled=builder_base.get('research_enabled') is True,
+        builder_base_progression_enabled=builder_base.get('progression_enabled') is True,
         builder_base_elixir_reserve=max(0,int(builder_base.get('elixir_reserve',100_000))),
         builder_base_interval_seconds=max(300,int(builder_base.get('interval_seconds',3600))),
         builder_base_builders_reserved=max(0,min(3,int(builder_base.get('builders_reserved',0)))),
         builder_base_gold_reserve=max(0,int(builder_base.get('gold_reserve',100_000))),
         farm_interval_seconds=int(farm.get("interval_seconds", 3600)),
         farm_interval_variance_seconds=max(0, int(farm.get("interval_variance_seconds", 300))),
+        farm_resource_start_percent=int(farm.get('resource_start_percent', 75)),
+        farm_resource_target_percent=int(farm.get('resource_target_percent', 95)),
         farm_deploy_side=deploy_side,
         farm_pan_swipes=max(0.0, float(farm.get("pan_swipes", 3))),
         farm_deploy_jitter_px=max(0, min(40, int(farm.get("deploy_jitter_px", 6)))),
@@ -392,6 +407,8 @@ def load_config(
         templates_dir=root / "data" / "templates",
     )
     from coc_bot.accounts.store import selected_account, apply_roles
+    from coc_bot.runtime.resource_farming import thresholds
+    thresholds(config.farm_resource_start_percent, config.farm_resource_target_percent)
     return apply_roles(config, selected_account.get())
 
 

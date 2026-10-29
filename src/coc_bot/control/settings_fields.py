@@ -37,6 +37,8 @@ def _pair(lo_hi: tuple[int, int]) -> str:
 
 # Shared by browser validation and desktop settings persistence.
 UPGRADE_INTEGER_LIMITS = {
+    'farm_resource_start_percent': (1, 99),
+    'farm_resource_target_percent': (2, 100),
     'builder_base_interval_seconds': (300, 86400),
     'builder_base_builders_reserved': (0, 3),
     'builder_base_gold_reserve': (0, 20_000_000),
@@ -51,16 +53,19 @@ UPGRADE_INTEGER_LIMITS = {
 
 SETTINGS: list[SettingField] = [
     SettingField('builder_base_collect_resources','Collect Builder Base resources','Collect verified mine/collector bubbles in both areas and defense rewards from the Elixir Cart. Works without attacks or upgrades.','bool',lambda c:c.builder_base_collect_resources,'Builder Base',('builder_base','collect_resources')),
-    SettingField('builder_base_research_enabled','Builder Base research','Upgrade the game’s recommended Night Witch using Builder Elixir. Other troop confirmation screens are not yet verified.','bool',lambda c:c.builder_base_research_enabled,'Builder Base',('builder_base','research_enabled')),
+    SettingField('builder_base_progression_enabled','Builder village progression','Prioritize the Star Laboratory, build missing structures, then upgrade existing buildings. Builder Hall advancement requires a complete max-building check.','bool',lambda c:c.builder_base_progression_enabled,'Builder Base',('builder_base','progression_enabled')),
+    SettingField('builder_base_research_enabled','Builder Base research','Use Builder Elixir for supported farming troops. Night Witch and the first Sneaky Archer upgrade are verified; unfamiliar confirmation screens pause safely.','bool',lambda c:c.builder_base_research_enabled,'Builder Base',('builder_base','research_enabled')),
     SettingField('builder_base_elixir_reserve','Builder Elixir to keep','Minimum Builder Elixir remaining after research.','int',lambda c:c.builder_base_elixir_reserve,'Builder Base',('builder_base','elixir_reserve')),
-    SettingField('builder_base_attacks_enabled','Builder Base attacks','Experimental: equip six Night Witches and Battle Machine first. Supports survivors and Battle Copter in stage two. Other starting armies are skipped. Returns home after one attack.','bool',lambda c:c.builder_base_attacks_enabled,'Builder Base',('builder_base','attacks_enabled')),
-    SettingField('builder_base_upgrades_enabled','Builder Base building upgrades','Start one eligible Suggested building upgrade paid with Builder Gold per visit. Excludes Builder Hall, heroes, walls, new construction, research, gems and items. Builder Elixir purchases are not supported yet.','bool',lambda c:c.builder_base_upgrades_enabled,'Builder Base',('builder_base','upgrades_enabled')),
-    SettingField('builder_base_interval_seconds','Builder Base visit interval (seconds)','Minimum time between completed visits. Donations take priority. Builder Base has its own schedule, separate from Home Village farming.','int',lambda c:c.builder_base_interval_seconds,'Builder Base',('builder_base','interval_seconds')),
+    SettingField('builder_base_attacks_enabled','Refill Builder Base resources','Use the Farm resource percentages to refill Builder storages before upgrade checks. Supports starter Barbarian camps or six Night Witches with Battle Machine. Unknown armies or counters defer farming; upgrade checks still run.','bool',lambda c:c.builder_base_attacks_enabled,'Builder Base',('builder_base','attacks_enabled')),
+    SettingField('builder_base_upgrades_enabled','Builder Base building upgrades','Use Builder Gold or Builder Elixir while keeping the selected reserves and spare builders. Progression adds construction and a gated Builder Hall check. Gems and items are excluded.','bool',lambda c:c.builder_base_upgrades_enabled,'Builder Base',('builder_base','upgrades_enabled')),
     SettingField('builder_base_builders_reserved','Builder Base builders to keep free','Only affects Builder Base builders.','int',lambda c:c.builder_base_builders_reserved,'Builder Base',('builder_base','builders_reserved')),
     SettingField('builder_base_gold_reserve','Builder Gold to keep','Minimum Builder Gold remaining after an upgrade.','int',lambda c:c.builder_base_gold_reserve,'Builder Base',('builder_base','gold_reserve')),
-    SettingField('progression_enabled','Village progression','Build new structures first, then improve the village and prepare farming armies from verified unlocks. Town Hall upgrades require a complete max-building check.','bool',lambda c:c.progression_enabled,'Upgrades',('progression','enabled')),
+    SettingField('progression_enabled','Village progression','Prioritize the Laboratory, build missing structures, then improve the village and prepare farming armies from verified unlocks. Town Hall upgrades require a complete max-building check.','bool',lambda c:c.progression_enabled,'Upgrades',('progression','enabled')),
     SettingField('progression_rearrange','Search for building space','Move the new-building preview to find a valid spot before paying. Ordinary-obstacle clearing is a separate option.','bool',lambda c:c.progression_rearrange,'Upgrades',('progression','rearrange')),
-    SettingField('progression_clear_obstacles','Clear ordinary obstacles','Allow verified gold/elixir removal of ordinary obstacles to create building space. Special obstacles and decorations stay in place.','bool',lambda c:c.progression_clear_obstacles,'Upgrades',('progression','clear_obstacles')),
+    SettingField('layouts_enabled','Automatic defensive layouts','Off by default. When enabled for this account, clear build-zone obstacles and import a matching defensive layout. Activate only after completion and Home village verification.','bool',lambda c:c.layouts_enabled,'Upgrades',('layouts','enabled')),
+    SettingField('layouts_replace_inactive','Replace inactive layouts','Allow automatic layouts to replace a spare inactive slot. The current active village is preserved until its replacement is complete.','bool',lambda c:c.layouts_replace_inactive,'Upgrades',('layouts','replace_inactive')),
+    SettingField('progression_clear_obstacles','Clear ordinary obstacles','Allow verified gold/elixir removal of ordinary obstacles to create building space. Seasonal removal needs its separate option.','bool',lambda c:c.progression_clear_obstacles,'Upgrades',('progression','clear_obstacles')),
+    SettingField('progression_clear_seasonal_obstacles','Remove seasonal obstacles','Also allow permanent removal of seasonal obstacles for verified gold/elixir costs. Gems, shovels and storage actions are excluded.','bool',lambda c:c.progression_clear_seasonal_obstacles,'Upgrades',('progression','clear_seasonal_obstacles')),
     SettingField('upgrade_buildings_enabled','Automatic building upgrades','Use spare builders. Village progression adds new construction and full-building checks; otherwise follows Suggested upgrades.','bool',lambda c:c.upgrade_buildings_enabled,'Upgrades',('upgrades','buildings_enabled')),
     SettingField('upgrade_research_enabled','Automatic army research','Start the first eligible Suggested troop or spell research when the laboratory is free. Never spend gems or items.','bool',lambda c:c.upgrade_research_enabled,'Upgrades',('upgrades','research_enabled')),
     SettingField('upgrade_pets_enabled','Automatic pet upgrades','Upgrade an eligible unassigned pet when the pet-upgrade slot is free. Uses dark elixir while keeping your reserve. Never spends gems or items.','bool',lambda c:c.upgrade_pets_enabled,'Upgrades',('upgrades','pets_enabled')),
@@ -201,8 +206,8 @@ SETTINGS: list[SettingField] = [
     ),
     SettingField(
         "farm_enabled",
-        "Enable scheduled farm attacks",
-        "Run one unranked attack per interval using the selected attack method. "
+        "Refill Home Village resources",
+        "Attack when storage is low and recheck after each battle until the refill target is reached. "
         "Requires the normal Farm navigation calibration.",
         "bool",
         lambda c: c.farm_enabled,
@@ -218,26 +223,22 @@ SETTINGS: list[SettingField] = [
         choices=('sequence','planner','automatic'),
     ),
     SettingField(
-        "farm_interval_seconds",
-        "Farm interval (seconds)",
-        "Base time between auto farm attacks after a battle is fought "
-        "(7200 = every 2 hours). Applies even if Return Home / chat confirm fails. "
-        "Stop and Start the bot after saving so the running loop picks this up.",
+        "farm_resource_start_percent",
+        "Start refill below (%)",
+        "Start a refill when any unlocked resource falls below this percentage. Applies to Home and Builder Base farming.",
         "int",
-        lambda c: c.farm_interval_seconds,
+        lambda c: c.farm_resource_start_percent,
         "Farm",
-        ("farm", "interval_seconds"),
+        ("farm", "resource_start_percent"),
     ),
     SettingField(
-        "farm_interval_variance_seconds",
-        "Farm interval variance (± seconds)",
-        "Random ± this many seconds around the farm interval so attacks are not "
-        "metronomic (300 ≈ ±5 minutes). Set 0 for an exact interval. "
-        "The rolled wait is saved until the next fought farm.",
+        "farm_resource_target_percent",
+        "Refill to (%)",
+        "Continue the refill until every unlocked resource reaches this target. Must exceed the start percentage. Failed or unproductive attacks pause for review/retry.",
         "int",
-        lambda c: c.farm_interval_variance_seconds,
+        lambda c: c.farm_resource_target_percent,
         "Farm",
-        ("farm", "interval_variance_seconds"),
+        ("farm", "resource_target_percent"),
     ),
     SettingField(
         "farm_deploy_side",
@@ -500,6 +501,8 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
         for part in field.yaml_path[:-1]:
             cursor = cursor.setdefault(part, {})
         cursor[field.yaml_path[-1]] = parsed
+    from coc_bot.runtime.resource_farming import thresholds
+    thresholds(payload['farm']['resource_start_percent'], payload['farm']['resource_target_percent'])
     return payload
 
 

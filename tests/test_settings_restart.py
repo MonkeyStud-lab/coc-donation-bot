@@ -68,7 +68,7 @@ class SettingsRestartTests(TestCase):
         expected = revision()
         def save():
             try:
-                self.results.append(self.service.apply_settings({"farm_interval_seconds": 7311}, expected))
+                self.results.append(self.service.apply_settings({"farm_resource_start_percent": 80}, expected))
             except Exception as exc:
                 self.results.append(exc)
         thread = threading.Thread(target=save)
@@ -80,7 +80,7 @@ class SettingsRestartTests(TestCase):
     def test_running_save_waits_then_restarts_with_same_options(self):
         self.start()
         thread = self.save_in_background()
-        self.assertNotEqual(load_config().farm_interval_seconds, 7311)
+        self.assertNotEqual(load_config().farm_resource_start_percent, 80)
         self.assertFalse(self.bots[0].hard_stopped)
         with self.assertRaises(BusyError):
             self.service.idle()
@@ -92,7 +92,7 @@ class SettingsRestartTests(TestCase):
         thread.join(3)
         self.assertFalse(thread.is_alive())
         self.assertTrue(self.results[0]["restarted"])
-        self.assertEqual(load_config().farm_interval_seconds, 7311)
+        self.assertEqual(load_config().farm_resource_start_percent, 80)
         self.assertEqual(self.options, [self.options[0]] * 2)
         self.assertIsNone(self.service.settings_update)
 
@@ -102,14 +102,14 @@ class SettingsRestartTests(TestCase):
         self.service.stop()
         thread.join(3)
         self.assertIsInstance(self.results[0], BusyError)
-        self.assertNotEqual(load_config().farm_interval_seconds, 7311)
+        self.assertNotEqual(load_config().farm_resource_start_percent, 80)
         self.assertEqual(len(self.options), 1)
         self.assertTrue(self.service.controller.wait(2))
 
     def test_validation_happens_before_graceful_stop(self):
         self.start()
-        for values in ({"farm_interval_variance_seconds": 86401}, {"collection_daily_limit": 0},
-                       {"farm_interval_seconds": -1}):
+        for values in ({"farm_resource_target_percent": 86401}, {"collection_daily_limit": 0},
+                       {"farm_resource_start_percent": -1}):
             with self.assertRaises(ValueError):
                 self.service.apply_settings(values, revision())
         self.assertFalse(self.bots[0].finish_requested.is_set())
@@ -118,16 +118,16 @@ class SettingsRestartTests(TestCase):
     def test_revision_change_while_waiting_leaves_bot_stopped(self):
         self.start()
         thread = self.save_in_background()
-        save_settings({"farm_interval_seconds": 7400}, revision())
+        save_settings({"farm_resource_start_percent": 85}, revision())
         self.bots[0].release.set()
         thread.join(3)
         self.assertIsInstance(self.results[0], RevisionConflict)
-        self.assertEqual(load_config().farm_interval_seconds, 7400)
+        self.assertEqual(load_config().farm_resource_start_percent, 85)
         self.assertEqual(len(self.options), 1)
         self.assertFalse(self.service.controller.snapshot().active)
 
     def test_stopped_save_does_not_start_and_manual_control_rejects_save(self):
-        result = self.service.apply_settings({"farm_interval_seconds": 7311}, revision())
+        result = self.service.apply_settings({"farm_resource_start_percent": 80}, revision())
         self.assertFalse(result["restarted"])
         self.assertEqual(self.options, [])
         self.service.manual_owner = "viewer"

@@ -29,9 +29,9 @@ automation is stopped.
   research, subject to availability, supported names, exclusions, and resource
   reserves. Pet upgrades use a separate slot and prefer unassigned pets.
   Previewing and starting an upgrade are separate actions.
-- **Browser controls:** Start/Stop, farm and break countdowns, activity logs,
+- **Browser controls:** Start/Stop, resource refill status, break countdown, activity logs,
   responsive settings, themes, guided calibration, and calibration backups.
-- **Builder Base (experimental):** separate scheduled visits for an equipped
+- **Builder Base (experimental):** account-visit checks for an equipped
   six-Night-Witch/Battle-Machine army, resource collection, supported Suggested
   building upgrades, and Night Witch research. Handles both battle stages,
   checks results, and returns to clan chat. Collection, attacks, building upgrades,
@@ -39,6 +39,11 @@ automation is stopped.
   See [Builder Base setup and limitations](docs/BUILDER_BASE.md).
 - **Recovery:** records unfinished attack and upgrade actions so a restart can
   inspect the game instead of blindly repeating them.
+- **Automatic defensive layouts:** optional resource-only obstacle clearing,
+  native layout imports, remaining-inventory placement, and verified activation
+  in a spare Home Village slot. Current support requires a compatible native
+  copy link and default-terrain recognition; TH2/3 have no automatic copy path.
+  See [automatic layouts](docs/AUTOMATIC_LAYOUTS.md).
 - **Development tools:** optional screenshot collection, labeling/export tools,
   offline checks, and an experimental screen-recognition observer.
 
@@ -235,7 +240,8 @@ waits for the current donation/attack to finish, then restarts with the new sett
 **Stop** cancels a pending restart. While stopped, **Save** applies settings without
 starting automation. Release manual control before saving.
 
-Farm and session-limit countdowns pause while stopped. A break that has already
+Automatic farming follows resource levels rather than a countdown. Session-limit
+countdowns pause while stopped. A break that has already
 started expires by real time. Scheduling uses running time rather than promising
 execution at a particular wall-clock hour.
 
@@ -257,7 +263,7 @@ alternative. See [Live view setup](docs/WEB_UI.md#experimental-live-video).
 
 ## Attacks
 
-Scheduled farming is **off by default**. The default attack method remains
+Automatic resource refill is **off by default**. The default attack method remains
 **Programmed tap sequence**; explicitly choose another method in Settings.
 **Farm now** uses that selection. **Attacks → Automatic attack** runs automatic
 mode directly without changing the saved method.
@@ -281,17 +287,20 @@ mass Electro Dragon pattern rather than inventing a strategy for every base:
 Supported armies use Electro Dragons with optional Rage spells, one supported
 siege machine, and up to four recognizable heroes. Unknown cards, unsupported
 spells such as Recall, inconsistent counts, or an incomplete map stop deployment.
-An entered but skipped match is cleaned up and advances the farm interval to
-avoid repeatedly retrying the same unsupported army.
+An entered but skipped match is cleaned up and gets a retry cooldown, rather
+than repeatedly retrying the same unsupported army.
 
 Connection, navigation calibration, unit artwork, and the pinned gesture server
 are still required. This is not universal army/scenery support. Test one attack
 before enabling its schedule.
 
-For scheduled automatic attacks, select **automatic** under
-**Settings → Attack method**, enable scheduled farming, choose the interval,
-and save. Release manual control and press **Start**. The interval and its
-optional plus/minus variance are adjustable in Settings.
+For automatic refill attacks, select **automatic** under **Settings → Attack
+method**, enable **Refill Home Village resources**, and save. Release manual
+control and press **Start**. **Start refill below (%)** and **Refill to (%)**
+default to 75% and 95%. Resources and actual storage capacities must be verified;
+the bot rechecks after each battle. This works with one account or many.
+Repeated unproductive attacks or unreadable counters defer refill while other
+visit tasks continue. Old farm-interval settings no longer schedule attacks.
 
 ### Custom routines and the original sequence
 
@@ -335,8 +344,9 @@ Pet upgrades use their own free slot and the dark-elixir reserve. Only unassigne
 pets are eligible by default. **Allow upgrades of equipped pets** is a separate
 setting because an upgrading pet may be unavailable for attacks.
 
-Walls, heroes, the Town Hall, new building purchases, equipment, and several
-army-production buildings are excluded. Buildings and research must be in the
+Without Village progression, walls, heroes, the Town Hall, new building purchases,
+equipment, and several army-production buildings are excluded. Village progression
+can bulk-upgrade verified walls while keeping resource reserves. Buildings and research must be in the
 Suggested list; pets must have a verified name, assignment, and price.
 This path does not authorize gems, magic items, or buying missing
 resources. An uncertain spending result blocks another purchase until the

@@ -45,8 +45,8 @@ clan:
 farm:
   engine: sequence               # sequence | planner (saved routine) | automatic (built-in Electro Dragons)
   enabled: false
-  interval_seconds: 3600          # base seconds between fought auto farms (even if leave fails)
-  interval_variance_seconds: 300  # random ±N seconds around interval (0 = exact)
+  resource_start_percent: 75     # refill if any unlocked resource falls below this
+  resource_target_percent: 95    # finish a refill when all unlocked resources reach this
   deploy_side: left               # default side when programming a new sequence
   pan_swipes: 3                   # default pans when programming a new sequence
   deploy_jitter_px: 6             # jitter for farm deploy sequence taps only
@@ -55,6 +55,7 @@ farm:
   retry_cooldown_seconds: 300     # only when farm fails before deploy (menu/matchmaking)
 
 builder_base:
+  progression_enabled: false
   collect_resources: false
   research_enabled: false
   elixir_reserve: 100000
@@ -68,6 +69,7 @@ progression:
   enabled: false
   rearrange: true
   clear_obstacles: false
+  clear_seasonal_obstacles: false
 
 upgrades:
   buildings_enabled: false
@@ -80,6 +82,10 @@ upgrades:
   elixir_reserve: 2000000
   dark_elixir_reserve: 50000
   excluded_names: ""
+
+layouts:
+  enabled: false
+  replace_inactive: false
 
 # Control window (GUI)
 gui:

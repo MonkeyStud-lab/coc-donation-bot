@@ -81,6 +81,10 @@ class Navigator:
                     logger.info("ensure_clan_chat: stop requested — aborting")
                     return False
                 frame = self.capture.screenshot()
+                from coc_bot.progression.home import recover_home_bonus
+                if recover_home_bonus(self,frame):
+                    if self._sleep(.6):return False
+                    continue
                 if self.classifier.is_global_chat(frame, allow_ocr=False):
                     self._return_from_global_chat(frame)
                     if self._sleep(0.8):

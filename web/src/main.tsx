@@ -8,6 +8,7 @@ import './style.css';
 type Status = {active:boolean; state:string; operation:string|null; activity:string|null; result:any; error:string|null;
   account?:{id:string;nickname:string;tag:string};account_pending?:boolean;
   timers:{farm_seconds:number|null;break_seconds:number|null}; manual_control:boolean;on_break:boolean;settings_update:string|null;
+  resource_farming?:{enabled:boolean;start_percent:number;target_percent:number;status:string;message?:string};
   platform:{stage:string;message:string;ready:boolean;busy:boolean;error:string|null;game_update?:string|null}|null};
 type Entry = {id:number; level:string; text:string; at:string};
 type Field = {key:string;label:string;description:string;kind:string;choices:string[];section:string;advanced:boolean};
@@ -19,7 +20,7 @@ let csrf='';
 const FIRST_LAUNCH=location.pathname.startsWith('/first-launch');
 const BASE=FIRST_LAUNCH?'/first-launch':'';
 const BASIC_SETTINGS=new Set(['gui_timing_preset','donate_open_requests','farm_enabled','farm_engine',
-  'farm_interval_seconds','farm_interval_variance_seconds','session_limit_seconds',
+  'farm_resource_start_percent','farm_resource_target_percent','session_limit_seconds',
   'session_limit_variance_seconds','gui_theme','gui_show_debug_activity','gui_dev_options']);
 async function api(path:string, method='GET', body?:unknown) {
   const response=await fetch(BASE+'/api/'+path,{method,headers:{
@@ -202,7 +203,7 @@ function App(){
     value={password} onChange={e=>setPassword(e.target.value)} required/></label>
     <button className="primary" disabled={busy}>Sign in</button><p role="alert">{notice}</p></form></main>;
   const fields=settings?.fields.filter(f=>(!f.advanced||values.gui_dev_options)&&
-    (advanced||BASIC_SETTINGS.has(f.key)||f.key.startsWith('upgrade_')||f.key.startsWith('progression_')||f.key.startsWith('builder_base_'))&&
+    (advanced||BASIC_SETTINGS.has(f.key)||f.key.startsWith('upgrade_')||f.key.startsWith('progression_')||f.key.startsWith('builder_base_')||f.key.startsWith('layouts_'))&&
     (f.label+' '+f.description).toLowerCase().includes(search.toLowerCase()))||[];
   return <div className="app"><aside><a className="brand" href="#" onClick={e=>e.preventDefault()}>CoC Bot</a>
     <nav>{['Dashboard','Accounts','Attacks','Settings','Setup','Library','Diagnostics'].map(p=><button key={p}
@@ -232,7 +233,8 @@ function App(){
           (status?.active&&(status.operation!=='bot'||status.state!=='running'))}
           onClick={()=>attempt(()=>api('farm','POST'))}>Farm now</button>
         <button disabled={!online} onClick={()=>setLive(true)}>Live view</button></div>
-      <div className="timers"><span>Farm <strong>{fmt(status?.timers.farm_seconds??null)}</strong></span>
+      <div className="timers"><span>Resources <strong title={status?.resource_farming?.message}>{status?.resource_farming?.enabled?
+        `${status.resource_farming.start_percent}% → ${status.resource_farming.target_percent}% · ${status.resource_farming.status}`:'Auto refill off'}</strong></span>
         <span>{status?.on_break?'Break ends':'Next break'} <strong>{fmt(status?.timers.break_seconds??null)}</strong></span></div>
       <label className="toggle"><input type="checkbox" checked={practice} disabled={!!status?.active} onChange={e=>setPractice(e.target.checked)}/>Practice mode</label>
       {status?.error&&<p role="alert">{status.error}</p>}</section>

@@ -16,11 +16,40 @@ class DonationLayout:
     def detect(cls, frame):
         result = suggest_donation(frame)
         if not result['supported']:
-            return None
+            return cls.troop_only(frame)
         boxes = {p['part']: tuple(p['selection']) for p in result['proposals']}
         h, w = frame.shape[:2]
         return cls(w, h, boxes['donation_troop_bar'], boxes['donation_spell_bar'],
                    boxes['donation_elixir_button'])
+
+    @classmethod
+    def troop_only(cls,frame):
+        import cv2
+        import numpy as np
+        from coc_bot.vision.battle_menu import _white_label
+        h,w=frame.shape[:2]
+        edges=cv2.Canny(frame,70,150)
+        contours,_=cv2.findContours(edges,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
+        cards=[]
+        for contour in contours:
+            x,y,cw,ch=cv2.boundingRect(contour)
+            if not (w*.38<x<w*.91 and y>h*.25 and w*.058<cw<w*.077 and h*.14<ch<h*.17):continue
+            if any(abs(x-a)<8 and abs(y-b)<8 for a,b,_,_ in cards):continue
+            cards.append((x,y,cw,ch))
+        if len(cards)<10:return None
+        rows=[]
+        for y in sorted(c[1] for c in cards):
+            if not rows or y-rows[-1]>h*.03:rows.append(y)
+        if len(rows)!=2:return None
+        top=min(rows);stride=rows[1]-rows[0]
+        first=max((sorted(c for c in cards if abs(c[1]-row)<h*.02) for row in rows),key=len)
+        if len(first)<6:return None
+        x=first[0][0];dx=float(np.median(np.diff([c[0] for c in first])))
+        if not w*.065<dx<w*.08 or not h*.145<stride<h*.18:return None
+        label=(x/w,(top-h*.145)/h,(x+w*.245)/w,(top-h*.085)/h)
+        if _white_label(frame,label)!='donationresource':return None
+        return cls(w,h,(x,top,round(dx*7),round(stride*2)),(0,0,0,0),
+                   (round(x+dx*3.9),round(top-h*.16),round(dx),round(h*.09)))
 
     def agrees(self, other):
         if other is None or (self.width, self.height) != (other.width, other.height):
@@ -32,6 +61,7 @@ class DonationLayout:
                    for a, b in zip(left, right))
 
     def bar(self, key):
+        if key=='donation_spell_bar' and self.spells[2]==0:return None
         if key == 'donation_troop_bar':
             return self.troops, {'cols': 7, 'rows': 2}
         if key == 'donation_spell_bar':

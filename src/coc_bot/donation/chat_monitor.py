@@ -118,7 +118,7 @@ class ChatMonitor:
                 continue
             capacity = None
             if self.config.parse_request_capacity:
-                capacity = self.capacity_parser.parse(frame, adjusted)
+                capacity = self.capacity_parser.parse(frame, adjusted, fast=True)
             kind = self.request_parser.classify(frame, adjusted, capacity)
             is_specific = kind == RequestKind.SPECIFIC
             if kind == RequestKind.SPECIFIC:
@@ -185,7 +185,7 @@ class ChatMonitor:
 
         # Context: troop/spell capacity fractions only exist on donate requests.
         if self.config.parse_request_capacity:
-            capacity = self.capacity_parser.parse(frame, match)
+            capacity = self.capacity_parser.parse(frame, match, fast=True)
             if capacity is not None:
                 logger.debug(
                     "Green button at ({}, {}) accepted — request capacity visible",

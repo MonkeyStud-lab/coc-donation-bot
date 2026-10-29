@@ -10,7 +10,20 @@ class Accounts:
 
     def snapshot(self):
         state = self.store.load()
-        return {k: state[k] for k in ('accounts', 'active', 'pending')}
+        from coc_bot.accounts.rotation import RotationStore
+        rotation=RotationStore(self.store).load()
+        from coc_bot.accounts.clan import membership
+        import time
+        accounts=[a|{'clan_tag':membership(self.store,a,time.time())} for a in state['accounts']]
+        return {k: state[k] for k in ('active', 'pending')} | {'accounts':accounts,'rotation':rotation}
+
+    def configure_rotation(self, **values):
+        from coc_bot.accounts.rotation import RotationStore
+        from coc_bot.accounts.store import backup
+        with self.service.mutation():
+            backup(self.store.root)
+            RotationStore(self.store).configure(**values)
+        return self.snapshot()
 
     def update(self, ident, nickname, selected_roles):
         with self.service.mutation():
@@ -39,16 +52,18 @@ class Accounts:
                         identity = nav.learn()
                         self.store.register(identity, nickname or identity['name'], selected_roles)
                     elif action == 'verify':
-                        identity = nav.identity()
-                        self.store.complete(identity['tag'])
-                        nav.button('menu_close', (.84, .02, .91, .14))
+                        pending=self.store.load().get('pending')
+                        finishing=bool(pending and pending['kind']=='switch')
+                        identity=(nav.switch(self.store.account(pending['target'])) if finishing else nav.identity())
+                        self.store.complete(identity['tag'],hall=identity.get('hall'))
+                        if not finishing:nav.button('menu_close', (.84, .02, .91, .14))
                     else:
                         self.store.begin(action, target)
                         if action == 'add':
                             nav.chooser()
                             return {'accounts': True, 'message': 'Sign in through Live view, return to the home village, and release control. Then choose tasks and press Save and verify account.'}
                         identity = nav.switch(self.store.account(target))
-                        self.store.complete(identity['tag'])
+                        self.store.complete(identity['tag'],hall=identity.get('hall'))
                     self.service._finished_generation = -1
                     account=self.store.account()
                     message=(account['nickname']+' is saved and verified. No separate check is needed.' if action=='register'

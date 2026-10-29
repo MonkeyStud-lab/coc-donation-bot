@@ -26,6 +26,7 @@ def _project_root() -> Path:
 def load_units(path: Path | None = None) -> dict[str, UnitStats]:
     root = _project_root()
     path = path or root / "data" / "game" / "units.yaml"
+    if not path.exists():path=Path.cwd()/'data/game/units.yaml'
     if not path.exists():
         return {}
     with open(path, encoding="utf-8") as f:

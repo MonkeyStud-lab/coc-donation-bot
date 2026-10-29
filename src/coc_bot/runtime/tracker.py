@@ -220,15 +220,9 @@ class RuntimeTracker:
                     raise
             else:
                 save_runtime_state(self.state_path, self.state)
-        base = max(60, int(self.config.farm_interval_seconds))
-        variance = max(0, int(self.config.farm_interval_variance_seconds))
-        logger.info(
-            "Recorded farm interval clock at {} — next wait {}s (base {}s ± {}s)",
-            self.state.last_farm_at,
-            rolled,
-            base,
-            variance,
-        )
+        # Legacy interval fields remain readable for old state files. Normal
+        # automation schedules its next attack from verified storage demand.
+        logger.info("Recorded farm completion at {} — refill follows resource levels", self.state.last_farm_at)
 
     def pause_farm_clock(self) -> None:
         """Freeze the farm interval while the bot is stopped (no wall-clock drift)."""

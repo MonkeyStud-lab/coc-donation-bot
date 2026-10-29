@@ -68,15 +68,15 @@ with isolated_data(), \
                 check_controls(app._pages[page])
             # Tab switches must retain unsaved edits and the same controls.
             app._show_page("settings")
-            var = app._setting_vars["farm_interval_seconds"]
+            var = app._setting_vars["farm_resource_start_percent"]
             original = var.get()
-            var.set("7311")
+            var.set("81")
             for tab in app._settings_notebook.tabs():
                 app._settings_notebook.select(tab)
                 app.update_idletasks()
                 check_controls(app._pages["settings"])
-                assert app._setting_vars["farm_interval_seconds"] is var
-                assert var.get() == "7311"
+                assert app._setting_vars["farm_resource_start_percent"] is var
+                assert var.get() == "81"
             var.set(original)
             assert app._library_buttons
             with patch.object(app, "_farm_oneshot_running", return_value=True):

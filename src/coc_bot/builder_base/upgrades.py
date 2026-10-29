@@ -6,6 +6,7 @@ from coc_bot.upgrades.vision import compact
 from coc_bot.builder_base.vision import BuilderReader
 
 BUILDINGS = {compact(name) for name in (
+    'Star Laboratory', 'Builder Barracks',
     'Elixir Collector', 'Gold Mine', 'Gold Storage', 'Elixir Storage',
     'Cannon', 'Double Cannon', 'Archer Tower', 'Hidden Tesla', 'Firecrackers',
     'Crusher', 'Guard Post', 'Air Bombs', 'Multi Mortar', 'Roaster',
@@ -14,25 +15,31 @@ BUILDINGS = {compact(name) for name in (
 )}
 
 
+def supported_building(candidate):
+    return compact(candidate.name) in BUILDINGS and candidate.currency in ('gold', 'elixir')
+
+
 def eligibility(config, candidate, balances, availability):
     if compact(candidate.name) not in BUILDINGS:
         return 'Only recognized existing Builder Base defenses and resource buildings are supported'
     excluded = {compact(n) for n in config.upgrade_excluded_names.split(',')}
     if compact(candidate.name) in excluded:
         return 'Excluded in settings'
-    if candidate.currency != 'gold':
-        return 'Only Builder Gold building confirmations are supported in this version'
+    if candidate.currency not in ('gold', 'elixir'):
+        return 'Only Builder Gold and Builder Elixir building confirmations are supported'
     if (availability is None or not 1 <= availability[1] <= 3
             or not 0 <= availability[0] <= availability[1]
             or availability[0] <= config.builder_base_builders_reserved):
         return 'No verified spare Builder Base builder'
-    floors = {'gold': config.builder_base_gold_reserve}
-    if candidate.currency not in floors or type(candidate.cost) is not int or candidate.cost <= 0:
+    if type(candidate.cost) is not int or candidate.cost <= 0:
         return 'Unknown price; gems and items are excluded'
+    floor=getattr(config,'builder_base_'+candidate.currency+'_reserve',None)
+    if type(floor) is not int or floor<0:
+        return 'Builder resource reserve is unverified'
     balance = balances.get(candidate.currency)
     if type(balance) is not int or not 0 <= balance <= 20_000_000:
         return 'Builder resource balance is unverified'
-    if balance-candidate.cost < floors[candidate.currency]:
+    if balance-candidate.cost < floor:
         return 'Would fall below the Builder Base reserve'
     return None
 
@@ -97,11 +104,18 @@ class BuilderUpgradeRunner(UpgradeRunner):
         return frame
 
     def close(self):
-        if self.stopped():
-            return
-        frame = self.capture.screenshot()
-        if self.reader.menu_kind(frame):
-            if self.stopped():
-                return
-            self.input.tap(round(frame.shape[1]*.984), round(frame.shape[0]*.032), jitter=0)
-            self.wait()
+        for _ in range(3):
+            if self.stopped():return
+            frame=self.capture.screenshot()
+            sorting=self.reader.research_sorting(frame) is True
+            point=(round(frame.shape[1]*.40),round(frame.shape[0]*.60)) if sorting else self.reader.detail_close(frame)
+            if sorting:
+                if self.reader.research_sorting(self.capture.screenshot()) is not True:return
+            elif point is not None:
+                if self.reader.detail_close(self.capture.screenshot())!=point:return
+            elif self.reader.menu_kind(frame):
+                point=(round(frame.shape[1]*.984),round(frame.shape[0]*.032))
+            else:return
+            if self.stopped():return
+            self.input.tap(*point,jitter=0)
+            if self.wait():return

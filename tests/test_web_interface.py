@@ -25,8 +25,13 @@ class WebTests(TestCase):
         self.addCleanup(self.temp.cleanup)
         self.home = Path(self.temp.name)
         shutil.copytree(root / "config", self.home / "config")
+        import yaml
+        defaults=self.home/'config/default.yaml'
+        config=yaml.safe_load(defaults.read_text())
+        config.setdefault('adb',{})['device']='offline-web-test'
+        defaults.write_text(yaml.safe_dump(config))
         self.env = patch.dict("os.environ", {"COC_BOT_HOME": str(self.home),
-            "COC_BOT_CONFIG": str(self.home / "data/calibrated.yaml")})
+            "COC_BOT_CONFIG": str(self.home / "data/calibrated.yaml"), 'COC_HOST_SOCKET':''})
         self.env.start()
         self.addCleanup(self.env.stop)
         (self.home / "data").mkdir()
@@ -178,17 +183,19 @@ class WebTests(TestCase):
         settings = self.client.get("/api/settings").json()
         keys = [field['key'] for field in settings['fields']]
         self.assertEqual(len(keys), len(set(keys)))
-        self.assertTrue({'farm_interval_seconds', 'donate_open_requests',
+        self.assertTrue({'farm_resource_start_percent', 'donate_open_requests',
                          'progression_enabled', 'progression_rearrange', 'progression_clear_obstacles',
                          'builder_base_collect_resources', 'builder_base_research_enabled',
                          'builder_base_attacks_enabled', 'builder_base_upgrades_enabled',
                          'builder_base_gold_reserve', 'builder_base_elixir_reserve',
-                         'builder_base_builders_reserved', 'builder_base_interval_seconds'} <= set(keys))
+                         'builder_base_builders_reserved'} <= set(keys))
+        self.assertNotIn('farm_interval_seconds',keys)
+        self.assertNotIn('builder_base_interval_seconds',keys)
         self.assertEqual(len(settings["themes"]), 7)
-        body = {"revision": settings["revision"], "values": {"farm_interval_seconds": 7200}}
+        body = {"revision": settings["revision"], "values": {"farm_resource_start_percent": 80}}
         result = self.client.put("/api/settings", headers=self.headers, json=body)
         self.assertEqual(result.status_code, 200, result.text)
-        self.assertEqual(load_config().farm_interval_seconds, 7200)
+        self.assertEqual(load_config().farm_resource_start_percent, 80)
         self.assertEqual(self.client.put("/api/settings", headers=self.headers, json=body).status_code, 409)
         for values in ({"donate_open_requests": "false"}, {"farm_pan_swipes": -1},
                        {"farm_pan_swipes": None}, {"farm_pan_swipes": True},
@@ -515,10 +522,10 @@ class WebTests(TestCase):
         self.assertEqual(self.client.post("/first-launch/api/stop").status_code, 403)
         test_settings = self.client.get("/first-launch/api/settings").json()
         result = self.client.put("/first-launch/api/settings", headers=self.headers,
-            json={"revision": test_settings["revision"], "values": {"farm_interval_seconds": 7311}})
+            json={"revision": test_settings["revision"], "values": {"farm_resource_start_percent": 80}})
         self.assertEqual(result.status_code, 200, result.text)
-        self.assertEqual(self.client.get("/first-launch/api/settings").json()["values"]["farm_interval_seconds"], 7311)
-        self.assertNotEqual(load_config().farm_interval_seconds, 7311)
+        self.assertEqual(self.client.get("/first-launch/api/settings").json()["values"]["farm_resource_start_percent"], 80)
+        self.assertNotEqual(load_config().farm_resource_start_percent, 80)
         entered = threading.Event()
         self.service.job("test", lambda cancel: (entered.set(), cancel.wait(1)))
         self.assertTrue(entered.wait(1))
@@ -527,8 +534,8 @@ class WebTests(TestCase):
         self.service.stop()
         self.assertTrue(self.service.controller.wait(1))
         self.assertEqual(self.client.post("/api/first-launch/reset", headers=self.headers).status_code, 200)
-        self.assertEqual(self.client.get("/first-launch/api/settings").json()["values"]["farm_interval_seconds"],
-                         load_config().farm_interval_seconds)
+        self.assertEqual(self.client.get("/first-launch/api/settings").json()["values"]["farm_resource_start_percent"],
+                         load_config().farm_resource_start_percent)
         after = {p.name: p.read_bytes() for p in (self.home / "data").glob("*") if p.is_file()}
         self.assertEqual(before, after)
         self.assertEqual(self.client.get("/first-launch/").status_code, 200)
@@ -549,7 +556,7 @@ class WebTests(TestCase):
     def test_stopped_timers_remain_frozen_without_writing(self):
         from datetime import datetime, timedelta, timezone
         from coc_bot.runtime.persistence import RuntimeState, save_runtime_state
-        save_settings({"farm_enabled": True, "farm_interval_seconds": 7200}, revision())
+        save_settings({"farm_enabled": True, "farm_resource_start_percent": 80}, revision())
         state = RuntimeState.fresh()
         now = datetime.now(timezone.utc)
         state.last_farm_at = (now-timedelta(seconds=1000)).isoformat()
@@ -562,7 +569,7 @@ class WebTests(TestCase):
         original = path.read_bytes()
         for _ in range(2):
             snapshot = self.service.snapshot()
-            self.assertEqual(snapshot["timers"], {"farm_seconds": 7100, "break_seconds": 13900})
+            self.assertEqual(snapshot["timers"], {"farm_seconds": None, "break_seconds": 13900})
             self.assertFalse(snapshot["active"])
         self.assertEqual(path.read_bytes(), original)
 

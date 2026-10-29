@@ -29,12 +29,21 @@ class ResourceReader:
         # The Home Village has different resources; never reuse these reads there.
         if not (self.builder.home(frame) or self.cart(frame)):
             return {}
-        return {kind: resource_amount(crop(frame, box), self.builder.stop)
-                for kind, box in {
+        values={}
+        from coc_bot.upgrades.digits import read_digits
+        from coc_bot.progression.reader import counter_digit_variants,red_digit_variants
+        import re
+        for kind,box in {
                     'gold': (.855, .034, .958, .071),
                     'elixir': (.855, .102, .958, .140),
                     'gems': (.91, .174, .953, .208),
-                }.items()}
+                }.items():
+            region=crop(frame,box);original=resource_amount(region,self.builder.stop)
+            digits=read_digits(region,extra_templates=counter_digit_variants()|red_digit_variants())
+            alternate=int(digits) if digits and re.fullmatch(r'\d{1,9}',digits) else None
+            values[kind]=(None if original is not None and alternate is not None and original!=alternate
+                          else original if original is not None else alternate)
+        return values
 
     def cart(self, frame):
         return bool(self.builder.find(frame, 'cart_title', (.38,.06,.62,.15))

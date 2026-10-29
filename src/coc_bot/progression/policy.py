@@ -1,7 +1,7 @@
 """Progression ordering never mistakes affordability or a partial list for maxing."""
 from coc_bot.upgrades.vision import compact
 
-ARMY_BUILDINGS = ('armycamp', 'barracks', 'laboratory', 'spellfactory', 'darkspellfactory',
+ARMY_BUILDINGS = ('laboratory', 'armycamp', 'barracks', 'spellfactory', 'darkspellfactory',
                   'darkbarracks', 'clancastle', 'goldstorage', 'elixirstorage')
 EXTRA_BUILDINGS = {'laboratory', 'barracks', 'darkbarracks', 'spellfactory',
                    'darkspellfactory', 'workshop', 'herohall', 'pethouse', 'clancastle', 'wall'}
@@ -39,6 +39,6 @@ def town_hall_blockers(inventory):
 
 def priority(row):
     name = compact(row['name'])
-    return (0 if row.get('new') else 2 if name == 'townhall' else 1,
+    return (0 if name=='laboratory' else 1 if row.get('new') else 3 if name == 'townhall' else 2,
             ARMY_BUILDINGS.index(name) if name in ARMY_BUILDINGS else len(ARMY_BUILDINGS)+(name=='wall'),
             row.get('cost') or 0)

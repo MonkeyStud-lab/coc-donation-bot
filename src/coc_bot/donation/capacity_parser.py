@@ -17,7 +17,7 @@ from coc_bot.vision.matcher import MatchResult
 from coc_bot.vision.ocr import QuantityOCR
 
 # Common clan-castle troop request totals (helps score OCR candidates).
-_COMMON_TROOP_TOTALS = {15, 20, 25, 30, 35, 40, 45, 50, 55, 60}
+_COMMON_TROOP_TOTALS = {10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60}
 
 
 @dataclass(frozen=True)
@@ -178,7 +178,14 @@ class RequestCapacityParser:
         else:
             logger.debug("tesseract not found — EasyOCR only")
 
-    def parse(self, frame: np.ndarray, donate_button: MatchResult) -> RequestCapacity | None:
+    def parse(self, frame: np.ndarray, donate_button: MatchResult, *, fast=False) -> RequestCapacity | None:
+        if fast:
+            h,w=frame.shape[:2];cy=donate_button.center[1]
+            strip=frame[max(0,cy-round(h*.045)):min(h,cy+round(h*.025)),
+                        round(w*.02):max(round(w*.03),donate_button.x-round(w*.06))]
+            frac=self._read_row_fraction(strip,kind='troop',fast=True)
+            if frac is not None and frac[1] in _COMMON_TROOP_TOTALS:
+                return self._from_donated_totals(frac,(0,0),(0,0))
         region = chat_message_region(frame, donate_button)
         if region.size == 0:
             return None
@@ -209,11 +216,11 @@ class RequestCapacityParser:
         for idx, row in enumerate(row_rois):
             self._maybe_save_debug(row, f"capacity_row_{idx}.png")
             kind = ("troop", "spell", "siege")[idx]
-            frac = self._read_row_fraction(row, kind=kind)
+            frac = self._read_row_fraction(row, kind=kind, fast=fast)
             logger.info("Capacity row {} ({}) OCR -> {}", idx, kind, frac)
             fractions.append(frac)
 
-        if any(f is None for f in fractions):
+        if any(f is None for f in fractions) and not fast:
             logger.info("Row OCR incomplete — trying full lower band")
             band_fracs = self.ocr.read_fractions(lower, max_count=3)
             logger.info("Lower-band OCR fractions -> {}", band_fracs)
@@ -275,13 +282,18 @@ class RequestCapacityParser:
             logger.debug("Could not save debug image {}: {}", name, exc)
 
     def _read_row_fraction(
-        self, row: np.ndarray, *, kind: str
+        self, row: np.ndarray, *, kind: str, fast=False
     ) -> tuple[int, int] | None:
         if row.size == 0:
             return None
 
         candidates: list[tuple[int, int, float]] = []
         variants = self._row_variants(row)
+        if fast:
+            if not self._has_tesseract:return None
+            values=[self._tesseract_fraction(image) for image in variants[:3]]
+            valid=[v for v in values if v is not None and self._score_fraction(v,kind=kind)>0]
+            return valid[0] if len(valid)>=2 and len(set(valid))==1 else None
 
         readers = []
         if self._has_tesseract:

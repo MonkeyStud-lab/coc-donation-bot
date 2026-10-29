@@ -672,6 +672,10 @@ class AttackNavigator:
                 logger.info("return_home_from_attack: stop requested — aborting")
                 return False
             frame = self.capture.screenshot()
+            from coc_bot.progression.home import recover_home_bonus
+            if self.donation_nav is not None and recover_home_bonus(self.donation_nav,frame):
+                if self._sleep(.6):return False
+                continue
             screen = self.classify(frame, mode=BotMode.ATTACK)
 
             from coc_bot.vision.battle_menu import reward_continue_button
@@ -830,6 +834,10 @@ class AttackNavigator:
             if self._stopping():
                 return "stopped"
             frame = self.capture.screenshot()
+            from coc_bot.progression.home import recover_home_bonus
+            if recover_home_bonus(self.donation_nav,frame):
+                if self._sleep(.6):return 'stopped'
+                continue
 
             # A sequence of resource reveals can interrupt home confirmation.
             # Check each fresh frame before any village/chat anchors.

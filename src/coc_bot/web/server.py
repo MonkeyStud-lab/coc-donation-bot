@@ -34,6 +34,14 @@ class Start(Payload):
     practice: StrictBool = False
 
 
+class AccountRotation(Payload):
+    enabled: StrictBool
+    primary_id: str = Field(min_length=32,max_length=32)
+    watch_seconds: StrictInt = 900
+    visit_seconds: StrictInt = 180
+    interval_seconds: StrictInt = 1800
+
+
 class UpgradeRequest(Payload):
     kind: Literal['buildings','research','pets']
     token: str | None = Field(default=None,max_length=64)
@@ -204,6 +212,10 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
     @app.get('/api/accounts')
     def list_accounts():
         return accounts.snapshot()
+
+    @app.put('/api/accounts/rotation')
+    def account_rotation(body: AccountRotation):
+        return accounts.configure_rotation(**body.model_dump())
 
     @app.post('/api/accounts/action')
     def account_action(body: AccountAction):

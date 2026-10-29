@@ -12,6 +12,20 @@ def composition(hall, capacity, unlocked):
         raise ValueError('Verify Town Hall and army capacity first')
     available = {unit for unit, level in unlocked.items() if type(level) is int and level > 0}
     eligible = [p for p in HOME_PROFILES if 2 <= p.hall <= hall and all(u in available for u, _ in p.troops)]
+    # A missing filler identity must not reject a verified mass-air army or
+    # downgrade it to a starter composition. Spare camp space may remain empty;
+    # never invent an unlock merely to fill the last few housing spaces.
+    air = next((u for u, minimum in (('electro_dragon',11),('dragon',7))
+                if hall >= minimum and u in available), None)
+    if air and capacity >= HOUSING[air] and not any(p.troops[0][0] == air for p in eligible):
+        counts = {air:capacity//HOUSING[air]}
+        remaining = capacity % HOUSING[air]
+        for unit in ('archer','barbarian','balloon'):
+            if unit in available:
+                amount = remaining//HOUSING[unit]
+                if amount:counts[unit] = amount
+                remaining -= amount*HOUSING[unit]
+        return counts
     if not eligible:
         basic = [u for u in ('barbarian', 'archer') if u in available]
         if not basic:

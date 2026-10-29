@@ -38,6 +38,21 @@ def elixir_is_selected(config, frame) -> bool:
     reference = template.astype(np.float32)
     if _selection_matches(observed, reference):
         return True
+    # Short castles move the complete donation card down. Locate the same
+    # selected-state template only around its independently verified elixir
+    # control, retaining the color/border checks that distinguish gem mode.
+    from coc_bot.donation.layout import DonationLayout
+    layout=DonationLayout.detect(frame)
+    if layout is not None:
+        cx,cy=layout.elixir_center
+        scale=w/max(1,getattr(config,'frame_width',w))
+        target=cv2.resize(template,None,fx=scale,fy=scale)
+        th,tw=target.shape[:2]
+        region=frame[max(0,cy-th):min(h,cy+th),max(0,cx-tw//2-20):min(w,cx+tw//2+20)]
+        if region.shape[0]>=th and region.shape[1]>=tw:
+            _,score,_,(px,py)=cv2.minMaxLoc(cv2.matchTemplate(region,target,cv2.TM_CCOEFF_NORMED))
+            if score>=.97 and _selection_matches(region[py:py+th,px:px+tw].astype(np.float32),target.astype(np.float32)):
+                return True
 
     # Some captures scale the brightness of the entire game. Correct only one
     # common exposure factor, preserving relative colors, fill and borders.

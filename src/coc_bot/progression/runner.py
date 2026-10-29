@@ -68,7 +68,8 @@ class ProgressionRunner(UpgradeRunner):
         if availability:
             inventory['busy'] = availability[0] != availability[1]
         seen = set()
-        evidence = self.config.data_dir/'progression/screens'
+        directory=getattr(self,'inventory_directory','progression')
+        evidence = self.config.data_dir/directory/'screens'
         evidence.mkdir(parents=True,exist_ok=True)
         for page in range(20):
             if self.stopped(): raise ValueError('Stopped')
@@ -77,7 +78,8 @@ class ProgressionRunner(UpgradeRunner):
             # Fixed names retain at most twenty current pages per tab.
             cv2.imwrite(str(evidence/(kind+'-'+str(page)+'.png')),frame)
             for row in self.reader.rows(frame):
-                if compact(row['name'])=='townhall' and type(row.get('target_level')) is int and 3<=row['target_level']<=19:
+                if (compact(row['name'])==getattr(self,'hall_identity','townhall')
+                    and type(row.get('target_level')) is int and 3<=row['target_level']<=19):
                     second=self.capture.screenshot()
                     if self.stopped():raise ValueError('Stopped')
                     matching=next((r for r in self.reader.rows(second) if same_row_observation(row,r,second.shape)
@@ -87,7 +89,7 @@ class ProgressionRunner(UpgradeRunner):
                 key = row_key(row)
                 if key not in seen:
                     inventory['rows'].append(row); seen.add(key)
-                if row['currency'] != 'gems' and (not row['name'] or not row['cost'] or not row['currency']):
+                if row['currency'] not in ('gems','free') and (not row['name'] or not row['cost'] or not row['currency']):
                     inventory['unknown'] = True
             before = cv2.resize(frame[round(frame.shape[0]*.11):round(frame.shape[0]*.89),
                                      round(frame.shape[1]*.735):],(180,400))
@@ -101,7 +103,11 @@ class ProgressionRunner(UpgradeRunner):
                 break
             frame = after
         self.inventory = inventory
-        write_json(self.config.data_dir/('progression/'+kind+'-inventory.json'), inventory | {'at':time.time()})
+        write_json(self.config.data_dir/(directory+'/'+kind+'-inventory.json'), inventory | {'at':time.time()})
+        if (kind == 'buildings' and getattr(self,'hall_identity','townhall') == 'townhall'
+            and inventory['complete'] and inventory['hall_verified']):
+            from coc_bot.accounts.hall import observe_hall
+            observe_hall(self.config, inventory['hall'])
         return inventory
 
     def eligibility(self, kind, candidate, balances, availability):
@@ -194,7 +200,15 @@ class ProgressionRunner(UpgradeRunner):
         if state.get('pending'):
             if not isinstance(state['pending'],dict):
                 return {'status':'needs_review','message':'Previous upgrade journal is malformed'}
-            if state['pending'].get('kind') in ('construction','obstacle','wall'):
+            if state['pending'].get('kind')=='wall':
+                from coc_bot.progression.walls import WallUpgrade
+                receipt=state['pending']
+                if any(type(receipt.get(k)) is not int for k in ('remaining_before','target_level','balance_before','cost')):
+                    return {'status':'needs_review','message':'Wall receipt lacks an independent before observation'}
+                try:return WallUpgrade(self).recover(state)
+                finally:
+                    if not self.stopped():self.close()
+            if state['pending'].get('kind') in ('construction','obstacle'):
                 return {'status':'needs_review','message':'Interrupted progression spending needs verification before any new payment'}
             # Reconciliation must not fall through to the legacy Suggested
             # selection and bypass the full new-building/Town Hall inventory.
@@ -226,14 +240,26 @@ class ProgressionRunner(UpgradeRunner):
                 if self.wait():return {'status':'stopped'}
             frame = self.open_menu(kind)
             if frame is None:return {'status':'stopped'}
+            availability=self.reader.availability(frame,kind)
+            reserve=self.config.upgrade_builders_reserved if kind=='buildings' else 0
+            if availability is not None and availability[0]<=reserve:
+                return {'status':'busy','availability':availability,
+                        'message':'No available builders' if kind=='buildings' else 'Laboratory is already busy'}
             inventory = self.scan(frame,kind)
             if not inventory['complete']:
                 return {'status':'blocked','message':'Complete building inventory could not be read; no progression spending'}
-            ordinary = [r for r in inventory['rows'] if r['currency'] != 'gems'
+            ordinary = [r for r in inventory['rows'] if r['name'] and r['currency'] != 'gems'
                         and compact(r['name']) not in HEROES]
             new = [r for r in ordinary if r['new']] if kind=='buildings' else []
-            if inventory['unknown'] and not new:
-                return {'status':'blocked','message':'Some upgrade rows are unreadable; Town Hall and existing upgrades remain paused'}
+            if kind=='buildings' and inventory['unknown'] and not new:
+                unreadable=[r for r in inventory['rows'] if r['currency'] not in ('gems','free')
+                            and (not r['name'] or not r['cost'] or not r['currency'])]
+                # An unreadable price on a named existing building cannot be
+                # spent, but need not idle every other builder. Unknown names
+                # or new construction still block priority selection. The
+                # inventory's unknown flag continues to block Town Hall.
+                if not unreadable or any(not r['name'] or r['new'] for r in unreadable):
+                    return {'status':'blocked','message':'Construction priorities are unreadable; no progression spending'}
             if kind == 'research':
                 from coc_bot.progression.army import research_priority
                 units = {'electrodragon':'electro_dragon','wallbreaker':'wall_breaker',
@@ -244,11 +270,18 @@ class ProgressionRunner(UpgradeRunner):
                     used=json.loads((self.config.data_dir/'progression/army.json').read_text())['troops']
                     if not isinstance(used,dict):used={}
                 except (OSError,ValueError,KeyError,TypeError):used={}
-                candidates = sorted([r for r in ordinary if compact(r['name']) in units],
-                                    key=lambda r:(units[compact(r['name'])] not in used,
-                                                  research_priority(units[compact(r['name'])])))
+                # Farming units get priority, but finishing them must not leave
+                # the Laboratory idle while other verified research remains.
+                candidates = sorted(ordinary,
+                                    key=lambda r:(units.get(compact(r['name'])) not in used,
+                                                  compact(r['name']) not in units,
+                                                  research_priority(units[compact(r['name'])])
+                                                  if compact(r['name']) in units else 999))
             else:
-                candidates = sorted(new or ordinary,key=priority)
+                # The lab unlocks the next troop levels. It is the one existing
+                # building allowed ahead of still-unbuilt structures; all other
+                # existing upgrades retain construction-first ordering.
+                candidates = sorted(ordinary,key=priority)
             free = self.reader.availability(self.capture.screenshot(),kind)
             choices = []
             for row in candidates:
@@ -258,7 +291,7 @@ class ProgressionRunner(UpgradeRunner):
                 if not self.eligibility(kind,candidate,inventory['balances'],free):choices.append(row)
             if not choices:
                 return {'status':'waiting','message':'Build new structures first; waiting for resources or builders' if new
-                        else 'No eligible farming-unit research; waiting for resources or a free Laboratory' if kind=='research'
+                        else 'No eligible research; waiting for resources or a free Laboratory' if kind=='research'
                         else 'No eligible building; Town Hall remains gated by the full inventory',
                         'town_hall_blockers':town_hall_blockers(inventory) if kind=='buildings' else []}
             self.target = choices[0]

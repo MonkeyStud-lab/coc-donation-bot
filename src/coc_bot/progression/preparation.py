@@ -24,9 +24,16 @@ def capacity_digit_variants():
 
 
 def capacity(frame, stop=None):
+    # The game widens the hero panel while the troop army is empty. Read the
+    # same header row in both inspected layouts; disagreement stays unknown.
+    values=[value for box in ((.315,.205,.45,.255),(.45,.205,.57,.255))
+            if (value:=_capacity_area(crop(frame,box),stop)) is not None]
+    return values[0] if values and len(set(values))==1 else None
+
+
+def _capacity_area(area, stop=None):
     # Exclude the troop silhouette at the left and the distant trash control.
     # The silhouette can become false leading digits when the camp is not full.
-    area=crop(frame,(.315,.205,.45,.255))
     hsv=cv2.cvtColor(area,cv2.COLOR_BGR2HSV)
     # Bright red separates the alert from the brown (also reddish) header.
     red=cv2.inRange(hsv,(0,110,185),(8,255,255))|cv2.inRange(hsv,(172,110,185),(180,255,255))
@@ -67,10 +74,40 @@ def capacity(frame, stop=None):
     return (used,total) if 0<=used<=total<=352 and total>0 else None
 
 
-def army_page(frame, stop=None):
-    if capacity(frame,stop) is None:return False
+@lru_cache(maxsize=1)
+def _army_heading():
+    return cv2.imread(str(Path(__file__).with_name('assets')/'army_heading.png'))
+
+
+def army_heading_visible(frame, stop=None):
+    """A known heading can authorize closing even when capacity is unreadable."""
+    if not isinstance(frame,np.ndarray):return False
     for bounds in ((.40,.075,.61,.13),(.13,.075,.29,.13)):
         if _white_label(frame,bounds,stop)=='myarmy':return True
+        reference=_army_heading()
+        if reference is not None:
+            scale=frame.shape[1]/1853
+            ref=cv2.resize(reference,None,fx=scale,fy=scale)
+            region=crop(frame,bounds);rh,rw=ref.shape[:2]
+            if region.shape[0]>=rh and region.shape[1]>=rw:
+                _,score,_,(x,y)=cv2.minMaxLoc(cv2.matchTemplate(region,ref,cv2.TM_CCOEFF_NORMED))
+                if score>=.97 and region[y:y+rh,x:x+rw].mean()>=ref.mean()*.85:return True
+    return False
+
+
+def army_editor_close_button(frame, stop=None):
+    if not army_heading_visible(frame,stop):return None
+    box=crop(frame,(.944,.057,.987,.126));hsv=cv2.cvtColor(box,cv2.COLOR_BGR2HSV)
+    red=cv2.inRange(hsv,(0,100,100),(10,255,255))|cv2.inRange(hsv,(170,100,100),(180,255,255))
+    white=cv2.inRange(hsv,(0,0,205),(180,70,255))
+    if red.mean()/255<.20 or white.mean()/255<.06:return None
+    return round(frame.shape[1]*.967),round(frame.shape[0]*.091)
+
+
+def army_page(frame, stop=None):
+    if capacity(frame,stop) is None:return False
+    if army_heading_visible(frame,stop):return True
+    for bounds in ((.40,.075,.61,.13),(.13,.075,.29,.13)):
         # The troop picker dims the header while preserving capacity/card UI.
         # Require its real grid as well as the exact dimmed heading.
         if len(picker_boxes(frame))>=3:
@@ -87,6 +124,25 @@ def edit_army_button(frame, stop=None):
                       (30,70,100),(90,255,255))
     if green.mean()/255<.25:return None
     return round(frame.shape[1]*.117),round(frame.shape[0]*.951)
+
+
+@lru_cache(maxsize=1)
+def _empty_army_prompt():
+    return cv2.imread(str(Path(__file__).with_name('assets')/'empty_army_edit.png'))
+
+
+def empty_army_button(frame, stop=None):
+    value=capacity(frame,stop)
+    if value is None or value[0]!=0 or not army_heading_visible(frame,stop):return None
+    reference=_empty_army_prompt()
+    if reference is None:return None
+    scale=frame.shape[1]/1853
+    ref=cv2.resize(reference,None,fx=scale,fy=scale)
+    region=crop(frame,(.45,.28,.98,.42));rh,rw=ref.shape[:2]
+    if region.shape[0]<rh or region.shape[1]<rw:return None
+    _,score,_,(x,y)=cv2.minMaxLoc(cv2.matchTemplate(region,ref,cv2.TM_CCOEFF_NORMED))
+    if score<.97 or region[y:y+rh,x:x+rw].mean()<ref.mean()*.9:return None
+    return round(frame.shape[1]*.45)+x+rw//2,round(frame.shape[0]*.28)+y+rh//2
 
 
 def picker_boxes(frame):
@@ -181,13 +237,27 @@ class ArmyPreparation:
                 if row:
                     # The Build list badge is the NEXT level. Inspecting the row
                     # can instead open a requirements dialog on starter accounts.
+                    # Small two-digit badges and a settling list can give an
+                    # uncertain first observation. Wait for two consecutive
+                    # identical complete rows/levels; never use a majority vote
+                    # or the saved account level to fill an unreadable badge.
                     target=r.reader.target_level(frame,row)
-                    fresh=self.frame()
-                    matching=next((v for v in r.reader.rows(fresh)
-                                   if compact(v['name'])=='townhall' and same_row_observation(row,v,fresh.shape)),None)
-                    if matching and target is not None and target==r.reader.target_level(fresh,matching) and 3<=target<=19:
-                        logger.info('Farming army: Town Hall {} verified from the building list',target-1)
-                        return target-1
+                    for _ in range(4):
+                        fresh=self.frame()
+                        if r.reader.menu_kind(fresh)!='buildings':break
+                        current=next((v for v in r.reader.rows(fresh) if compact(v['name'])=='townhall'),None)
+                        level=r.reader.target_level(fresh,current) if current else None
+                        same=bool(row and current and same_row_observation(row,current,fresh.shape))
+                        known=getattr(self.s.config,'account_town_hall',None)
+                        plausible=type(known) is not int or target is not None and target-1>=known
+                        if same and plausible and target is not None and target==level and 3<=target<=19:
+                            logger.info('Farming army: Town Hall {} verified from the building list',target-1)
+                            from coc_bot.accounts.hall import observe_hall
+                            observe_hall(self.s.config,target-1)
+                            return target-1
+                        logger.debug('Town Hall still settling: prior={}, fresh={}, same_row={}',target,level,same)
+                        frame,row,target=fresh,current,level
+                        self.s._sleep(.25)
                     raise ValueError('Current Town Hall level badge could not be verified')
                 h,w=frame.shape[:2]
                 self.s.input.swipe(round(w*.87),round(h*.82),round(w*.87),round(h*.40),350)
@@ -199,18 +269,25 @@ class ArmyPreparation:
             if close:self.tap(close)
             r.close()
 
-    def open(self):
+    def open(self, *, require_capacity=True):
+        visible=army_page if require_capacity else army_heading_visible
         if not self.s.attack_nav.leave_chat_for_home() or not self.s.attack_nav.open_attack_menu():
             raise ValueError('Could not open the farming army menu')
         frame=self.frame()
-        if army_page(frame,self.stop):return frame
+        from coc_bot.progression.home import recover_home_overlay
+        for _ in range(3):
+            if not recover_home_overlay(self.s.navigator,frame):break
+            self.s._sleep(.4);frame=self.frame()
+        if visible(frame,self.stop):return frame
         button=edit_army_button(frame,self.stop)
         if button is None:
             raise ValueError('Edit Army control was not verified')
         self.tap(button)
-        frame=self.frame()
-        if not army_page(frame,self.stop):raise ValueError('My Army did not open')
-        return frame
+        for _ in range(5):
+            frame=self.frame()
+            if visible(frame,self.stop):return frame
+            self.s._sleep(.25)
+        raise ValueError('My Army did not open')
 
     def observe(self):
         first=self.frame();second=self.frame()
@@ -234,9 +311,17 @@ class ArmyPreparation:
         return second,troops,a
 
     def unlocked(self,frame,cards):
-        if not cards:raise ValueError('An empty army needs a verified troop picker')
-        first=cards[0];x,y,w,h=first.box
-        self.tap((x+w//2,y+h//2));frame=self.frame()
+        if cards:
+            first=cards[0];x,y,w,h=first.box
+            self.tap((x+w//2,y+h//2))
+        else:
+            point=empty_army_button(frame,self.stop)
+            second=self.frame()
+            if (point is None or empty_army_button(second,self.stop)!=point
+                or capacity(second,self.stop)!=capacity(frame,self.stop)):
+                raise ValueError('Empty army and its troop edit area were not verified')
+            self.tap(point)
+        frame=self.frame()
         if not army_page(frame,self.stop):raise ValueError('Troop picker lost My Army')
         frame=self.learn_unlocks(frame)
         first=picker_unlocks(frame,self.catalog,self.stop)
@@ -264,7 +349,9 @@ class ArmyPreparation:
             if point is None:continue
             self.tap((x+point[0],y+point[1]))
             first=read_info(self.frame(),self.stop,level);second=read_info(self.frame(),self.stop,level)
-            if first is None or first!=second:raise ValueError('Troop Info identity did not agree; no army edits sent')
+            if first is None or first!=second:
+                logger.debug('Troop Info rejected: expected level {}, first={}, second={}',level,first,second)
+                raise ValueError('Troop Info identity did not agree; no army edits sent')
             self.tap(first['close']);fresh=self.frame()
             if not army_page(fresh,self.stop):raise ValueError('My Army did not return after troop Info')
             current=fresh[y:y+h,x:x+w]
@@ -285,10 +372,11 @@ class ArmyPreparation:
             self.tap((round(frame.shape[1]*.50),round(frame.shape[0]*.17)))
             frame=self.frame()
             if not army_page(frame,self.stop):raise ValueError('My Army disappeared before closing')
-            box=crop(frame,(.944,.057,.987,.126));hsv=cv2.cvtColor(box,cv2.COLOR_BGR2HSV)
-            red=cv2.inRange(hsv,(0,100,100),(10,255,255))|cv2.inRange(hsv,(170,100,100),(180,255,255))
-            if red.mean()/255<.20:raise ValueError('My Army close control is missing')
-            self.tap((round(frame.shape[1]*.967),round(frame.shape[0]*.091)))
+        point=army_editor_close_button(frame,self.stop)
+        if point:
+            if army_editor_close_button(self.frame(),self.stop)!=point:
+                raise ValueError('My Army close control changed')
+            self.tap(point)
             frame=self.frame()
         if direct_match_button(frame,stop_check=self.stop):
             self.tap((round(frame.shape[1]*.80),round(frame.shape[0]*.60)))
@@ -311,9 +399,23 @@ class ArmyPreparation:
                 except Exception as exc:logger.warning('Army preparation cleanup could not confirm home: {}',exc)
             raise
 
+    def army_hall(self):
+        try:return self.hall()
+        except ValueError as exc:
+            if str(exc)!='Town Hall entry was not found':raise
+            from coc_bot.accounts.store import selected_account
+            account=selected_account.get()
+            known=getattr(self.s.config,'account_town_hall',None)
+            if (account is None or account['tag']!=getattr(self.s.config,'account_tag',None)
+                or type(known) is not int or not 2<=known<=18 or account.get('town_hall')!=known):raise
+            # Army choice only: actual unlocks and housing are read below.
+            # This value never authorizes building/Town Hall spending.
+            logger.info('Town Hall upgrade row unavailable; using verified account TH{} for army choice only',known)
+            return known
+
     def _prepare(self):
         logger.info('Preparing farming army from current unlocks and camp space')
-        hall=self.hall()
+        hall=self.army_hall()
         self.open();frame,cards,space=self.observe()
         unlocked=self.unlocked(frame,cards)
         desired=composition(hall,space[1],{u:v['level'] for u,v in unlocked.items()})

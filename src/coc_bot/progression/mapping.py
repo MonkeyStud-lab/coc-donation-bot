@@ -20,13 +20,15 @@ def compact_projection(previous, frame):
     h,w=frame.shape[:2]
     mask=boundary_mask(frame)
     old=cv2.dilate(boundary_mask(previous),np.ones((3,3),np.uint8))
-    # Keep thin outline components with actual spatial extent; isolated red
-    # artwork/particles cannot establish the extent of a starter village.
+    # Sparse starter villages have many short, disconnected footprint steps.
+    # Keep those thin fragments; the independent long lines in BOTH directions
+    # and repeat-frame agreement below must still establish the whole envelope.
+    # Isolated red artwork/particles cannot establish it.
     count,labels,stats,_=cv2.connectedComponentsWithStats(mask)
     clean=np.zeros_like(mask)
     for i in range(1,count):
         x,y,bw,bh,area=stats[i]
-        if area>=30 and bw>=25 and bh>=20 and area/(bw*bh)<.20:
+        if area>=15 and bw>=12 and bh>=8 and area/(bw*bh)<.20:
             clean[labels==i]=255
     yy,xx=np.nonzero(clean)
     if len(xx)<300 or (old[yy,xx]>0).mean()<.95:return None

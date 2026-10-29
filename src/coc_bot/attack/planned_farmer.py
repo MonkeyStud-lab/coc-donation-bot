@@ -206,14 +206,18 @@ def run_planned_attack(farmer, *, automatic=False):
     except AdbStopped:
         return FarmResult(False,'stopped',True)
     try:
-        # A failed survey still entered an opponent. Wait for the match to end
-        # and restore the camera instead of handing a battle back to donations.
         started=(result.first_deploy_at or result.first_attempt_at) if result else None
-        timeout=None if started else max(225.,farmer.config.farm_battle_timeout_seconds)
-        farmer.attack_nav.wait_for_battle_end(timeout=timeout,since=started or opponent_at)
+        abandoned=False
+        if not started and not (AttackCheckpoint(farmer.config).load() or {}).get('deployment_possible'):
+            from coc_bot.attack.abort import leave_unstarted_opponent
+            logger.info('No deployment sent — leaving unverified opponent immediately')
+            abandoned=leave_unstarted_opponent(session)
+        else:
+            timeout=None if started else max(225.,farmer.config.farm_battle_timeout_seconds)
+            farmer.attack_nav.wait_for_battle_end(timeout=timeout,since=started or opponent_at)
         check_stop(session.client.stop_check)
         farmer._gs(GameState.RETURNING_HOME,'finish planned attack')
-        returned=farmer.attack_nav.return_home_from_attack()
+        returned=abandoned or farmer.attack_nav.return_home_from_attack()
         if not returned: return FarmResult(False,'home could not be confirmed',True)
         if farmer.donation_nav is not None and farmer.attack_nav.classifier._clan_chat_anchor_visible(farmer.capture.screenshot()):
             farmer.donation_nav.close_clan_chat(farmer.capture.screenshot())

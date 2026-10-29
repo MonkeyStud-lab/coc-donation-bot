@@ -349,6 +349,21 @@ class UpgradeRunnerTests(unittest.TestCase):
 
 
 class UpgradeSchedulingTests(unittest.TestCase):
+    def test_fill_builders_after_giving_lab_and_pets_a_turn(self):
+        bot=self.make_bot();bot.config.upgrade_buildings_enabled=True;bot.config.upgrade_pets_enabled=True
+        with patch('coc_bot.upgrades.runner.UpgradeRunner') as runner:
+            runner.return_value.run.side_effect=[{'status':s} for s in ('started','started','started','started','nothing_eligible')]
+            self.assertTrue(bot._maybe_run_upgrades())
+            self.assertEqual([c.args[0] for c in runner.return_value.run.call_args_list],
+                             ['buildings','research','pets','buildings','buildings'])
+
+    def test_uncertain_upgrade_stops_remaining_categories(self):
+        bot=self.make_bot();bot.config.upgrade_buildings_enabled=True
+        with patch('coc_bot.upgrades.runner.UpgradeRunner') as runner:
+            runner.return_value.run.return_value={'status':'needs_review'}
+            bot._maybe_run_upgrades()
+            runner.return_value.run.assert_called_once_with('buildings',execute=True)
+
     def make_bot(self):
         from coc_bot.bot import DonationBot
         bot=object.__new__(DonationBot)

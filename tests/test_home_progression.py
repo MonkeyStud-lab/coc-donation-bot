@@ -14,11 +14,19 @@ from coc_bot.progression.army import composition, farming_plan
 from coc_bot.progression.policy import town_hall_blockers, priority
 from coc_bot.progression.reader import ProgressionReader
 from coc_bot.progression.construction import controls, Construction
-from coc_bot.upgrades.vision import compact
+from coc_bot.upgrades.vision import compact, crop
 
 FIXTURES = Path(__file__).parent/'fixtures/progression'
 
 
+class LabPriorityTests(TestCase):
+    def test_lab_precedes_new_buildings_but_other_new_buildings_precede_upgrades(self):
+        rows=[{'name':'Cannon','new':True,'cost':100},
+              {'name':'Army Camp','new':False,'cost':100},
+              {'name':'Laboratory','new':False,'cost':1000},
+              {'name':'Town Hall','new':False,'cost':100}]
+        self.assertEqual([r['name'] for r in sorted(rows,key=priority)],
+                         ['Laboratory','Cannon','Army Camp','Town Hall'])
 class ProgressionPolicyTests(TestCase):
     def test_research_padlock_requires_the_actual_lock_and_build_menu(self):
         reader=ProgressionReader()
@@ -228,6 +236,48 @@ class ProgressionPolicyTests(TestCase):
             x,y=p.pixel(point)
             self.assertTrue(input_area(x,y,frame.shape[1],frame.shape[0]))
             self.assertLess(cv2.pointPolygonTest(np.float32(p.corners),(x,y),True),-10)
+
+    def test_short_starter_footprints_enclose_the_whole_observed_village(self):
+        from coc_bot.progression.mapping import compact_projection, deployment_line
+        from coc_bot.attack.mapping import boundary_mask
+        from coc_bot.attack.projection import input_area
+        from coc_bot.attack.plans import MapPoint
+        before=cv2.imread(str(FIXTURES/'compact-short-steps-before.png'))
+        after=cv2.imread(str(FIXTURES/'compact-short-steps-after.png'))
+        p=compact_projection(before,after)
+        self.assertIsNotNone(p)
+        # Both disconnected footprints, including the lower castle, must be
+        # inside the envelope; all deployment points stay outside and off HUD.
+        for x,y in ((719,421),(861,338),(1145,433),(957,622),(813,731)):
+            self.assertGreaterEqual(cv2.pointPolygonTest(np.float32(p.corners),(x,y),True),0)
+        first,last=deployment_line(p,after.shape[1],after.shape[0])
+        for y in np.linspace(first.y,last.y,30):
+            xy=p.pixel(MapPoint(first.x,float(y)))
+            self.assertTrue(input_area(*xy,after.shape[1],after.shape[0]))
+            self.assertLess(cv2.pointPolygonTest(np.float32(p.corners),xy,True),-10)
+        shifted=cv2.warpAffine(after,np.float32([[1,0,10],[0,1,0]]),
+                               (after.shape[1],after.shape[0]))
+        self.assertIsNone(compact_projection(before,shifted))
+        # A missing outline in the preceding frame cannot authorize taps.
+        mask=boundary_mask(after)
+        with patch('coc_bot.progression.mapping.boundary_mask',
+                   side_effect=[mask,np.zeros_like(mask)]):
+            self.assertIsNone(compact_projection(before,after))
+
+    def test_starter_partial_or_single_direction_outline_never_authorizes_taps(self):
+        from coc_bot.progression.mapping import compact_projection
+        from coc_bot.attack.mapping import boundary_mask
+        frame=cv2.imread(str(FIXTURES/'compact-short-steps-after.png'))
+        # A footprint touching the observation crop is not a complete survey.
+        mask=boundary_mask(frame)
+        cv2.line(mask,(280,400),(340,445),255,1)
+        with patch('coc_bot.progression.mapping.boundary_mask',return_value=mask):
+            self.assertIsNone(compact_projection(frame,frame))
+        # Many parallel fragments still lack the other map direction.
+        mask[:]=0
+        for y in range(300,650,50):cv2.line(mask,(700,y),(780,y+60),255,1)
+        with patch('coc_bot.progression.mapping.boundary_mask',return_value=mask):
+            self.assertIsNone(compact_projection(frame,frame))
 
     def test_unresolved_payment_never_falls_back_to_legacy_purchases(self):
         from coc_bot.progression.runner import ProgressionRunner
@@ -488,6 +538,22 @@ class ProgressionReaderTests(TestCase):
         self.assertEqual(camp['cost'],2000)
         # Its partial row must be read after scrolling, never as missing price.
         self.assertFalse(any(compact(v['name'])=='archertower' for v in rows))
+
+    def test_small_white_starter_counters_use_inspected_font_variants(self):
+        reader=ProgressionReader()
+        frame=cv2.imread(str(FIXTURES/'starter-short-balances.png'))
+        self.assertEqual(reader.balances(frame),{'gold':136,'elixir':2635,'dark_elixir':None})
+        frame[30:80,960:1260]=0
+        self.assertIsNone(reader.balances(frame)['gold'])
+
+    def test_conflicting_balance_reads_do_not_fall_back_to_another_font(self):
+        from coc_bot.progression.reader import balance_amount
+        frame=cv2.imread(str(FIXTURES/'starter-short-balances.png'))
+        image=crop(frame,(.525,.035,.679,.072))
+        with patch('coc_bot.progression.reader.amount',side_effect=[136,138]), \
+             patch('coc_bot.upgrades.digits.read_digits') as extra:
+            self.assertIsNone(balance_amount(image))
+            extra.assert_not_called()
 
     def test_edit_army_requires_text_without_portrait_letters_and_green(self):
         from coc_bot.progression.preparation import edit_army_button

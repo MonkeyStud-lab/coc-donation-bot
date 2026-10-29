@@ -99,6 +99,7 @@ class DonationBot:
         self._farm_requested = False
         self._farm_fail_cooldown_until = 0.0
         self._next_upgrade_check = 0.0
+        self._visit_repeat=False;self._visit_reason=None;self._visit_retry_at=None
         self.last_screen: str = "unknown"
         self.mode = BotMode.DONATE
         self._unknown_streak = 0
@@ -106,6 +107,9 @@ class DonationBot:
         self.farmer.attack_nav.mode = BotMode.ATTACK
         self.farmer._on_mode = self.set_mode
         self.farmer.tracker = self.tracker
+        from coc_bot.runtime.visits import Visit
+        self._visit = Visit(self.config)
+        self._visit_chat_pending=True
 
         # Stop button interrupts long waits (chat nav, farm, donation panel, breaks).
         stop = self.should_stop
@@ -149,7 +153,7 @@ class DonationBot:
 
     def _settings_stop_ready(self) -> bool:
         return (getattr(self, "_finish_action_requested", False)
-                and self._state not in ("open_donation", "donate", "farm", "builder_base"))
+                and self._state not in ("open_donation", "donate", "farm", "builder_base", "layouts"))
 
     def request_farm_attack(self) -> None:
         """Queue one farm attack as soon as the loop is not mid-donation."""
@@ -179,20 +183,8 @@ class DonationBot:
         if now < self._farm_fail_cooldown_until:
             left = int(self._farm_fail_cooldown_until - now)
             return f"Farm: retry cooldown {left // 60}m {left % 60}s"
-        since = self.tracker.seconds_since_last_farm()
-        interval = self.tracker.effective_farm_interval_seconds()
-        if since is None:
-            return "Farm: due on next safe tick"
-        remaining = max(0, int(interval - since))
-        if remaining <= 0:
-            return "Farm: due on next safe tick"
-        variance = max(0, int(self.config.farm_interval_variance_seconds))
-        if variance > 0:
-            return (
-                f"Farm: next auto in {remaining // 60}m {remaining % 60}s "
-                f"(target {interval}s)"
-            )
-        return f"Farm: next auto in {remaining // 60}m {remaining % 60}s"
+        return (f'Farm: refill below {self.config.farm_resource_start_percent}% '
+                f'to {self.config.farm_resource_target_percent}%')
 
     def break_status_line(self) -> str:
         """Short status for the GUI (time until next session break)."""
@@ -254,9 +246,18 @@ class DonationBot:
 
     @exclusive_device
     def run(self) -> None:
+        self.run_owned()
+
+    def run_owned(self) -> None:
+        """Run under an existing controller lease, including fleet handoffs."""
         logger.info("CoC Donation Bot starting (dry_run={})", self.config.dry_run)
         if self.should_stop():
             return
+        from coc_bot.accounts.store import read
+        layout=read(self.config.data_dir/'layouts/state.json',{})
+        if layout.get('pending') or layout.get('last_survey',{}).get('payment'):
+            if not self._layout_runner().recover():
+                raise RuntimeError('Interrupted layout edit could not be safely recovered')
         from coc_bot.accounts.navigation import verify_session
         verify_session(self, self.should_stop)
         self._start_recorder()
@@ -305,6 +306,9 @@ class DonationBot:
 
             while not self._stop_requested:
                 if self._settings_stop_ready():
+                    break
+                if (self._state in ('scan_chat','scroll_chat') and
+                    getattr(self,'_fleet_should_yield',lambda:False)()):
                     break
                 try:
                     self._loop_tick()
@@ -361,22 +365,77 @@ class DonationBot:
         # Farm between donation states only — never mid open_donation / donate.
         if self._settings_stop_ready():
             return
-        if self._maybe_run_farm():
-            self.tracker.tick()
-            lo, hi = self.config.scan_interval_ms
-            interrupted_sleep(random.uniform(lo, hi) / 1000.0, self.should_stop)
-            return
-
-        if self._stop_requested:
-            return
-
-        if self._maybe_run_upgrades():
-            self.tracker.tick()
-            return
-
-        if self._maybe_run_builder_base():
-            self.tracker.tick()
-            return
+        work={'requests':self._maybe_request_reinforcements,'upgrades':self._maybe_run_upgrades,'farm':self._maybe_run_farm,'layouts':self._maybe_run_layouts,
+              'builder_base':self._maybe_run_builder_base}
+        visit=getattr(self,'_visit',None)
+        from coc_bot.accounts.store import read
+        if (visit and getattr(self,'_visit_chat_pending',False)
+            and getattr(self.config,'donation_enabled',True)
+            and not read(self.config.data_dir/'upgrades/state.json',{}).get('pending')
+            and not read(self.config.data_dir/'layouts/state.json',{}).get('pending')
+            and not read(self.config.data_dir/'layouts/state.json',{}).get('last_survey',{}).get('payment')):
+            if self._state in ('scan_chat','scroll_chat'):
+                self._do_scan_chat()
+                # Continue existing donation states before maintenance work.
+                self._visit_chat_pending=self._state in ('open_donation','donate')
+            elif self._state=='open_donation':self._do_open_donation()
+            elif self._state=='donate':self._do_donate()
+            self.tracker.tick();return
+        order=getattr(self,'_fleet_work_order',lambda:visit.order() if visit else tuple(work))()
+        if visit and self._state in ('open_donation','donate'):order=()
+        from coc_bot.accounts.store import read
+        layout=read(self.config.data_dir/'layouts/state.json',{})
+        from coc_bot.layouts.runner import REVISION
+        automatic=layout.get('automatic',{})
+        hall=getattr(self.config,'account_town_hall',None)
+        new_layout=(automatic.get('hall')!=hall or automatic.get('revision')!=REVISION)
+        needs_layout=(new_layout or automatic.get('stage')!='active'
+                      or automatic.get('dirty') or not layout.get('completed',{}).get('home_verified'))
+        if (getattr(self.config,'layouts_enabled',False) and type(hall) is int and hall>=4
+            and needs_layout and (new_layout or time.time()>=automatic.get('next_check_at',0))):
+            # First setup / Hall changes must not keep losing whole visits to
+            # due farm attacks. LayoutRunner is bounded, and its existing fresh
+            # donation-request check still gives visible requests priority.
+            order=('layouts',)+tuple(name for name in order if name!='layouts')
+        if layout.get('pending') or layout.get('last_survey',{}).get('payment'):
+            order=('layouts',)
+        # An explicit Farm now request keeps its usual priority over scheduled
+        # work. Each method still enforces its own permissions and due time.
+        if self._farm_requested and order!=('layouts',):order=('farm',)+tuple(name for name in order if name!='farm')
+        from coc_bot.upgrades.runner import UpgradeRunner
+        upgrade_pending=UpgradeRunner(self.config,self.capture,self.nav_input,self.navigator).state().get('pending')
+        if upgrade_pending and order!=('layouts',):
+            # A saved payment outcome must be resolved before another feature
+            # can leave this village, including a rotated/manual farm turn.
+            order=('upgrades',)
+        for name in order:
+            if self.should_stop():return
+            self._visit_repeat=False;self._visit_reason=None;self._visit_retry_at=None
+            urgent=(name=='upgrades' and upgrade_pending or name=='layouts' and
+                    (layout.get('pending') or layout.get('last_survey',{}).get('payment')))
+            deferred=visit.deferred(name) if visit and not urgent else None
+            if deferred:
+                self._visit_reason=deferred.get('reason');self._visit_retry_at=deferred['retry_at']
+                attempted=False
+            else:
+                if visit and name=='upgrades':self._next_upgrade_check=0
+                attempted=work[name]()
+            pending_after=UpgradeRunner(self.config,self.capture,self.nav_input,self.navigator).state().get('pending') if visit else None
+            unresolved=(pending_after or builder_pending(self.config) or pending(self.config)) if visit else None
+            if visit and not unresolved and self._state in ('scan_chat','scroll_chat') and not self.should_stop():
+                visit.finish_step(name,repeat=self._visit_repeat,reason=self._visit_reason,retry_at=self._visit_retry_at)
+                self._visit_chat_pending=True
+                getattr(self,'_fleet_after_step',lambda:None)()
+            if attempted:
+                getattr(self,'_fleet_work_attempted',lambda _:None)(name)
+                self.tracker.tick()
+                if name=='farm':
+                    lo,hi=self.config.scan_interval_ms
+                    interrupted_sleep(random.uniform(lo,hi)/1000.0,self.should_stop)
+                return
+            if visit:
+                self.tracker.tick()
+                return
 
         if not getattr(self.config,'donation_enabled',True):
             self.tracker.tick()
@@ -402,7 +461,48 @@ class DonationBot:
         lo, hi = self.config.scan_interval_ms
         interrupted_sleep(random.uniform(lo, hi) / 1000.0, self.should_stop)
 
+    def _layout_runner(self):
+        from types import SimpleNamespace
+        from coc_bot.layouts.runner import LayoutRunner
+        return LayoutRunner(SimpleNamespace(config=self.config,capture=self.capture,input=self.nav_input,
+                            client=self.client,navigator=self.navigator),self.should_stop)
+
+    def _maybe_run_layouts(self):
+        from coc_bot.accounts.store import read
+        from coc_bot.layouts.runner import REVISION
+        state=read(self.config.data_dir/'layouts/state.json',{})
+        unresolved=state.get('pending') or state.get('last_survey',{}).get('payment')
+        if not unresolved and (not getattr(self.config,'layouts_enabled',False) or self.config.dry_run):return False
+        if self._state not in ('scan_chat','scroll_chat') or self.should_stop():return False
+        automatic=state.get('automatic',{})
+        if (not unresolved and automatic.get('hall')==self.config.account_town_hall
+            and automatic.get('revision')==REVISION
+            and time.time()<automatic.get('next_check_at',0)):return False
+        if not unresolved and self._has_donate_request(self.capture.screenshot()):
+            self._visit_repeat=True;return False
+        runner=self._layout_runner()
+        self.set_mode(BotMode.HOME)
+        self._set_state('layouts')
+        try:
+            result=runner.run(seconds=90)
+            logger.info('Automatic layout: {} — {}',result.get('status'),result.get('message',''))
+            if result.get('status') in ('unavailable','current','disabled'):
+                runner.record(next_check_at=time.time()+3600)
+            remaining=read(runner.i.path,{})
+            if remaining.get('pending') or remaining.get('last_survey',{}).get('payment'):
+                raise RuntimeError('Automatic layout retained an unresolved edit or payment')
+        finally:
+            self.set_mode(BotMode.DONATE)
+            remaining=read(runner.i.path,{})
+            if not self.should_stop() and not (remaining.get('pending') or remaining.get('last_survey',{}).get('payment')):
+                self._set_state('scan_chat')
+            self._state_entered=time.monotonic()
+        return True
+
     def _maybe_run_builder_base(self) -> bool:
+        hall=getattr(self.config,'account_town_hall',None)
+        if type(hall) is int and hall<6:
+            return False  # Builder Base is not unlocked; do not start a boat journal.
         if (self._state not in ('scan_chat','scroll_chat') or self.should_stop()
                 or self.config.dry_run or not (self.config.builder_base_attacks_enabled
                                                or self.config.builder_base_upgrades_enabled
@@ -411,21 +511,46 @@ class DonationBot:
             return False
         from coc_bot.builder_base.runner import BuilderBaseRunner, state
         visit = state(self.config)
-        if time.time() < visit.get('next_visit_at',0):
+        if not getattr(self,'_visit',None) and time.time() < visit.get('next_visit_at',0):
             return False
         if self._has_donate_request(self.capture.screenshot()):
+            self._visit_repeat=True
             return False
         self._set_state('builder_base')
         self.game_state.transition(GameState.BUILDER_BASE,reason='scheduled visit')
         runner = BuilderBaseRunner(self.config,self.capture,self.nav_input,self.navigator,
                                    self.client,self.should_stop)
-        result = runner.run()
+        try:
+            result = runner.run(refill=True) if getattr(self,'_visit',None) else runner.run()
+        except ValueError as exc:
+            if not getattr(self,'_visit',None) or self.should_stop():raise
+            # Recover/close the journal before deferring this step. An uncertain
+            # payment or battle that cannot recover still raises and owns input.
+            runner.recover()
+            from coc_bot.builder_base.runner import pending as builder_pending
+            if builder_pending(self.config):raise
+            result={'retry_at':time.time()+900,'message':str(exc),'status':'deferred'}
+        self._visit_repeat=result.get('visit_repeat',False)
+        if result.get('retry_at'):
+            self._visit_retry_at=result['retry_at'];self._visit_reason=result.get('message')
         logger.info('Builder Base visit completed: {}',result)
         self.set_mode(BotMode.DONATE)
         self.game_state.transition(GameState.CLAN_CHAT,reason='Builder Base return verified')
         self._set_state('scan_chat')
         self._state_entered = time.monotonic()
         return True
+
+    def _maybe_request_reinforcements(self) -> bool:
+        if self._state not in ('scan_chat','scroll_chat') or self.should_stop():return False
+        from coc_bot.donation.reinforcements import request_if_empty,eligible
+        if not eligible(self.config):return False
+        from coc_bot.attack.planned_farmer import context
+        try:
+            result=request_if_empty(context(self.farmer))
+            if result:logger.info('Clan Castle request check finished')
+            return result
+        finally:
+            self._state_entered=time.monotonic()
 
     def _maybe_run_upgrades(self) -> bool:
         if self._state not in ('scan_chat','scroll_chat') or self._stop_requested or self.config.dry_run:
@@ -438,6 +563,7 @@ class DonationBot:
             return False
         frame=self.capture.screenshot()
         if self._has_donate_request(frame):
+            self._visit_repeat=True
             return False
         self._next_upgrade_check=time.monotonic()+self.config.upgrade_interval_seconds
         from coc_bot.upgrades.runner import UpgradeRunner
@@ -450,13 +576,34 @@ class DonationBot:
                 runner=ProgressionRunner(self.config,self.capture,self.nav_input,self.navigator,self.should_stop)
             else:
                 runner=UpgradeRunner(self.config,self.capture,self.nav_input,self.navigator,self.should_stop)
-            for kind in kinds:
+            # Give each single-slot category a turn before filling remaining
+            # builders. Each successful payment is independently verified by
+            # the runner; an uncertain outcome stops the entire pass.
+            queue=list(kinds)
+            attempts=0
+            while queue and attempts<10:
+                kind=queue.pop(0)
                 if self._stop_requested: break
                 result=runner.run(kind,execute=True)
+                attempts+=1
                 logger.info('Upgrade check ({}): {} — {}',kind,result.get('status'),
                             result.get('message','No resource spending requested'))
-                if result.get('status')=='needs_review': break
+                if result.get('status') in ('needs_review','stopped','blocked','changed'):
+                    self._visit_retry_at=time.time()+300
+                    self._visit_reason=result.get('message',result['status'])
+                    if result.get('status') in ('needs_review','stopped') or runner.state().get('pending'):break
+                    continue  # A pre-payment building issue must not starve lab/pets.
+                if kind=='buildings' and result.get('status') in ('started','built','recovered'):
+                    # Rescan after construction/upgrade; never reuse the old
+                    # balance, builder count, price, or selected row.
+                    queue.append(kind)
+                    if self._has_donate_request(self.capture.screenshot()): break
+            self._visit_repeat=bool(queue) and not getattr(self,'_visit_retry_at',None)
+            if self._visit_repeat:self._next_upgrade_check=0
         finally:
+            # Long inventory reads must not make the next check overdue before
+            # this one finishes, starving farming and donation scans.
+            self._next_upgrade_check=time.monotonic()+self.config.upgrade_interval_seconds
             self._state_entered=time.monotonic()
             self.set_mode(BotMode.DONATE)
             if not self._stop_requested:
@@ -466,6 +613,43 @@ class DonationBot:
                                            reason='upgrade check finished')
         return True
 
+    def _resource_state(self):
+        from coc_bot.accounts.store import read
+        state=read(self.config.data_dir/'resources/home.json',{})
+        if state and state.get('account',self.config.account_tag)!=self.config.account_tag:
+            raise ValueError('Resource observations belong to a different account')
+        return state
+
+    def _save_resource_state(self, state):
+        from coc_bot.accounts.store import write
+        write(self.config.data_dir/'resources/home.json',state|{'account':self.config.account_tag})
+
+    def _observe_resources(self):
+        from coc_bot.progression.resources import HomeResources
+        return HomeResources(self.navigator).observe(self.config)
+
+    def _resource_farm_due(self):
+        from coc_bot.runtime.resource_farming import decide
+        state=self._resource_state()
+        if time.time()<state.get('retry_at',0):
+            self._visit_reason=state.get('message','Resource farming paused')
+            self._visit_retry_at=state['retry_at'];return False
+        observation=self._observe_resources()
+        decision=decide(observation,state,start=self.config.farm_resource_start_percent,
+                        stop=self.config.farm_resource_target_percent)
+        state.update(observation=observation,observed_at=time.time(),status=decision.status,message=decision.message)
+        self._visit_reason=decision.message
+        if decision.status=='unverified':
+            state['retry_at']=time.time()+300;self._visit_retry_at=state['retry_at']
+        if decision.attack and state.get('no_progress',0)>=3:
+            state.update(retry_at=time.time()+900,message='Three attacks produced no verified resource gain',no_progress=0)
+            self._visit_retry_at=state['retry_at'];self._visit_reason=state['message']
+            self._save_resource_state(state);return False
+        self._save_resource_state(state)
+        logger.info('Resource farming: {}',decision.message)
+        self._refill_before=observation;self._refill_resources=decision.resources
+        return decision.attack
+
     def _farm_due(self) -> bool:
         if self._farm_requested:
             return True
@@ -474,17 +658,11 @@ class DonationBot:
         if not self.config.farm_calibrated:
             return False
         if time.monotonic() < self._farm_fail_cooldown_until:
+            self._visit_retry_at=time.time()+self._farm_fail_cooldown_until-time.monotonic()
+            self._visit_reason='Attack retry cooldown'
             return False
-        since = self.tracker.seconds_since_last_farm()
-        interval = self.tracker.effective_farm_interval_seconds()
-        due = since is None or since >= interval
-        if due and since is not None:
-            logger.debug(
-                "Farm due: {:.0f}s since last fight (target interval {}s)",
-                since,
-                interval,
-            )
-        return due
+        if self.config.dry_run:return False
+        return self._resource_farm_due()
 
     def _maybe_run_farm(self) -> bool:
         """Run one farm cycle if due. Returns True if farm work was attempted."""
@@ -509,11 +687,7 @@ class DonationBot:
         if not manual and not self.config.farm_enabled:
             return False
 
-        logger.info(
-            "Pausing donations for farm attack (manual={}, interval={}s)",
-            manual,
-            max(60, int(self.config.farm_interval_seconds)),
-        )
+        logger.info('Pausing donations for resource refill attack (manual={})',manual)
         self._set_state("farm")
         self.game_state.transition(GameState.HOME, reason="farm start")
         self.set_mode(BotMode.HOME)
@@ -536,12 +710,7 @@ class DonationBot:
                 self.tracker.mark_farm_success()
             self._farm_fail_cooldown_until = 0.0
             if not result.success:
-                logger.warning(
-                    "Farm attempt did not complete ({}) — still advancing interval clock "
-                    "({}s until next auto farm)",
-                    result.reason,
-                    max(60, int(self.config.farm_interval_seconds)),
-                )
+                logger.warning('Farm attempt did not complete ({}) — recovery is required',result.reason)
         else:
             cooldown = max(60, int(self.config.farm_retry_cooldown_seconds))
             self._farm_fail_cooldown_until = time.monotonic() + cooldown
@@ -553,6 +722,8 @@ class DonationBot:
         from coc_bot.attack.recovery import pending
         if pending(self.config):
             self._recover()
+            self._visit_retry_at=time.time()+300
+            self._visit_reason='Attack recovery must finish before another refill battle'
             return True
         self.set_mode(BotMode.DONATE)
         if not self._stop_requested:
@@ -560,6 +731,26 @@ class DonationBot:
         self.game_state.transition(GameState.CLAN_CHAT if getattr(self.config,'donation_enabled',True) else GameState.HOME, reason="farm done")
         self._set_state("scan_chat")
         self._last_anti_idle = time.monotonic()
+        if not manual and not self._stop_requested:
+            state=self._resource_state()
+            if result.success:
+                from coc_bot.runtime.resource_farming import record_outcome,decide
+                after=self._observe_resources()
+                resources=getattr(self,'_refill_resources',())
+                record_outcome(state,getattr(self,'_refill_before',{}).get('balances',{}),
+                               after.get('balances',{}),resources)
+                decision=decide(after,state,start=self.config.farm_resource_start_percent,
+                                stop=self.config.farm_resource_target_percent)
+                state.update(observation=after,observed_at=time.time(),status=decision.status,message=decision.message)
+                self._visit_reason=decision.message
+                if decision.status=='unverified':
+                    state['retry_at']=time.time()+300
+                    self._visit_retry_at=state['retry_at'];self._visit_reason='Post-battle resources are unreadable'
+                else:self._visit_repeat=decision.attack
+            else:
+                state['retry_at']=time.time()+max(60,self.config.farm_retry_cooldown_seconds)
+                self._visit_retry_at=state['retry_at'];self._visit_reason=result.reason
+            self._save_resource_state(state)
         return True
 
     def _maybe_anti_idle(self) -> None:
@@ -796,6 +987,15 @@ class DonationBot:
 
         recorder.note_event("recovery", state=self._state)
         self.game_state.transition(GameState.RECOVERING, reason="watchdog/desync")
+        from coc_bot.accounts.store import read
+        layout=read(self.config.data_dir/'layouts/state.json',{})
+        if layout.get('pending') or layout.get('last_survey',{}).get('payment'):
+            if not self._layout_runner().recover():
+                raise RuntimeError('Layout recovery is uncertain; automatic navigation stopped')
+            if not self.navigator.ensure_clan_chat():
+                raise RuntimeError('Home could not be verified after layout recovery')
+            self._set_state('scan_chat');self._state_entered=time.monotonic()
+            return
         from coc_bot.builder_base.runner import BuilderBaseRunner, pending as builder_pending
         if builder_pending(self.config):
             BuilderBaseRunner(self.config,self.capture,self.nav_input,self.navigator,

@@ -229,7 +229,7 @@ class InventoryParser:
                 category = default_category
                 if identify and self.icon_matcher.available():
                     matched = self.icon_matcher.match_slot(cell, preferred_categories=preferred)
-                    if matched is not None:
+                    if matched is not None and matched[1]>=.90:
                         unit_id, conf = matched
                         category = self.icon_matcher.resolve_category(unit_id, default_category)
                         logger.debug(

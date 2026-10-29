@@ -130,7 +130,7 @@ class DonationExecutor:
         max_rounds: int = 20,
     ) -> bool:
         """Donate for the current donation panel using colored slot detection."""
-        del capacity  # reserved for a later smart-fill mode; unused in simple path
+        self._quality_open=False
         if self._stopping():
             return False
         frame = self.capture.screenshot()
@@ -152,6 +152,14 @@ class DonationExecutor:
         resolved_kind = kind
         if resolved_kind is None:
             resolved_kind = RequestKind.SPECIFIC if is_specific else RequestKind.OPEN
+        if resolved_kind==RequestKind.SPECIFIC:
+            visible=self.inventory_parser.parse_bar_slots(self.capture.screenshot(),'donation_troop_bar',identify=False)
+            if len(visible)>=5:
+                logger.info('Broad troop choice confirms open capacity — applying quality policy')
+                resolved_kind=RequestKind.OPEN
+            elif self.inventory_parser.layout_session is None:
+                logger.warning('Donation geometry is unverified; refusing old coordinates')
+                self._finish_donation();return False
 
         if resolved_kind == RequestKind.SPECIFIC:
             logger.info(
@@ -167,21 +175,10 @@ class DonationExecutor:
             self._finish_donation()
             return False
 
-        if resolved_kind == RequestKind.HYBRID:
-            logger.info(
-                "Hybrid request — clear visible troop+spell slots, then scroll bars"
-            )
-            donated_any = self._donate_open_colored_scroll()
-            if not self._stopping():
-                self._finish_donation()
-            return donated_any
-
-        logger.info(
-            "Open request — clear visible troop+spell slots, then scroll for siege/etc."
-        )
-        donated_any = self._donate_open_colored_scroll()
-        if not self._stopping():
-            self._finish_donation()
+        self._quality_open=True
+        donated_any=self._donate_quality(capacity)
+        if not self._stopping():self._finish_donation()
+        self._quality_open=False
         return donated_any
 
     def _donate_open_colored_scroll(self) -> bool:
@@ -213,6 +210,55 @@ class DonationExecutor:
                 made = True
         return made
 
+    def _donate_quality(self, capacity):
+        from coc_bot.donation.quality import HOUSING,composition
+        made=False
+        remaining=capacity.troop_remaining if capacity else None
+        for _ in range(6):
+            found=set()
+            frame=self.capture.screenshot()
+            if self._stopping() or not self._panel_visible(frame):return made
+            visible={s.unit_id for s in self.inventory_parser.parse_bar_slots(frame,'donation_troop_bar',identify=True)}
+            if visible&{'dragon','electro_dragon'}:
+                approved=visible&HOUSING.keys()
+                self._quality_targets=composition(remaining,approved) if remaining is not None else {next(u for u in HOUSING if u in approved and u!='archer'):1}
+                self._quality_spent=0
+                made=self._clear_colored_current_view('donation_troop_bar') or made
+                if remaining is not None:remaining=max(0,remaining-self._quality_spent)
+                if not self._panel_visible(self.capture.screenshot()):return made
+            # Survey all pages before selecting: a small visible troop must not
+            # consume space needed by a stronger troop further along the bar.
+            maximum=self._max_scrolls_for_bar('donation_troop_bar')
+            for page in range(maximum+1):
+                frame=self.capture.screenshot()
+                if self._stopping() or not self._panel_visible(frame):return made
+                found.update(s.unit_id for s in self.inventory_parser.parse_bar_slots(frame,'donation_troop_bar',identify=True))
+                if page<maximum and not self._scroll_bar('donation_troop_bar',scroll_i=page,max_scrolls=maximum):return made
+            allowed=found&HOUSING.keys()
+            if not allowed:
+                self._quality_targets={};self._quality_spent=0
+                made=self._clear_colored_current_view('donation_spell_bar') or made
+                made=self._scroll_and_clear_bar('donation_spell_bar') or made
+                break
+            if remaining is None and allowed=={'archer'}:break
+            targets=composition(remaining,allowed) if remaining is not None else {next(u for u in HOUSING if u in allowed and u!='archer'):1}
+            if not targets:break
+            self._quality_targets=targets
+            # Return to the beginning using the same verified panel geometry.
+            for _ in range(maximum):
+                frame=self.capture.screenshot()
+                if self._stopping() or not self._panel_visible(frame):return made
+                line=self.inventory_parser.bar_swipe_line(frame,'donation_troop_bar')
+                if not line:break
+                x1,y,x2,_=line;self.input.swipe(x2,y,x1,y,duration_ms=self.BAR_SWIPE_MS)
+                if interrupted_sleep(self.AFTER_BAR_SCROLL_S,self.stop_check):return made
+            self._quality_spent=0
+            before=sum(targets.values())
+            made=self._donate_open_colored_scroll() or made
+            if remaining is not None:remaining=max(0,remaining-self._quality_spent)
+            if sum(targets.values())==before:break
+        return made
+
     def _max_scrolls_for_bar(self, bar_roi_key: str) -> int:
         if bar_roi_key == "donation_spell_bar":
             return self.config.spell_bar_max_scroll_attempts
@@ -229,8 +275,11 @@ class DonationExecutor:
                 return made
 
             slots = self.inventory_parser.parse_bar_slots(
-                frame, bar_roi_key, identify=False
+                frame, bar_roi_key, identify=getattr(self,'_quality_open',False)
             )
+            if getattr(self,'_quality_open',False):
+                slots=[s for s in slots if not s.unit_id.startswith(('troop_slot_','spell_slot_')) and
+                       (s.category in ('spell','siege') or getattr(self,'_quality_targets',{}).get(s.unit_id,0)>0)]
             if not slots:
                 break
 
@@ -304,6 +353,7 @@ class DonationExecutor:
         return made
 
     def _tap_colored_slots(self, slots: list[InventorySlot]) -> bool:
+        if getattr(self,'_quality_open',False):return self._tap_automatic_slots(slots)
         if self.inventory_parser.layout_session is not None:
             return self._tap_automatic_slots(slots)
         if not slots:
@@ -337,17 +387,23 @@ class DonationExecutor:
                 if self._stopping() or not self._panel_visible(frame):
                     return made
                 if not elixir_is_selected(self.config, frame):
-                    session.valid = False
+                    if session is not None:session.valid = False
                     logger.warning("Donation stopped: selected elixir indicator is no longer confirmed")
                     return made
                 key = 'donation_spell_bar' if slot.category == 'spell' else 'donation_troop_bar'
-                current = self.inventory_parser.parse_bar_slots(frame, key, identify=False)
+                current = self.inventory_parser.parse_bar_slots(frame, key, identify=getattr(self,'_quality_open',False))
                 target = next((s for s in current if s.unit_id == slot.unit_id), None)
                 if target is None:
                     continue  # The request may have been filled by another donor.
+                if getattr(self,'_quality_open',False) and target.category=='troop':
+                    from coc_bot.donation.quality import HOUSING
+                    if self._quality_targets.get(target.unit_id,0)<=0 or target.unit_id not in HOUSING:continue
                 if self._stopping():
                     return made
                 self.input.tap(*target.center, jitter=0)
+                if getattr(self,'_quality_open',False) and target.category=='troop':
+                    self._quality_targets[target.unit_id]-=1
+                    self._quality_spent+=HOUSING[target.unit_id]
                 made = True
                 if interrupted_sleep(self.BETWEEN_SLOTS_S, self.stop_check):
                     return made

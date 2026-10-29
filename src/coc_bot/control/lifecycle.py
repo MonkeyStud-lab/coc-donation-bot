@@ -107,8 +107,8 @@ class BotController:
                 error_traceback=self._error_traceback,
             )
 
-    def start(self, options: RunOptions = RunOptions()) -> bool:
-        return self._start(self._factory, options)
+    def start(self, options: RunOptions = RunOptions(), *, factory=None) -> bool:
+        return self._start(factory or self._factory, options)
 
     def new_controller(self):
         """Use the same injected worker implementation with independent state."""

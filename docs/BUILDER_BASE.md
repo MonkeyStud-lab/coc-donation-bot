@@ -1,23 +1,65 @@
 # Builder Base
 
-Builder Base visits are experimental and independent of Home Village farming.
-In **Settings**, choose any combination of **Collect Builder Base resources**,
-**Builder Base attacks**, **Builder Base building upgrades**, and **Builder Base
-research**. Set the visit interval, builders to keep free, and the Builder Gold
-and Builder Elixir reserves. All four switches default to off. Start the bot
-normally. Collection-only visits do not require an equipped attack army.
+Builder Base is an optional step in each saved account visit. In **Settings**,
+choose **Collect Builder Base resources**, **Refill Builder Base resources**,
+**Builder Base building upgrades**, and/or **Builder Base research**. Choose
+builder reservations and gold/elixir reserves independently from Home Village.
+These switches default off. **Builder village progression** adds new structures
+and the complete building inventory gate before upgrading the Builder Hall.
 
-A visit runs between donation operations, after any due Home Village farm or
-upgrade check. A visible donation request takes priority. Each visit performs
-at most one attack and one eligible upgrade, then returns by boat and verifies
-clan chat. The interval runs from completion of the last visit; this separate
-schedule uses wall-clock time, so a visit overdue while stopped can run on Start.
-There is currently no separate Builder Base countdown or manual attack button.
+The bot collects first, then refills enabled storages using the Farm start/target
+percentages (75% / 95% by default). It reads actual balances and native **Max**
+tooltips twice. After each battle it collects again, returns Home for the clan-chat
+check, and saves the cursor before continuing the refill. Full storages do not
+trigger more attacks. Unknown counters, unsupported armies, or three unproductive
+attacks defer farming; affordable building and research checks still get a turn.
 
-The visit collects first, checks research and then buildings, attacks if enabled,
-and collects again after returning from battle. If no eligible upgrade was found
-before the attack, its rewards can trigger another eligibility check. A successful,
-blocked, or uncertain purchase never causes a second purchase in that visit.
+After refill, the bot checks the Star Laboratory and builders. Bounded batches
+check up to three builders with fresh balances and independently confirmed
+payments, then return Home for another chat check. A busy Laboratory does not
+block free builders. Successful batches repeat until slots are busy or no
+supported affordable upgrade remains. Uncertain payments retain their recovery
+journal and block account switching. No gems, items or resource purchases are used.
+
+There is no separate Builder Base visit interval in normal automation. Both solo
+and fleet operation use the same saved checklist; a completed solo checklist is
+checked again after five minutes. Disabled/locked features are skipped, including
+Builder Base below Town Hall 6. Legacy interval values are retained only for
+compatibility with standalone diagnostic visits.
+
+## First visit
+
+Accounts below Town Hall 6 skip Builder Base visits before starting a boat
+journal. On an eligible account, a named **FREE** Boat rebuild can start the
+inspected introduction. The bot clears the Home Build list's filters and searches
+bounded pages for that exact free entry, including when it is below the first
+page. The setup backs up the profile, follows recognized
+dialogue and controls, repairs Builder Hall 1 to 2 with 3,500 Builder Gold,
+and researches Raged Barbarian 1 to 2 with 3,500 Builder Elixir. It waits the
+short timers rather than pressing gem completion controls.
+
+An uninitialized boat can also be located by its wooden hull, adjacent tutorial
+arrow, and Home controls on two fresh frames. The first tap selects the boat;
+it does not assume the boat can sail. A selected **FREE Rebuild** action opens
+the native confirmation, which must independently verify the free price before
+rebuilding. This navigation is backed up and journaled, and other arrows are not
+generic tap targets.
+
+After rebuilding, the first-trip recovery can close a verified Build sidebar
+and reacquire the boat's travel bubble after the tutorial moves the camera.
+The exact first-sailing caption also authorizes that bubble while the tutorial
+hides normal village controls. Small bubble movement is allowed between fresh
+observations. A sea-trip transition gets a bounded observation period without
+input; an unknown screen that remains visible still stops setup.
+
+The mandatory three-Barbarian tutorial battle is a setup exception to ordinary
+resource-demand scheduling. Its NPC, army count and control layout must match;
+it cannot authorize a normal battle. Setup completes only after normal Build
+controls return on two fresh observations. Payments are journaled before input,
+and the matching resource deduction and unchanged gem balance must verify.
+Unknown prompts or interrupted payments remain paused for review. Ordinary
+Builder Base attacks still require the supported army described below; this
+introduction does not add unrestricted support for other armies or upgrades.
 
 ## Resources and builders
 
@@ -50,9 +92,17 @@ not purchase builders or attempt to transfer the Master Builder.
 
 ## Attacks
 
-Equip **six Night Witches and Battle Machine** in Builder Base before enabling
-attacks. The first version verifies this starting army before matchmaking and
-skips other armies. It does not edit the army or train troops automatically.
+The supported armies are **six Night Witches and Battle Machine**, or the
+inspected starter **Raged Barbarian camps with three troops per camp**. Both
+require fresh army artwork and quantity checks before matchmaking. The bot does
+not edit the army automatically; other compositions are skipped.
+
+Starter battles use their normal troop cards, including the enlarged selected
+card and its zero-count state. Each individual deployment must decrement the
+total remaining count by one. A saved possible deployment is never replayed on
+recovery. The first real defense can introduce the Elixir Cart even after the
+initial tutorial has finished; its separate account-owned recovery follows the
+recognized captions and collection controls without paying anything.
 
 The runner verifies Builder Base battle headers before touching the army bar,
 zooms out, and finds clear drop tiles beside the visible deployment boundary.
@@ -75,15 +125,19 @@ screens stop the operation rather than entering Home Village recovery.
 
 ## Upgrades
 
-Only existing supported defenses and resource buildings in **Suggested
-upgrades** paid with **Builder Gold** qualify for building upgrades. Builder
-Elixir building confirmations are not supported yet. Builder Hall, heroes, walls,
-new construction, gems, potions, and items are excluded. The shared
+Existing supported defenses, resource buildings, **Builder Barracks** and
+**Star Laboratory** qualify when paid with **Builder Gold or Builder Elixir**.
+The native row parser reads both Suggested and Other upgrades; early villages
+can put essential buildings in Other. Among the visible existing rows, the lab
+takes priority, followed by Barracks and storages. Each resource has its own
+reserve. Without **Builder village progression**, green **New** rows, Builder
+Hall and walls are excluded. Heroes, gems, potions and items remain excluded. The shared
 excluded-building-name setting also applies. Builder availability and reserves
 are separate from Home Village.
 
 The separate research switch supports **Night Witch** research paid with Builder
-Elixir. It requires a free Star Laboratory, the recommended unit, sufficient
+Elixir. Progression also supports the inspected **Sneaky Archer level 2** dialog.
+It requires a free Star Laboratory, the recommended unit, sufficient
 Elixir above the reserve, the matching portrait and ability label, and the exact
 price and currency in the confirmation. Other troop research is skipped until
 its confirmation has been inspected and tested. After payment, only the verified
@@ -94,6 +148,29 @@ on fresh frames before confirming. It records a pending transaction before
 spending and then checks for a new running upgrade and fewer free builders.
 An uncertain transaction is retained for review and is not automatically retried.
 
+Progression inventories the unfiltered building list before selecting work.
+The Star Laboratory comes first, followed by missing buildings and then existing
+upgrades. A storage upgrade can precede an unbuilt structure when a verified
+capacity is too small for its price. Builder Hall advancement requires a complete,
+readable inventory, a verified Hall level, no outstanding construction, and no
+remaining current-Hall building or wall upgrades. Unaffordable does not mean maxed.
+Construction verifies the native placement controls, exact resource deduction
+and unchanged gems. Free walls additionally require the unbuilt quantity to
+decrease by exactly one. A subsequent wall preview is canceled rather than
+placing another item without a new transaction.
+
+The early-village regression fixture covers a 4,000-Elixir Builder Barracks
+upgrade and a 15,000-Elixir Star Laboratory row under Other upgrades. The live
+Barracks test started its upgrade, verified the builder changing from 1/1 to
+0/1, checked the unchanged gem count, and returned to Home Village. This does
+not prove every later Hall or troop confirmation. Further live tests built a
+1,000-Gold Push Trap, a 12,000-Gold Archer Tower and a free wall, completed a normal
+three-Barbarian attack, and verified Sneaky Archer level 2 for 5,000 Elixir.
+The gem balance stayed unchanged. Short research can also reconcile after its
+timer has finished when two fresh next-level badges, its saved resource
+deduction and unchanged gems independently agree. Unrecognized later dialogs
+remain blocked for inspection.
+
 ## Recovery and development
 
 - `src/coc_bot/builder_base/vision.py`: village, boat, battle, troop-card,
@@ -101,6 +178,13 @@ An uncertain transaction is retained for review and is not automatically retried
 - `runner.py`: bounded visits, deployment verification and return navigation.
 - `resources.py`: bubble/cart collection, bounded camera survey and balance checks.
 - `upgrades.py`: Builder-specific policy layered on the shared upgrade transaction.
+- `progression.py`: full inventories, construction, free-wall receipts and Hall gating.
+- `starter.py`: count-verified ordinary Barbarian deployment and visual results.
+- `tutorials.py`: account-owned first-defense Elixir Cart instructions.
+- `army.py`: guarded repair of an inspected BH2 army after its second camp is
+  constructed. It preserves the first Barbarian camp, fills the empty second
+  camp, and verifies two groups of three before matchmaking. Other incomplete
+  compositions remain unsupported.
 - `data/builder_base/visit.json`: durable navigation checkpoint and visit schedule.
 - `data/builder_base/upgrades.json`: separate spending journal.
 - `data/debug/builder-base/`: at most 32 evidence frames per visit, included in
@@ -123,6 +207,8 @@ research profiles, not additional supported attack executors. Their automatic
 release flags remain off. Automatic army editing and attacks with Dragons,
 Baby Dragons, P.E.K.K.As/Bombers and low-hall ground armies are still pending.
 The current Home Electro Dragon and Builder Night Witch executors remain in use.
+The inspected BH2 Barbarian executor also supports its first one- and two-camp
+armies; this does not enable the other researched army profiles.
 See [the progression plan](ARMY_PROGRESSION_PLAN.md) for those later phases.
 
 The initial live validation on 2026-10-24 started an Elixir Collector upgrade for
@@ -145,3 +231,70 @@ Calibration and saved settings were unchanged. A separate Ubuntu test environmen
 passed 292 relevant regression tests, including the browser settings API and OCR
 fixtures. Three-builder accounts, full storages and lower-hall armies have not
 been live-tested on this account.
+
+On 2026-10-25, a BH2 test account deployed its three ordinary Barbarians with a
+verified 3→2→1→0 card-count receipt, recognized results and returned by boat.
+The first-defense Cart tutorial was recovered without repeating the attack.
+Live construction checks placed a Push Trap, Archer Tower and free Walls;
+Sneaky Archer level 2 research was confirmed from its next-level badge and exact
+Elixir deduction after the short timer had already finished. The visible gem
+balance stayed at 297. A full visit also collected 5,055 Elixir and correctly
+stopped when OCR could not verify a remaining wall count. That quantity reader
+now checks the actual digit glyphs separately, and recovery verified the existing
+placement without sending another purchase. Later farming troops, paid wall
+upgrade dialogs and fully automatic Builder Hall advancement still require live
+coverage; unfamiliar confirmations remain blocked.
+
+The second Army Camp was subsequently built for 12,000 Builder Elixir. Its
+receipt verified 14,448→2,448 Elixir and 297 gems before/after. Testing added
+recognition for the native gray placement check at small scale changes and a
+strict outlined-counter fallback. An unreadable resource counter now prevents
+the confirmation input, even if the same counter was also unreadable in the
+preceding menu. These fixes do not alter Home Village placement recognition.
+
+Further current-UI checks found that Army Upgrades exposes a sorting-only
+popup, not the building Resource/Type filters. Research inventory now verifies
+that popup, closes it and returns to the first row before scanning. The Builder
+row detector also retains long Star Laboratory titles; Home row thresholds stay
+unchanged. Native wall previews whose red Cancel button touches a Barracks roof
+use a separate inspected control variant. Recovery can cancel an unpaid preview
+without confirming it.
+
+The final unbuilt wall is displayed as `Wall`, without a multiplication suffix.
+A short-title fallback requires the exact native word and four visible glyphs;
+it cannot turn a dropped suffix into quantity one. Free-wall receipts need the
+independent inventory decrement, including the final one-to-zero case. Unknown
+new rows cannot prove the last wall disappeared.
+
+An orphaned Builder payment journal also counts as a pending visit. Recovery
+uses the existing receipt reconciler with execution disabled; it never sends the
+payment again. From Home, it verifies the account and uses only an already-built
+boat, with onboarding actions disabled. An uncertain receipt prevents account
+handoff and new work.
+
+The early Barbarian executor now normalizes the camera before reading placement
+targets, like the existing Night Witch executor. It discards scouting coordinates
+after zooming, stops if terrain cannot establish a target, and requires a troop
+count decrement after each map tap. Recovery never repeats a possible deployment.
+
+The inspected Daily Reward calendar can require claiming its free reward before
+closing. Recognition checks its title, footer, and exact native controls; the
+gray disabled X and red enabled X are distinct. Free claims have a bounded,
+persistent intent. Purchase and inventory-conversion dialogs are not accepted by
+this handler. A live check collected the required calendar reward and returned
+to clan chat with the same gem balance.
+
+A subsequent two-camp live test verified all six Barbarian deployments, observed
+100% damage and 15,000 Builder Gold on results, then collected 41,003 Builder
+Elixir and returned to clan chat. Gems stayed at 297. The placement reader checks
+multiple positions along visible red edges and the inspected default/winter
+terrain palettes; occupied or unknown patches are still rejected. These results
+cover the tested compositions and arenas, not every scenery or Builder Hall.
+
+The Star Laboratory payment dialog has an inspected title-art fallback because
+OCR can misread its stylized lettering. Its price, resource icon, enabled payment
+button, and close control are still checked independently on fresh observations.
+The fallback is specific to that building and never supplies a missing price.
+Live validation selected the laboratory ahead of an unbuilt Double Cannon,
+started level 2, verified the builder changing from 1/1 to 0/1, and read the exact
+46,140→31,140 Elixir deduction with gems unchanged at 297.

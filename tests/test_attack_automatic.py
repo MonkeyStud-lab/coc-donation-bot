@@ -185,13 +185,15 @@ class AutomaticLifecycleTests(TestCase):
                     patch('coc_bot.attack.planned_farmer.survey',return_value={'projection':Mock(),'reference':Mock()}), \
                     patch('coc_bot.attack.planned_farmer.learned_catalog'), \
                     patch('coc_bot.attack.automatic.scan_army',return_value=[card('recall_spell','spell',1)]), \
+                    patch('coc_bot.attack.abort.leave_unstarted_opponent',return_value=True) as abandon, \
                     patch('coc_bot.attack.planned_farmer.VerifiedExecutor') as executor:
                 result=run_planned_attack(f,automatic=True)
             self.assertFalse(result.success);self.assertTrue(result.counts_toward_interval)
             self.assertIn('no verified Electro Dragons',result.reason)
             executor.assert_not_called()
             self.assertEqual(restore.call_count,2)
-            f.attack_nav.return_home_from_attack.assert_called_once()
+            abandon.assert_called_once()
+            f.attack_nav.wait_for_battle_end.assert_not_called()
 
     def test_stop_during_auto_inventory_sends_no_cleanup_inputs(self):
         with TemporaryDirectory() as root:

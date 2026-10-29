@@ -13,6 +13,10 @@ data/runtime_state.json
 data/upgrades/
 data/progression/
 data/builder_base/
+data/layouts/
+data/resources/
+data/visits/
+data/clan/
 data/accounts/
 data/account_backups/
 data/attack-planner/

@@ -18,6 +18,52 @@ from coc_bot.runtime.screenshot_retention import RetentionPolicy, prune_attack_d
 
 
 class BuilderVisionTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('tesseract'),'OCR executable is required')
+    def test_lab_confirmation_uses_native_title_without_guessing_name_or_price(self):
+        reader=BuilderReader()
+        frame=cv2.imread(str(Path(__file__).parent/'fixtures/builder_base/lab-upgrade-confirm.png'))
+        candidate=Candidate('Star Laboratory',15000,'elixir',(1,2))
+        self.assertIsNotNone(reader.confirmation(frame,candidate))
+        for name,cost,resource in [('Cannon',15000,'elixir'),('Star Laboratory',1500,'elixir'),
+                                  ('Star Laboratory',15000,'gold'),('Star Laboratory',1,'gems')]:
+            self.assertIsNone(reader.confirmation(frame,Candidate(name,cost,resource,(1,2))))
+        masked=frame.copy();masked[145:200,325:735]=0
+        self.assertIsNone(reader.confirmation(masked,candidate))
+        self.assertIsNone(reader.confirmation((frame*.5).astype('uint8'),candidate))
+
+    def test_daily_reward_close_needs_independent_bright_title_footer_and_close(self):
+        reader=BuilderReader()
+        frame=cv2.imread(str(Path(__file__).parent/'fixtures/builder_base/daily-reward.png'))
+        self.assertIsNotNone(reader.daily_reward_close(frame))
+        self.assertIsNotNone(reader.daily_reward_claim(frame))
+        gray=frame.copy();gray[400:480,550:790]=127
+        self.assertIsNone(reader.daily_reward_claim(gray))
+        for x0,y0,x1,y1 in ((720,130,1090,190),(590,925,1270,975),(1520,110,1610,190)):
+            changed=frame.copy();changed[y0:y1,x0:x1]=0
+            self.assertIsNone(reader.daily_reward_close(changed))
+        self.assertIsNone(reader.daily_reward_close((frame*.5).astype('uint8')))
+        claimed=cv2.imread(str(Path(__file__).parent/'fixtures/builder_base/daily-reward-claimed.png'))
+        self.assertIsNotNone(reader.daily_reward_close(claimed))
+        self.assertIsNone(reader.daily_reward_claim(claimed))
+
+    def test_calendar_day_three_survives_a_different_village_background(self):
+        reader=BuilderReader()
+        frame=cv2.imread(str(Path(__file__).parent/'fixtures/builder_base/daily-reward-day-three.png'))
+        self.assertEqual(reader.daily_reward_close(frame),(1565,150))
+        self.assertEqual(reader.daily_reward_claim(frame),(956,440))
+        for x0,y0,x1,y1 in ((720,130,1090,190),(590,925,1270,975),(1520,110,1610,190)):
+            changed=frame.copy();changed[y0:y1,x0:x1]=0
+            self.assertIsNone(reader.daily_reward_close(changed))
+
+    def test_free_boat_setup_requires_rebuild_title_description_and_free_price(self):
+        reader=BuilderReader()
+        frame=cv2.imread(str(Path(__file__).parent/'fixtures/builder_base/setup-boat.png'))
+        self.assertIsNotNone(reader.free_boat_confirmation(frame))
+        for box in ((718,83,1136,144),(654,642,1215,683),(1743,400,1819,428)):
+            bad=frame.copy();x0,y0,x1,y1=box;bad[y0:y1,x0:x1]=0
+            self.assertIsNone(reader.free_boat_confirmation(bad))
+        self.assertIsNone(reader.free_boat_confirmation((frame*.5).astype(np.uint8)))
+
     def frame(self, n):
         return cv2.imread(str(Path(__file__).parent/'fixtures/builder_base'/f'controls-{n}.png'))
 
@@ -71,6 +117,34 @@ class BuilderVisionTests(unittest.TestCase):
             self.assertIsNone(reader.confirmation(frame,Candidate(name,price,currency,(1,2))))
 
     @unittest.skipUnless(shutil.which('tesseract'), 'OCR executable is required')
+    def test_early_barracks_confirmation_requires_elixir_price_and_name(self):
+        reader=BuilderReader()
+        frame=cv2.imread(str(Path(__file__).parent/'fixtures/builder_base/barracks-elixir-confirm.png'))
+        self.assertIsNotNone(reader.confirmation(frame,Candidate('Builder Barracks',4000,'elixir',(1,2))))
+        for name,price,resource in [('Builder Barracks',4000,'gold'),('Builder Barracks',400,'elixir'),
+                                    ('Star Laboratory',4000,'elixir'),('Builder Barracks',4000,'gems')]:
+            self.assertIsNone(reader.confirmation(frame,Candidate(name,price,resource,(1,2))))
+
+    @unittest.skipUnless(shutil.which('tesseract'), 'OCR executable is required')
+    def test_early_menu_prioritizes_lab_and_excludes_unbuilt_rows(self):
+        reader=BuilderReader()
+        frame=cv2.imread(str(Path(__file__).parent/'fixtures/builder_base/early-upgrade-menu.png'))
+        rows,complete=reader.candidates(frame)
+        self.assertEqual([(c.name,c.cost,c.currency) for c in rows],
+                         [('Star Laboratory',15000,'elixir'),('Builder Barracks',4000,'elixir')])
+        self.assertFalse(complete)
+        frame[0:160,1240:1345]=0  # Home menu headings alone cannot establish Builder Base.
+        self.assertEqual(reader.candidates(frame),([],False))
+
+    @unittest.skipUnless(shutil.which('tesseract'), 'OCR executable is required')
+    def test_full_row_parser_preserves_the_existing_night_witch_recommendation(self):
+        reader=BuilderReader()
+        frame=cv2.imread(str(Path(__file__).parent/'fixtures/builder_base/progression-research.png'))
+        rows,_=reader.candidates(frame)
+        from coc_bot.upgrades.vision import compact
+        self.assertTrue(any(compact(c.name)=='nightwitch' and c.cost==2500000 and c.currency=='elixir' for c in rows))
+
+    @unittest.skipUnless(shutil.which('tesseract'), 'OCR executable is required')
     def test_research_confirmation_and_running_modal(self):
         reader=BuilderReader()
         root=Path(__file__).parent/'fixtures/builder_base'
@@ -106,6 +180,13 @@ class BuilderSafetyTests(unittest.TestCase):
         self.assertIsNotNone(eligibility(self.config,c,{'gold':104_999},(2,2)))
         for name,resource in [('Builder Hall','gold'),('Battle Machine','elixir'),('Wall','gold'),('Cannon','gems')]:
             self.assertIsNotNone(eligibility(self.config,Candidate(name,1,resource,(1,2)),{resource:200_000},(2,2)))
+
+    def test_early_army_buildings_use_the_correct_resource_reserve(self):
+        for name,resource in [('Builder Barracks','elixir'),('Star Laboratory','gold')]:
+            candidate=Candidate(name,4000,resource,(1,2))
+            self.assertIsNone(eligibility(self.config,candidate,{resource:104_000},(1,1)))
+            self.assertIsNotNone(eligibility(self.config,candidate,{resource:103_999},(1,1)))
+            self.assertIsNotNone(eligibility(self.config,candidate,{resource:104_000},(0,1)))
 
     def test_stop_after_screenshot_prevents_next_tap(self):
         stopped=[False];r=self.runner(lambda:stopped[0])

@@ -1,8 +1,9 @@
 import React, {useEffect, useRef, useState} from 'react';
 
 const roles = {donating:'Donating', farming:'Farming', upgrading:'Upgrading', builder_base:'Builder Base'};
-type Account = {id:string;tag:string;nickname:string;roles:string[]};
-type Registry = {accounts:Account[];active:string|null;pending:{kind:string;target?:string|null}|null};
+type Account = {id:string;tag:string;nickname:string;roles:string[];clan_tag?:string|null};
+type Rotation = {enabled:boolean;primary_id:string|null;watch_seconds:number;visit_seconds:number;interval_seconds:number};
+type Registry = {accounts:Account[];active:string|null;pending:{kind:string;target?:string|null}|null;rotation?:Rotation};
 
 export function Accounts({api,locked,result,operation,working,jobError,live,onChanged,stop}:{api:(p:string,m?:string,b?:unknown)=>Promise<any>;
   locked:boolean;result:any;operation:string|null;working:boolean;jobError:string|null;
@@ -40,7 +41,7 @@ export function Accounts({api,locked,result,operation,working,jobError,live,onCh
     {!error&&jobError&&accountJob&&<p role="alert">{jobError}</p>}
     {result?.accounts&&<p role="status">{result.message}</p>}
     {working&&accountJob&&<p role="status">Reading the village and confirming its saved Supercell ID. Keep Live view control released.</p>}
-    {switching&&<div className="notice">Switching to {target?.nickname||'the selected account'} is unfinished. Open that village in Live view, release control, then finish the switch.</div>}
+    {switching&&<div className="notice">Switching to {target?.nickname||'the selected account'} is unfinished. Release Live view control, then press Finish switch to reload and verify it.</div>}
     <div className="toolbar">
       <button disabled={disabled||!data?.active||!!data?.pending} onClick={()=>act('add')}>Add account</button>
       {!adding&&<button className={switching?'primary':undefined} disabled={disabled||!data?.active} onClick={()=>act('verify')}>
@@ -65,6 +66,7 @@ export function Accounts({api,locked,result,operation,working,jobError,live,onCh
     </section>}
     {data?.accounts.map(account=><section key={account.id}>
       <div className="toolbar"><strong>{account.nickname}</strong><span>{account.tag}</span>
+        {account.clan_tag&&<span title="Verified in the game's My Clan page">Clan {account.clan_tag}</span>}
         {data.active===account.id?<span className="chip">{data.pending?'Previous account':'Ready'}</span>:<button disabled={disabled||!!data.pending} onClick={()=>act('switch',account.id)}>Switch</button>}
         <button disabled={disabled||!!data.pending} onClick={()=>{setEditing(account.id);setName(account.nickname);setChosen(account.roles);}}>Edit</button></div>
       {editing===account.id?<>
@@ -74,5 +76,25 @@ export function Accounts({api,locked,result,operation,working,jobError,live,onCh
         <button onClick={()=>setEditing(null)}>Cancel</button>
       </>:<p>{account.roles.map(r=>roles[r as keyof typeof roles]).join(' · ')||'No automatic tasks'}</p>}
     </section>)}
+    {data&&data.accounts.length>1&&<section>
+      <label className="toggle"><input type="checkbox" disabled={disabled||!!data.pending}
+        checked={!!data.rotation?.enabled} onChange={async e=>{
+          const primary=data.rotation?.primary_id||data.accounts.find(a=>a.roles.includes('donating'))?.id;
+          if(!primary){setError('Give the main account the Donating role first.');return;}
+          setBusy(true);try{setData(await api('accounts/rotation','PUT',{
+            enabled:e.target.checked,primary_id:primary,
+            watch_seconds:data.rotation?.watch_seconds||900,visit_seconds:data.rotation?.visit_seconds||180,
+            interval_seconds:data.rotation?.interval_seconds||1800}));}
+          catch(e){setError((e as Error).message);}finally{setBusy(false);}
+        }}/>Automatic account visits</label>
+      {!!data.rotation?.enabled&&<label>Main donation account<select disabled={disabled||!!data.pending}
+        value={data.rotation.primary_id||''} onChange={async e=>{
+          setBusy(true);try{setData(await api('accounts/rotation','PUT',{
+            primary_id:e.target.value,
+            enabled:true,watch_seconds:data.rotation!.watch_seconds,visit_seconds:data.rotation!.visit_seconds,
+            interval_seconds:data.rotation!.interval_seconds}));}
+          catch(e){setError((e as Error).message);}finally{setBusy(false);}
+        }}>{data.accounts.filter(a=>a.roles.includes('donating')).map(a=><option key={a.id} value={a.id}>{a.nickname}</option>)}</select></label>}
+    </section>}
   </>;
 }

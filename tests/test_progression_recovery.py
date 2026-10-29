@@ -21,6 +21,8 @@ class ArmyRecoveryTests(TestCase):
         self.assertEqual(capacity(frame),(165,175));self.assertTrue(army_page(frame))
         changed=cv2.imread(str(root/'army-dimmed-161-175.png'))
         self.assertEqual(capacity(changed),(161,175));self.assertTrue(army_page(changed))
+        changed=cv2.imread(str(root/'army-dimmed-151-175.png'))
+        self.assertEqual(capacity(changed),(151,175));self.assertTrue(army_page(changed))
         # Only the drawer's safe backdrop dismissal may undim this X.
         self.assertIsNone(army_editor_close_button(frame))
         covered=cv2.imread(str(root/'army-covered-inactivity.png'))
@@ -43,6 +45,14 @@ class ArmyRecoveryTests(TestCase):
              patch('coc_bot.progression.home.ensure_home',return_value=True):prep.close()
         self.assertEqual(prep.tap.call_count,2)
         self.assertEqual(prep.tap.call_args_list[0].args[0],(round(picker.shape[1]*.5),round(picker.shape[0]*.17)))
+
+    def test_capacity_ocr_cannot_override_a_contrary_native_read(self):
+        from coc_bot.progression.preparation import capacity
+        frame=np.zeros((1048,1853,3),np.uint8)
+        with patch('coc_bot.progression.preparation.army_editor_close_button',return_value=(1792,95)),\
+             patch('coc_bot.progression.preparation._capacity_area',side_effect=[None,None,(151,175),None,None,None,None,None]),\
+             patch('coc_bot.progression.preparation._ocr_capacity_area',side_effect=[(150,175),None]*3):
+            self.assertIsNone(capacity(frame))
 
     def test_home_star_bonus_needs_its_title_delivery_message_and_enabled_okay(self):
         from coc_bot.vision.notices import home_star_bonus_button

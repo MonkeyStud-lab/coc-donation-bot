@@ -1,6 +1,7 @@
 """Prepare a farming army from fresh Home Village unlocks and real camp space."""
 import re
 import time
+import subprocess
 from functools import lru_cache
 from pathlib import Path
 import cv2
@@ -27,8 +28,9 @@ def capacity(frame, stop=None):
     # The game widens the hero panel while the troop army is empty. Read the
     # same header row in both inspected layouts; disagreement stays unknown.
     boxes=((.315,.205,.45,.255),(.45,.205,.57,.255))
-    def read(image):
-        values=[value for box in boxes if (value:=_capacity_area(crop(image,box),stop)) is not None]
+    def read(image,reader=None):
+        reader=reader or _capacity_area
+        values=[value for box in boxes if (value:=reader(crop(image,box),stop)) is not None]
         return values[0] if values and len(set(values))==1 else None
     value=read(frame)
     if value is not None:return value
@@ -38,10 +40,17 @@ def capacity(frame, stop=None):
     if not (army_editor_close_button(frame,stop) or picker_editor_visible(frame,stop)):return None
     values=[read(cv2.convertScaleAbs(frame,alpha=scale)) for scale in (1.1,1.3,1.5)]
     known=[v for v in values if v is not None]
-    return known[0] if len(known)>=2 and len(set(known))==1 else None
+    if len(known)>=2 and len(set(known))==1:return known[0]
+    # Keep native glyph thresholds strict. Require two agreeing readings,
+    # including OCR: a native match plus OCR, or two OCR preparations. Every
+    # contrary valid reading vetoes the result; unreadable digits stay unknown.
+    ocr=[read(cv2.convertScaleAbs(frame,alpha=scale),_ocr_capacity_area) for scale in (1,1.3,1.5)]
+    valid=[v for v in ocr if v is not None]
+    if valid and len(known)+len(valid)>=2 and len(set(known+valid))==1:return valid[0]
+    return None
 
 
-def _capacity_area(area, stop=None):
+def _capacity_parts(area, stop=None):
     # Exclude the troop silhouette at the left and the distant trash control.
     # The silhouette can become false leading digits when the camp is not full.
     hsv=cv2.cvtColor(area,cv2.COLOR_BGR2HSV)
@@ -60,7 +69,6 @@ def _capacity_area(area, stop=None):
         # Remove its border too, rather than accepting an invented capacity.
         area=area[:,:max(1,alerts[0]-round(h*.08))]
     if stop and stop():return None
-    from coc_bot.upgrades.digits import read_digits
     white=cv2.inRange(cv2.cvtColor(area,cv2.COLOR_BGR2HSV),(0,0,170),(180,75,255))
     _,_,stats,_=cv2.connectedComponentsWithStats(white)
     parts=sorted([(x,y,w,bh) for x,y,w,bh,a in stats[1:] if a>8 and h*.28<bh<h*.65])
@@ -72,6 +80,14 @@ def _capacity_area(area, stop=None):
     if len(separators)!=1:return None
     split=separators[0]
     if not 1<=split<=3 or not 1<=len(parts)-split-1<=3:return None
+    return white,parts,split
+
+
+def _capacity_area(area, stop=None):
+    parsed=_capacity_parts(area,stop)
+    if parsed is None:return None
+    white,parts,split=parsed
+    from coc_bot.upgrades.digits import read_digits
     digits=[]
     for i,(x,y,w,bh) in enumerate(parts):
         if i==split:
@@ -81,6 +97,20 @@ def _capacity_area(area, stop=None):
         if value is None or not re.fullmatch(r'\d',value):return None
         digits.append(value)
     used,total=map(int,''.join(digits).split('/'))
+    return (used,total) if 0<=used<=total<=352 and total>0 else None
+
+
+def _ocr_capacity_area(area, stop=None):
+    parsed=_capacity_parts(area,stop)
+    if parsed is None:return None
+    white,parts,_=parsed
+    left=min(x for x,y,w,h in parts);right=max(x+w for x,y,w,h in parts)
+    top=min(y for x,y,w,h in parts);bottom=max(y+h for x,y,w,h in parts)
+    mask=cv2.copyMakeBorder(255-white[top:bottom,left:right],5,5,5,5,cv2.BORDER_CONSTANT,value=255)
+    try:value=re.sub(r'\s','',text(mask,fraction=True,stop=stop))
+    except (OSError,subprocess.TimeoutExpired):return None
+    if not re.fullmatch(r'\d{1,3}/\d{1,3}',value):return None
+    used,total=map(int,value.split('/'))
     return (used,total) if 0<=used<=total<=352 and total>0 else None
 
 

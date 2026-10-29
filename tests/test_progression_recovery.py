@@ -151,6 +151,12 @@ class ArmyRecoveryTests(TestCase):
         observed=[picker_level(frame[y:y+h,x:x+w]) for x,y,w,h in picker_boxes(frame)]
         self.assertEqual(observed,[8,8,6,8,6,None,None,None,None,8,7,7,1,None,None,None,None,None])
 
+    def test_level_three_picker_reads_all_four_unlocks_and_no_gray_cards(self):
+        from coc_bot.progression.preparation import picker_boxes,picker_level
+        frame=cv2.imread(str(Path(__file__).parent/'fixtures/progression/army-dimmed-105-175.png'))
+        observed=[picker_level(frame[y:y+h,x:x+w]) for x,y,w,h in picker_boxes(frame)]
+        self.assertEqual(observed,[3,3,None,None,None,None,None,None,None,3,3,None,None,None,None,None,None,None])
+
     @skipUnless(shutil.which('tesseract'),'Tesseract required for dimmed picker heading')
     def test_empty_wide_picker_keeps_capacity_and_requires_its_dimmed_heading(self):
         from coc_bot.progression.preparation import capacity,army_page,picker_boxes

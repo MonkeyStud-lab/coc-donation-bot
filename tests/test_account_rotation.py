@@ -200,6 +200,28 @@ class RotationTests(unittest.TestCase):
         self.assertEqual(lease.call_count,1)
         self.assertIsNone(self.store.load()['pending'])
 
+    def test_final_handoff_check_recovers_same_account_without_switching_or_crashing(self):
+        from coc_bot.donation.chat_check import ChatCheckUnverified
+        self.configure();visited=[];fleet=None
+        def factory(options):
+            account=self.store.account();visited.append(account['id'])
+            bot=SimpleNamespace(config=SimpleNamespace(data_dir=self.store.profile(account)/'data',adb_device='test'),
+                tracker=SimpleNamespace(state=SimpleNamespace(last_completed_attack_id=None)),
+                capture=Mock(),nav_input=Mock(),navigator=Mock())
+            def run():
+                fleet._next=self.other['id']
+                if len(visited)==2:fleet.cancel.set()
+            bot.run_owned=run;return bot
+        fleet=AccountFleet(self.store,RunOptions(),factory=factory,clock=lambda:1000)
+        fleet._check_chat_before_switch=Mock(side_effect=ChatCheckUnverified('Unreadable chat'))
+        with patch('coc_bot.control.diagnostics.DebugSession',return_value=SimpleNamespace(config=SimpleNamespace(adb_device='test'))),\
+             patch('coc_bot.runtime.device_lease.DeviceLease',side_effect=lambda _:nullcontext()),\
+             patch('coc_bot.stop.interrupted_sleep',return_value=False),\
+             patch('coc_bot.accounts.navigation.AccountNavigator') as nav:
+            with self.store.scope(self.main['id']):fleet.run()
+        self.assertEqual(visited,[self.main['id'],self.main['id']])
+        nav.return_value.switch.assert_not_called();self.assertIsNone(self.store.load()['pending'])
+
     def test_non_donor_request_routes_to_donor_and_persists_resume(self):
         self.configure();fleet=AccountFleet(self.store,RunOptions(),clock=lambda:1000)
         fleet.current=Mock();fleet.current.chat_monitor.find_donate_request.return_value=SimpleNamespace(signature='request')

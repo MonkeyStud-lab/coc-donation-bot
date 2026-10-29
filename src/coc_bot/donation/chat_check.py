@@ -2,20 +2,24 @@
 from coc_bot.stop import interrupted_sleep
 
 
+class ChatCheckUnverified(ValueError):
+    """No clear-chat result was established; do not switch or start an attack."""
+
+
 def peek_requests(capture, navigator, monitor, stop):
     if stop():return None
     frame=capture.screenshot()
     if not navigator.classifier._clan_chat_anchor_visible(frame):
         from coc_bot.vision.battle_menu import home_build_control_visible
         if not home_build_control_visible(frame):
-            raise ValueError('Home not verified before clan chat check')
+            raise ChatCheckUnverified('Home not verified before clan chat check')
         if stop():return None
         navigator._open_clan_chat(frame)
         if interrupted_sleep(.5,stop):return None
         frame=capture.screenshot()
     if stop():return None
     if not navigator.classifier._clan_chat_anchor_visible(frame):
-        raise ValueError('Clan chat could not be verified before checking requests')
+        raise ChatCheckUnverified('Clan chat could not be verified before checking requests')
     request=monitor.find_donate_request(frame)
     if request is not None or stop():return request
     # Do not infer "no requests" from an old chat scroll position. The native
@@ -26,6 +30,6 @@ def peek_requests(capture, navigator, monitor, stop):
         frame=capture.screenshot()
         if stop():return None
         if not navigator.classifier._clan_chat_anchor_visible(frame):
-            raise ValueError('Clan chat changed after the request jump')
+            raise ChatCheckUnverified('Clan chat changed after the request jump')
         request=monitor.find_donate_request(frame)
     return request

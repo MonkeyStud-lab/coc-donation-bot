@@ -56,6 +56,10 @@ visit cursors and transaction data remain blocking rather than being skipped.
 Fleet chat checks run inside ordinary loop recovery: a failed check remains due,
 is logged in the account's verification history, and cannot count as clear chat
 or authorize an account switch.
+The final chat check before a fleet handoff has the same rule: if chat remains
+unverified, the current account is recovered through normal startup and no switch
+intent is written. Corrupt journals, changed identity and uncertain payments still
+block automation.
 
 The army picker can dim the My Army header. Its foreground Info controls and
 heading must first agree before two brightness-normalized capacity reads are

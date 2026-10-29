@@ -285,7 +285,16 @@ class AccountFleet:
                             UpgradeRunner(self.current.config,self.current.capture,self.current.nav_input,
                                           self.current.navigator).state().get('pending')):
                             raise ValueError('Account has an unresolved action; automatic switching paused')
-                        self._check_chat_before_switch(account)
+                        from coc_bot.donation.chat_check import ChatCheckUnverified
+                        try:self._check_chat_before_switch(account)
+                        except ChatCheckUnverified:
+                            # This check runs after the visit's bot loop exits.
+                            # Retry this account through normal verified startup;
+                            # an unreadable chat must never become a switch intent.
+                            logger.warning('Account handoff deferred — clan chat is unverified; recovering the current account')
+                            from coc_bot.stop import interrupted_sleep
+                            if interrupted_sleep(2,self.cancel.is_set):break
+                            continue
                         if self.cancel.is_set() or self.finish_action:break
                         if self._next==account['id']:continue
                         target=self.store.account(self._next)

@@ -1,6 +1,7 @@
 """Read visible army cards without changing selection or authorizing deployment."""
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
+from functools import lru_cache
 import re
 import shutil
 import subprocess
@@ -222,6 +223,13 @@ def zero_glyph(glyph):
             .40<(holes[0][1][1]-1)/h<.60 and .30<(holes[0][1][0]-1)/w<.70)
 
 
+@lru_cache(maxsize=1)
+def badge_digit_variants():
+    path=Path(__file__).with_name('assets')/'badge_digits.npz'
+    if not path.is_file():return {}
+    with np.load(path,allow_pickle=False) as archive:return {key:archive[key] for key in archive.files}
+
+
 def read_badge(cell, *, stop_check=None):
     """Read xN at the TOP of a card. Never mistake a bottom level for quantity."""
     if not shutil.which('tesseract') or not cell.size:
@@ -265,7 +273,7 @@ def read_badge(cell, *, stop_check=None):
                     digit = '0'
                 else:
                     from coc_bot.upgrades.digits import read_digits
-                    matched=read_digits(cv2.cvtColor(glyph,cv2.COLOR_GRAY2BGR))
+                    matched=read_digits(cv2.cvtColor(glyph,cv2.COLOR_GRAY2BGR),extra_templates=badge_digit_variants())
                     if matched is not None and re.fullmatch(r'\d',matched):
                         # The outlined 8 can be read as 3 by single-character
                         # OCR. Prefer the strict, margin-checked game-font bank.

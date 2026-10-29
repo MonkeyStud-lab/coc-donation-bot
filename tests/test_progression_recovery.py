@@ -12,6 +12,16 @@ from coc_bot.progression.space import obstacle,SpaceMaker,home_gems,free_builder
 
 
 class ArmyRecoveryTests(TestCase):
+    @skipUnless(shutil.which('tesseract'),'Tesseract required for native army badges')
+    def test_three_digit_badges_distinguish_two_from_four(self):
+        from coc_bot.attack.army import read_badge
+        root=Path(__file__).parent/'fixtures/progression'
+        for name,count in [('army-dimmed-165-175.png',134),('army-dimmed-161-175.png',130),
+                           ('army-dimmed-151-175.png',120),('army-dimmed-143-175.png',112)]:
+            with self.subTest(name=name):
+                frame=cv2.imread(str(root/name))
+                self.assertEqual(read_badge(frame[278:429,804:952]),count)
+
     @skipUnless(shutil.which('tesseract'),'Tesseract required for native army headings')
     def test_real_dimmed_picker_keeps_its_capacity_but_a_covering_popup_does_not(self):
         from coc_bot.progression.preparation import capacity,picker_editor_visible

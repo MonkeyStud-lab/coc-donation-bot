@@ -55,6 +55,11 @@ cd ..
 Commit rebuilt `src/coc_bot/web/static` assets alongside frontend source changes.
 Normal users should not need Node.js or a separate Vite server.
 
+CI pins Ubuntu 24.04 to match the CasaOS image's OCR engine, and checks Python
+3.12 and 3.14 independently. A new OCR engine or moving runner image needs the
+same native-price, army-count, and covered-screen fixture validation; do not
+relax spending checks to accommodate an engine change.
+
 ## Preserve these contracts
 
 - One operation owns Android. Use `ControlService`, `BotController`, the shared

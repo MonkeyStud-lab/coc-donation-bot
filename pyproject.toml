@@ -32,6 +32,7 @@ web-live = ["aiortc>=1.14,<2"]
 where = ["src"]
 
 [tool.setuptools.package-data]
+"coc_bot.attack" = ["assets/*.npz"]
 "coc_bot.vision" = ["assets/*.png"]
 "coc_bot.upgrades" = ["assets/*.npz"]
 "coc_bot.builder_base" = ["assets/*.png", "assets/*.npz"]

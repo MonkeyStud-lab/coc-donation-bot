@@ -366,6 +366,16 @@ class ProgressionPolicyTests(TestCase):
                 prep.adjust({'barbarian':21},{'barbarian':{'level':1,'point':(138,746)}})
         prep.tap.assert_called_once()
 
+    def test_each_edit_reuses_the_previous_verified_pair_without_replaying_inputs(self):
+        from coc_bot.progression.preparation import ArmyPreparation
+        prep=ArmyPreparation.__new__(ArmyPreparation);prep.tap=Mock();prep.s=Mock();prep.catalog=Mock();prep.stop=None
+        def observation(n):return None,[ArmyCard('card',(0,0,100,150),'barbarian','troop',n,stable=True)],(n,30)
+        prep.observe=Mock(side_effect=[observation(10),observation(11),observation(12)])
+        with patch('coc_bot.progression.preparation.picker_unlocks',return_value={'barbarian':{'level':1,'point':(138,746)}}),\
+             patch('coc_bot.progression.preparation.capacity',side_effect=[(10,30),(11,30)]):
+            prep.adjust({'barbarian':12},{'barbarian':{'level':1,'point':(138,746)}})
+        self.assertEqual(prep.tap.call_count,2);self.assertEqual(prep.observe.call_count,3)
+
     def test_new_army_card_needs_one_named_addition_and_exact_housing_change(self):
         from coc_bot.progression.preparation import ArmyPreparation
         prep=ArmyPreparation.__new__(ArmyPreparation);prep.stop=None;prep.catalog=Mock();prep.s=Mock()

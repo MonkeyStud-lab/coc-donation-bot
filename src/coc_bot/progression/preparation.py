@@ -477,8 +477,12 @@ class ArmyPreparation:
         return self.catalog
 
     def adjust(self,desired,unlocked):
+        verified=None
         for _ in range(704):
-            frame,cards,space=self.observe()
+            # Reuse the pair captured immediately after the previous edit.
+            # There has been no intervening input; every new edit still needs
+            # its own two-frame identity, quantity and capacity confirmation.
+            frame,cards,space=verified if verified is not None else self.observe()
             current={c.unit_id:c.quantity for c in cards}
             excess=next((c for c in cards if c.quantity>desired.get(c.unit_id,0)),None)
             if excess:
@@ -508,10 +512,11 @@ class ArmyPreparation:
             expected_space=(space[0]+delta*HOUSING[unit],space[1])
             for attempt in range(3):
                 try:
-                    _,after,after_space=self.observe()
+                    after_frame,after,after_space=self.observe()
                     logger.debug('Army edit check: expected {} at {}, observed {} at {}',
                                  expected,expected_space,{c.unit_id:c.quantity for c in after},after_space)
                     if {c.unit_id:c.quantity for c in after}==expected and after_space==expected_space:
+                        verified=(after_frame,after,after_space)
                         break
                 except ValueError:
                     # A changing badge can disagree across the first pair.

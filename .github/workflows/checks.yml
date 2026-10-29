@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -22,8 +22,10 @@ jobs:
       - name: Require rebuilt browser assets
         run: git diff --exit-code -- src/coc_bot/web/static
   offline:
-    runs-on: ubuntu-latest
+    # Match the OCR engine shipped in the CasaOS image; ubuntu-latest moves.
+    runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
         python: ['3.12', '3.14']
     steps:

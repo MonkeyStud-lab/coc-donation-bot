@@ -315,7 +315,8 @@ class ControlService:
                     "scrolling_chat": "Checking requests", "opening_donation": "Opening donation",
                     "donating": "Donating", "attack_menu": "Opening attack", "matchmaking": "Finding opponent",
                     "in_battle": "In battle", "battle_results": "Leaving battle", "returning_home": "Returning home",
-                    "recovering": "Recovering", "on_break": "On break", "layouts":"Arranging layout"}.get(phase)
+                    "recovering": "Recovering", "on_break": "On break", "layouts":"Arranging layout",
+                    "upgrading":"Checking upgrades","builder_base":"Visiting Builder Base"}.get(phase)
                 tracker = getattr(bot, "tracker", None)
                 if tracker is not None:
                     self._timer_snapshot = {
@@ -325,7 +326,6 @@ class ControlService:
                     self._break_active = False
                     from coc_bot.accounts.rotation import AccountFleet
                     if isinstance(bot,AccountFleet):
-                        self._timer_snapshot['farm_seconds']=bot.farm_remaining_seconds
                         if bot.activity.startswith('Switching to '):activity=bot.activity
                     until_text = getattr(getattr(tracker, "state", None), "break_until", None)
                     if until_text:
@@ -340,14 +340,10 @@ class ControlService:
                                 self._timer_snapshot["break_seconds"] = remaining
                         except ValueError:
                             pass
-            from coc_bot.accounts.store import read
             from coc_bot.config import load_config
+            from coc_bot.control.resource_status import resource_status
             config=(getattr(bot,'config',None) if bot is not None and state['active'] else None) or load_config()
-            resource=read(config.data_dir/'resources/home.json',{})
-            farming={'enabled':config.farm_enabled,'start_percent':config.farm_resource_start_percent,
-                     'target_percent':config.farm_resource_target_percent,'status':resource.get('status','unchecked'),
-                     'message':resource.get('message'),'observation':resource.get('observation'),
-                     'observed_at':resource.get('observed_at')}
+            farming=resource_status(config)
             return state | {"operation": self.operation, "result": self.result,
                             "account": self.accounts.store.account() if self.accounts else None,
                             "account_pending": bool(self.accounts and self.accounts.store.load().get('pending')),

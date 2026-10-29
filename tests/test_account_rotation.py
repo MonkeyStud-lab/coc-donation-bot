@@ -58,7 +58,6 @@ class RotationTests(unittest.TestCase):
     def test_existing_farm_timestamp_is_not_imported_into_resource_schedule(self):
         self.configure();fleet=AccountFleet(self.store,RunOptions(),clock=lambda:1000)
         tracker=Mock();tracker.state.last_completed_attack_id='historical'
-        tracker.seconds_since_last_farm.return_value=200;tracker.effective_farm_interval_seconds.return_value=7200
         fleet.current=SimpleNamespace(config=SimpleNamespace(farm_enabled=True),tracker=tracker)
         fleet._initialize_schedule(self.main)
         visit=self.rotation.load()['visits'][self.main['id']]
@@ -66,16 +65,6 @@ class RotationTests(unittest.TestCase):
         self.assertEqual(visit['last_attack_id'],'historical')
         fleet._initialize_schedule(self.main)
         self.assertNotIn('next_farm_at',self.rotation.load()['visits'][self.main['id']])
-
-    def test_stopped_status_uses_the_frozen_rotation_clock(self):
-        self.configure();state=self.rotation.load()
-        state['visits']={self.main['id']:{'next_farm_at':1000}};state['paused_at']=400
-        write(self.rotation.path,state)
-        self.assertEqual(self.rotation.farm_remaining(self.main['id'],900),600)
-        self.assertEqual(self.rotation.farm_remaining(self.main['id'],1900),600)
-        self.assertIsNone(self.rotation.farm_remaining(self.other['id'],1900))
-        self.rotation.resume(1900)
-        self.assertEqual(self.rotation.farm_remaining(self.main['id'],1900),600)
 
     def test_long_upgrade_visits_cannot_starve_farm_and_builder_work(self):
         from coc_bot.bot import DonationBot
@@ -225,6 +214,64 @@ class RotationTests(unittest.TestCase):
         self.assertTrue(fleet._checkpoint(self.main,990))
         self.assertEqual(fleet._next,self.other['id'])
         self.assertEqual(self.rotation.load()['donation_detour']['phase'],'returning')
+
+    def closed_chat_fleet(self):
+        # Use the real bot class: a broad Mock would hide a nonexistent _sleep.
+        from coc_bot.bot import DonationBot
+        self.configure();fleet=AccountFleet(self.store,RunOptions(),clock=lambda:1000)
+        fleet.current=DonationBot.__new__(DonationBot)
+        fleet.current.navigator=Mock();fleet.current.capture=Mock();fleet.current.chat_monitor=Mock()
+        fleet.current.navigator.classifier._clan_chat_anchor_visible.side_effect=[False,True]
+        fleet.current.chat_monitor.find_donate_request.return_value=None
+        fleet._next=self.other['id']
+        return fleet
+
+    def test_closed_chat_is_opened_and_checked_without_a_bot_sleep_method(self):
+        fleet=self.closed_chat_fleet()
+        self.assertFalse(hasattr(fleet.current,'_sleep'))
+        with patch('coc_bot.vision.battle_menu.home_build_control_visible',return_value=True),\
+             patch('coc_bot.donation.chat_check.interrupted_sleep',return_value=False) as wait:
+            fleet._check_chat_before_switch(self.other)
+        fleet.current.navigator._open_clan_chat.assert_called_once()
+        self.assertEqual(fleet.current.capture.screenshot.call_count,2)
+        fleet.current.chat_monitor.find_donate_request.assert_called_once()
+        self.assertEqual(wait.call_args.args[0],.5);self.assertFalse(wait.call_args.args[1]())
+        self.assertEqual(fleet._next,self.other['id'])
+
+    def test_request_found_after_opening_chat_routes_to_the_donor(self):
+        fleet=self.closed_chat_fleet()
+        fleet.current.chat_monitor.find_donate_request.return_value=SimpleNamespace(signature='request')
+        with patch('coc_bot.vision.battle_menu.home_build_control_visible',return_value=True),\
+             patch('coc_bot.donation.chat_check.interrupted_sleep',return_value=False):
+            fleet._check_chat_before_switch(self.other)
+        self.assertEqual(fleet._next,self.main['id'])
+        self.assertEqual(self.rotation.load()['donation_detour']['resume'],self.other['id'])
+
+    def test_stop_or_settings_restart_during_chat_wait_prevents_more_work(self):
+        for finish in (False,True):
+            fleet=self.closed_chat_fleet()
+            def stop(seconds,should_stop):
+                if finish:fleet.finish_action=True
+                else:fleet.cancel.set()
+                return should_stop()
+            with patch('coc_bot.vision.battle_menu.home_build_control_visible',return_value=True),\
+                 patch('coc_bot.donation.chat_check.interrupted_sleep',side_effect=stop):
+                fleet._check_chat_before_switch(self.other)
+            self.assertEqual(fleet.current.capture.screenshot.call_count,1)
+            fleet.current.chat_monitor.find_donate_request.assert_not_called()
+            self.assertNotIn('donation_detour',self.rotation.load())
+
+    def test_chat_check_sends_no_inputs_after_stop_or_on_unknown_village(self):
+        fleet=self.closed_chat_fleet();fleet.cancel.set()
+        fleet._check_chat_before_switch(self.other)
+        fleet.current.capture.screenshot.assert_not_called()
+        fleet=self.closed_chat_fleet()
+        with patch('coc_bot.vision.battle_menu.home_build_control_visible',return_value=False):
+            with patch('coc_bot.runtime.verification.record_failure') as log, self.assertRaisesRegex(ValueError,'Home not verified'):
+                fleet.current.config=SimpleNamespace(data_dir=self.root,account_tag=self.other['tag'])
+                fleet._check_chat_before_switch(self.other)
+            log.assert_called_once()
+        fleet.current.navigator._open_clan_chat.assert_not_called()
 
     def test_donor_selection_is_random_from_all_donation_roles(self):
         self.configure();extra=self.other|{'id':'c'*32,'tag':'#PQLYCG','roles':['donating']}

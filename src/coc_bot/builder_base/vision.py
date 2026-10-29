@@ -214,7 +214,7 @@ class BuilderReader(UpgradeReader):
         title = compact(self.label(frame, (.30, .035, .72, .09)))
         # The native outlined 5 can read as S. This correction locates only
         # the non-spending close control; independent payment checks remain.
-        if title == 'upgradetolevels' and self.find(frame,'upgrade_benefits',(.48,.12,.81,.18),threshold=.97):
+        if title in ('upgradetolevels','upgrradetolevels') and self.find(frame,'upgrade_benefits',(.48,.12,.81,.18),threshold=.97):
             title = 'upgradetolevel'
         if title not in ('upgradetolevel','upgradeunits'):
             return None

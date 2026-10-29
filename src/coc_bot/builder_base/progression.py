@@ -4,6 +4,8 @@ import json
 import re
 import time
 from types import SimpleNamespace
+from functools import lru_cache
+from pathlib import Path
 from coc_bot.builder_base.vision import BuilderReader
 from coc_bot.builder_base.upgrades import BuilderUpgradeRunner,BUILDINGS,eligibility
 from coc_bot.progression.reader import ProgressionReader,row_key
@@ -14,10 +16,19 @@ from coc_bot.upgrades.runner import write_json
 CONSTRUCTIBLE=BUILDINGS|{'armycamp','wall'}
 
 
+@lru_cache(maxsize=1)
+def wall_digits():
+    import numpy as np
+    with np.load(Path(__file__).with_name('assets')/'wall_digits.npz',allow_pickle=False) as archive:
+        return {key:archive[key] for key in archive.files}
+
+
 class BuilderProgressionReader(BuilderReader,ProgressionReader):
     row_min_value=110
     row_close_pixels=3
     row_background_fraction=.40
+    def wall_digit_templates(self):
+        return wall_digits()
     def single_new_wall(self,frame,row):
         if not row.get('new'):return False
         h,w=frame.shape[:2];x,y,bw,bh=row['box']
@@ -420,7 +431,13 @@ class BuilderConstruction:
             unknown_new=any(v.get('new') and (not compact(v.get('name','')) or
                               compact(v['name'])=='wall' and type(v.get('quantity')) is not int)
                             for v in inventory['rows'])
-            if not inventory['complete'] or unknown_new or left!=(row.get('quantity') or 0)-1:
+            # A positively identified remaining stack is independent evidence.
+            # An unrelated unreadable New building must not invalidate it. A
+            # disappearing final stack still requires every New row readable.
+            invalid_stack=any(type(v.get('quantity')) is not int or v.get('currency')!='free'
+                              or v.get('cost')!=0 for v in matches)
+            if (not inventory['complete'] or invalid_stack or len(matches)>1
+                or not matches and unknown_new or left!=(row.get('quantity') or 0)-1):
                 return {'status':'needs_review','message':'Free-wall quantity did not independently verify'}
             if matches:
                 observed=r.find_row(matches[0])
@@ -428,7 +445,12 @@ class BuilderConstruction:
                 second=[v for v in r.reader.rows(r.capture.screenshot())
                         if compact(v['name'])=='wall' and v.get('new')]
                 if (len(matches)!=1 or len(second)!=1
-                    or second[0].get('quantity')!=left):
+                    or second[0].get('quantity')!=left or second[0].get('currency')!='free'
+                    or second[0].get('cost')!=0):
                     return {'status':'needs_review','message':'Free-wall quantity changed during receipt verification'}
-        state['last_completed']=state.pop('pending')|{'phase':'confirmed','after':expected};write_json(r.path,state)
+        state['last_completed']=state.pop('pending')|{'phase':'confirmed','after':expected}
+        state.pop('deferred_receipt',None)
+        write_json(r.path,state)
+        from coc_bot.runtime.verification import resolve_receipt
+        resolve_receipt(r.config,pending)
         return {'status':'started','message':row['name']+' construction confirmed','spent':cost,'currency':resource}

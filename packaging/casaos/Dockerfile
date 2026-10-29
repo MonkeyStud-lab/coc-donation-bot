@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -m venv /opt/venv
 ENV PATH=/opt/venv/bin:$PATH
-RUN python -m pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+ARG COC_WITH_EASYOCR=0
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
@@ -14,8 +14,13 @@ COPY config ./config
 COPY data/game ./data/game
 COPY scripts/setup_live_view.py ./scripts/setup_live_view.py
 COPY scripts/sync_game_data.py ./scripts/sync_game_data.py
-# CPU-only Torch keeps the bot image independent of the host graphics driver.
-RUN python -m pip install --no-cache-dir '.[web,web-live]' \
+# The ordinary runtime uses Tesseract/OpenCV. Enhanced OCR is an optional image
+# build, with CPU-only Torch so it cannot pull GPU driver dependencies.
+RUN if [ "$COC_WITH_EASYOCR" = "1" ]; then \
+      python -m pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+      && python -m pip install --no-cache-dir '.[web,web-live,ocr]' \
+      && EASYOCR_MODULE_PATH=/opt/ocr-cache python -c 'import easyocr; easyocr.Reader(["en"], gpu=False, verbose=False)'; \
+    else python -m pip install --no-cache-dir '.[web,web-live]'; fi \
     && python scripts/setup_live_view.py \
     && python scripts/sync_game_data.py --icons-only --require-core-icons \
     && mkdir -p /app/bin \
@@ -23,7 +28,7 @@ RUN python -m pip install --no-cache-dir '.[web,web-live]' \
     && cp /app/bin/waydroid /app/bin/gdbus \
     && chmod 755 /app/bin/waydroid /app/bin/gdbus
 ENV PATH=/app/bin:/opt/venv/bin:$PATH COC_BOT_HOME=/profile COC_HOST_SOCKET=/host-runtime/host.sock
-ENV HOME=/profile EASYOCR_MODULE_PATH=/profile/data/ocr-cache TORCH_HOME=/profile/data/torch-cache
+ENV HOME=/profile EASYOCR_MODULE_PATH=/opt/ocr-cache TORCH_HOME=/profile/data/torch-cache
 RUN apt-get update && apt-get install -y --no-install-recommends apksigner default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 # Helper-only updates must not invalidate the large Python/artwork build layer.

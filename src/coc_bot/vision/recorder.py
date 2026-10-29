@@ -284,10 +284,6 @@ def smart_options():
     return _smart_options
 
 
-def smart_active() -> bool:
-    return _active is not None and hasattr(_active, "note_event")
-
-
 def _note(method: str, *args) -> None:
     rec = _active
     callback = getattr(rec, method, None)

@@ -4,6 +4,14 @@
 **/adbkey
 **/adbkey.pub
 web/node_modules
+web
+tests
+docs
+.github
+.cursor
+.codex
+.agents
+**/*.egg-info
 build
 logs
 experiments

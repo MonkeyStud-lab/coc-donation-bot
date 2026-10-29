@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,10 +12,6 @@ from coc_bot.runtime.game_state import GameState
 
 # Step-level “where should I be?” tips (also used by Setup detail panel).
 STEP_SCREEN_HINTS = STEP_INSTRUCTIONS
-
-_LOG_PREFIX_RE = re.compile(
-    r"^(?:\d{2}:\d{2}:\d{2}\s*\|\s*[A-Za-z]+\s*\|\s*)?(?:==>\s*)?"
-)
 
 
 @dataclass(frozen=True)
@@ -39,10 +34,11 @@ class FarmReadiness:
     farm_enabled: bool
     farm_calibrated: bool
     has_deploy_sequence: bool
+    requires_sequence: bool = True
 
     @property
     def ready_for_manual(self) -> bool:
-        return self.farm_calibrated and self.has_deploy_sequence
+        return self.farm_calibrated and (not self.requires_sequence or self.has_deploy_sequence)
 
     @property
     def ready_for_auto(self) -> bool:
@@ -51,7 +47,8 @@ class FarmReadiness:
     def summary_lines(self) -> list[str]:
         lines = [
             f"{'✓' if self.farm_calibrated else '✗'}  Farm taps calibrated (Attack / Battle / Return Home)",
-            f"{'✓' if self.has_deploy_sequence else '✗'}  Deploy tap sequence programmed",
+            (f"{'✓' if self.has_deploy_sequence else '✗'}  Deploy tap sequence programmed"
+             if self.requires_sequence else '✓  Army and plan checks run before deployment'),
             f"{'✓' if self.farm_enabled else '○'}  Auto-farm enabled in Settings"
             + ("" if self.farm_enabled else " (optional for Farm attack now)"),
         ]
@@ -86,6 +83,7 @@ def farm_readiness(config: BotConfig | None = None) -> FarmReadiness:
         farm_enabled=bool(config.farm_enabled),
         farm_calibrated=bool(config.farm_calibrated),
         has_deploy_sequence=bool(seq.get("taps")),
+        requires_sequence=config.farm_engine=='sequence',
     )
 
 
@@ -139,48 +137,6 @@ def live_status_label(
 
 def break_timer_caption(*, on_break: bool) -> str:
     return "BREAK LEFT" if on_break else "NEXT BREAK"
-
-
-def humanize_log_line(line: str) -> str | None:
-    """
-    Map a raw activity/log line to a short human sentence, or None to skip.
-    """
-    text = _LOG_PREFIX_RE.sub("", line).strip()
-    if not text:
-        return None
-    if text.startswith("Activity:"):
-        return text[len("Activity:") :].strip()
-
-    lowered = text.lower()
-    patterns: list[tuple[str, str]] = [
-        ("farm attack finished", "Farm attack finished"),
-        ("farm attack queued", "Farm attack queued"),
-        ("stop requested", "Stop requested"),
-        ("starting bot", "Bot started"),
-        ("adb connected", "ADB connected"),
-        ("adb connect failed", "ADB connect failed"),
-        ("adb disconnected", "ADB disconnected"),
-        ("calibration backed up", "Calibration backed up"),
-        ("calibration restored", "Calibration restored"),
-        ("[dry-run]", "Practice mode — skipped a donate tap"),
-        ("donated", "Donation completed"),
-        ("no donate request", "No donation requests visible"),
-        ("no requests", "No donation requests visible"),
-        ("opening donation", "Opening donation panel"),
-        ("session limit", "Session break starting — Clash will close and reopen"),
-        ("on a session break", "On a session break"),
-    ]
-    for needle, human in patterns:
-        if needle in lowered:
-            return human
-
-    if text.startswith("GameState") and "donating" in lowered:
-        return "Donating troops / spells"
-    if text.startswith("GameState") and "clan_chat" in lowered:
-        return "Watching clan chat"
-    if text.startswith("GameState") and "in_battle" in lowered:
-        return "In a farm battle"
-    return None
 
 
 FIXIT_RECIPES: tuple[FixItRecipe, ...] = (

@@ -45,6 +45,43 @@ class WebTests(TestCase):
         self.assertEqual(result.status_code, 200)
         self.headers = {"X-CSRF-Token": result.json()["csrf"]}
 
+    def test_corrupt_resource_history_does_not_break_status_or_stop(self):
+        path=self.home/'data/resources/home.json';path.parent.mkdir(parents=True)
+        path.write_text('{"observed_at":NaN}')
+        result=self.client.get('/api/status')
+        self.assertEqual(result.status_code,200)
+        self.assertEqual(result.json()['resource_farming']['status'],'unverified')
+        self.assertEqual(self.client.post('/api/stop',headers=self.headers).status_code,200)
+
+    def test_workspace_and_library_follow_the_selected_account_without_cache_leaks(self):
+        from coc_bot.accounts.store import AccountStore,write
+        store=AccountStore(self.home)
+        first=store.register({'tag':'#PYLQG'},'First',['donating'])
+        second=store.register({'tag':'#YQGRJPC2L'},'Second',['farming'])
+        for account in (first,second):
+            base=store.profile(account)/'data/collection';base.mkdir(parents=True)
+            (base/(account['nickname']+'.png')).write_bytes(b'fixture')
+            write(store.path,store.load()|{'active':account['id']})
+            response=self.client.get('/api/workspace')
+            self.assertEqual(response.status_code,200,response.text)
+            workspace=response.json()
+            self.assertEqual(workspace['account'],{'id':account['id'],'nickname':account['nickname']})
+            self.assertEqual([x['label'] for x in workspace['library']['images']],[account['nickname']+'.png'])
+            self.assertEqual(workspace['settings']['revision'],self.client.get('/api/settings').json()['revision'])
+        # A first account's cached image ID must not be served under the second.
+        write(store.path,store.load()|{'active':first['id']})
+        ident=self.client.get('/api/library').json()['images'][0]['id']
+        write(store.path,store.load()|{'active':second['id']})
+        self.assertEqual(self.client.get('/api/library/images/'+ident).status_code,404)
+
+    def test_corrupt_collection_diagnostics_do_not_break_workspace_loading(self):
+        path=self.home/'data/collection/status.json';path.parent.mkdir(parents=True)
+        for value in ('{"saved":NaN}','[]','invalid'):
+            path.write_text(value)
+            result=self.client.get('/api/workspace')
+            self.assertEqual(result.status_code,200,result.text)
+            self.assertIsNone(result.json()['library']['collection'])
+
     def test_authentication_origin_csrf_and_logout(self):
         self.assertEqual(self.client.post("/api/stop").status_code, 403)
         self.assertEqual(self.client.post("/api/stop", headers=self.headers).status_code, 200)

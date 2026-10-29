@@ -11,7 +11,7 @@ def row_key(row):
     return (compact(row['name']), row.get('new'), row.get('level'), row.get('cost'), row.get('currency'))
 
 
-def wall_quantity(name, letters):
+def wall_quantity(name, letters, *, extra_templates=None):
     """Read the suffix's actual glyphs; never translate an OCR '&' into 6."""
     stacked=re.fullmatch(r'(?i)\s*wall\s*[x×]\s*(\S{1,3})\s*',name)
     _,_,stats,_=cv2.connectedComponentsWithStats(letters)
@@ -27,7 +27,7 @@ def wall_quantity(name, letters):
     right=max(a+c for a,b,c,d in tail);bottom=max(b+d for a,b,c,d in tail)
     from coc_bot.upgrades.digits import read_digits
     value=read_digits(cv2.cvtColor(letters[y:bottom,x:right],cv2.COLOR_GRAY2BGR),
-                      extra_templates=counter_digit_variants()|red_digit_variants())
+                      extra_templates=counter_digit_variants()|red_digit_variants()|(extra_templates or {}))
     if not value or not re.fullmatch(r'\d{1,3}',value) or len(value)!=len(tail):return None
     # Conflicting valid OCR cannot authorize a quantity decrement receipt.
     if stacked[1].isdigit() and int(stacked[1])!=int(value):return None
@@ -112,6 +112,9 @@ def balance_amount(image, stop=None):
 
 
 class ProgressionReader(UpgradeReader):
+    def wall_digit_templates(self):
+        return {}
+
     def research_locked(self, frame):
         """Recognize the actual padlock in the Research tab, not a missing list."""
         if self.menu_kind(frame) != 'buildings':return False
@@ -202,7 +205,7 @@ class ProgressionReader(UpgradeReader):
             letters = cv2.inRange(hsv,(0,0,205),(180,80,255)) | cv2.inRange(hsv,(35,80,170),(90,255,255))
             name = text(255-cv2.copyMakeBorder(letters,6,6,6,6,cv2.BORDER_CONSTANT,value=0), stop=self.stop)
             if not name.strip():name=text(title,stop=self.stop)
-            quantity=wall_quantity(name,letters)
+            quantity=wall_quantity(name,letters,extra_templates=self.wall_digit_templates())
             if quantity is not None and re.match(r'(?i)^\s*wall\s*[x×]',name):name='Wall'
             name = re.sub(r'(?i)\s+[x×]\s*\d+(?:\s+[\W\d_]+)?\s*$','',name).strip(' _=|.;—')
             name = {'clancastile':'Clan Castle','cannnon':'Cannon'}.get(compact(name),name)

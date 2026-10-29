@@ -269,8 +269,32 @@ new rows cannot prove the last wall disappeared.
 An orphaned Builder payment journal also counts as a pending visit. Recovery
 uses the existing receipt reconciler with execution disabled; it never sends the
 payment again. From Home, it verifies the account and uses only an already-built
-boat, with onboarding actions disabled. An uncertain receipt prevents account
-handoff and new work.
+boat, with onboarding actions disabled. An uncertain receipt blocks new Builder
+spending. If the screen has settled, the bot closes only recognized menus,
+returns by boat, and independently verifies Home Village. It then pauses Builder
+Base automation for that account while donations and other safe work continue.
+The original receipt stays in `data/builder_base/upgrades.json`, alongside a
+receipt- and account-specific `deferred_receipt` marker. A changed receipt or an
+unfinished visit invalidates that marker. Unknown screens, held placements,
+battles, and failed Home verification remain blocking.
+
+Verification warnings appear in Activity and the normal log. Account-local
+`data/verification/failures.json` keeps the latest 100 distinct failures, including
+timestamps, repeat counts, feature, receipt and available evidence location.
+Repeated observations update their record; warnings are rate limited. A deferred
+receipt requires review before Builder Base automation resumes; restarting does
+not erase it or repeat the purchase.
+
+Green Builder wall quantities use additional native digit templates only for
+wall counts, without lowering the shared digit-match threshold. A remaining
+free-wall stack must show the exact one-wall decrement on two observations;
+the final disappearing stack still requires a complete readable New inventory.
+
+A live recovery check verified an existing 18-to-17 free-wall decrement without
+repeating placement, with Gold, Elixir and gems unchanged. A separate supervised
+failure check preserved the uncertain receipt, safely returned to clan chat and
+released other account work. Later independent verification marked that logged
+failure resolved while retaining its history.
 
 The early Barbarian executor now normalizes the camera before reading placement
 targets, like the existing Night Witch executor. It discards scouting coordinates

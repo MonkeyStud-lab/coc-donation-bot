@@ -25,14 +25,21 @@ python scripts/setup_live_view.py
 python -m coc_bot.web
 ```
 
+Tesseract/OpenCV provide the normal OCR path. EasyOCR and its Torch dependencies
+are optional: use `bash scripts/setup_linux.sh --web --ocr` to install and preload
+them explicitly. Device workers use only preloaded models and never download them.
+For a custom CasaOS image, `--build-arg COC_WITH_EASYOCR=1` installs CPU-only Torch
+and preloads the English model into the image; the default image omits both.
+
 For browser work without Android, run:
 
 ```bash
 PYTHONPATH=src python scripts/preview_web_offline.py
 ```
 
-Use a disposable profile. `--home` selects a separate prepared root; the browser's
-Simulate first launch isolates files but still permits real game input. A fresh
+The preview creates its own disposable profile and blocks live ADB. For the real
+server, `python -m coc_bot.web --home PATH` selects a separate prepared root;
+the browser's Simulate first launch isolates files but still permits real game input. A fresh
 clone does not include private screenshots, models, account data, or calibration.
 Do not run unit tests against a production profile or device.
 

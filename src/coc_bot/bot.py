@@ -110,6 +110,7 @@ class DonationBot:
         from coc_bot.runtime.visits import Visit
         self._visit = Visit(self.config)
         self._visit_chat_pending=True
+        self._farm_chat_check_due=False
 
         # Stop button interrupts long waits (chat nav, farm, donation panel, breaks).
         stop = self.should_stop
@@ -256,6 +257,7 @@ class DonationBot:
         from coc_bot.accounts.store import read
         layout=read(self.config.data_dir/'layouts/state.json',{})
         if layout.get('pending') or layout.get('last_survey',{}).get('payment'):
+            self.__dict__.pop('_verified_handoff',None)
             if not self._layout_runner().recover():
                 raise RuntimeError('Interrupted layout edit could not be safely recovered')
         from coc_bot.accounts.navigation import verify_session
@@ -287,7 +289,6 @@ class DonationBot:
         recover_attack(context(self.farmer), tracker=self.tracker)
         prune_attack_diagnostics(self.config.data_dir)
         self.break_manager.resume_pending_break()
-        self.tracker.resume_farm_clock()
         self.tracker.start_loop_timing()
 
         self.set_mode(BotMode.DONATE)
@@ -304,13 +305,17 @@ class DonationBot:
             self._set_state("scan_chat")
             self._last_anti_idle = time.monotonic()
 
+            handed_off=False
             while not self._stop_requested:
                 if self._settings_stop_ready():
                     break
-                if (self._state in ('scan_chat','scroll_chat') and
-                    getattr(self,'_fleet_should_yield',lambda:False)()):
-                    break
                 try:
+                    # A fleet checkpoint performs fresh navigation/OCR too.
+                    # Keep it inside the same recoverable boundary as a tick.
+                    if (self._state in ('scan_chat','scroll_chat') and
+                        getattr(self,'_fleet_should_yield',lambda:False)()):
+                        handed_off=not self.should_stop()
+                        break
                     self._loop_tick()
                 except KeyboardInterrupt:
                     logger.info("Shutting down...")
@@ -335,11 +340,10 @@ class DonationBot:
                         break
 
             self.tracker.tick()
-            logger.info("Bot stopped")
+            logger.info('Account visit complete — handing off' if handed_off else 'Bot stopped')
         finally:
-            # Freeze farm interval so Stop → Start keeps the same remaining wait.
+            # Only active session time advances the mandatory-break countdown.
             self.tracker.pause()
-            self.tracker.pause_farm_clock()
 
     def _loop_tick(self) -> None:
         if self._stop_requested or self._settings_stop_ready():
@@ -349,6 +353,14 @@ class DonationBot:
         if pending(self.config) or builder_pending(self.config):
             self._recover()
             return
+        if (getattr(self,'_farm_chat_check_due',False) is True
+            and not callable(getattr(self,'_fleet_should_yield',None))):
+            from coc_bot.accounts.store import read
+            layout=read(self.config.data_dir/'layouts/state.json',{})
+            blocked=(read(self.config.data_dir/'upgrades/state.json',{}).get('pending')
+                     or layout.get('pending') or layout.get('last_survey',{}).get('payment'))
+            if not blocked and self._check_chat_between_attacks():
+                self.tracker.tick();return
         self._check_watchdog()
         if self._stop_requested or self._settings_stop_ready():
             return
@@ -510,6 +522,11 @@ class DonationBot:
                                                or getattr(self.config, 'builder_base_collect_resources', False))):
             return False
         from coc_bot.builder_base.runner import BuilderBaseRunner, state
+        from coc_bot.builder_base.verification import deferred
+        if deferred(self.config):
+            self._visit_retry_at=time.time()+3600
+            self._visit_reason='Builder upgrades paused for receipt review'
+            return False
         visit = state(self.config)
         if not getattr(self,'_visit',None) and time.time() < visit.get('next_visit_at',0):
             return False
@@ -585,6 +602,8 @@ class DonationBot:
                 kind=queue.pop(0)
                 if self._stop_requested: break
                 result=runner.run(kind,execute=True)
+                from coc_bot.runtime.verification import log_result
+                log_result(self.config,'home.'+kind,result,pending=runner.state().get('pending'))
                 attempts+=1
                 logger.info('Upgrade check ({}): {} — {}',kind,result.get('status'),
                             result.get('message','No resource spending requested'))
@@ -663,6 +682,23 @@ class DonationBot:
             return False
         if self.config.dry_run:return False
         return self._resource_farm_due()
+
+    def _check_chat_between_attacks(self):
+        from coc_bot.donation.chat_check import peek_requests
+        if not getattr(self.config,'donation_enabled',True):
+            logger.info('Between attacks: no donating role or account rotation is enabled')
+            self._farm_chat_check_due=False
+            return False
+        logger.info('Between attacks: checking clan chat before another refill battle')
+        request=peek_requests(self.capture,self.navigator,self.chat_monitor,self.should_stop)
+        if self.should_stop():return True
+        self._farm_chat_check_due=False
+        if request is not None and self._should_handle_request(request):
+            self._pending_request=request;self._visit_chat_pending=True
+            self._set_state('open_donation')
+            return True
+        logger.info('Between attacks: clan chat check complete')
+        return False
 
     def _maybe_run_farm(self) -> bool:
         """Run one farm cycle if due. Returns True if farm work was attempted."""
@@ -751,6 +787,9 @@ class DonationBot:
                 state['retry_at']=time.time()+max(60,self.config.farm_retry_cooldown_seconds)
                 self._visit_retry_at=state['retry_at'];self._visit_reason=result.reason
             self._save_resource_state(state)
+        self._farm_chat_check_due=True
+        self._visit_chat_pending=True
+        getattr(self,'_fleet_after_step',lambda:None)()
         return True
 
     def _maybe_anti_idle(self) -> None:
@@ -766,6 +805,18 @@ class DonationBot:
         if self._state in ("donate", "open_donation"):
             return
 
+        from coc_bot.accounts.store import read
+        from coc_bot.upgrades.runner import UpgradeRunner
+        layout=read(self.config.data_dir/'layouts/state.json',{})
+        if (UpgradeRunner(self.config,self.capture,self.nav_input,self.navigator).state().get('pending')
+            or layout.get('pending') or layout.get('last_survey',{}).get('payment')):
+            return
+        # The loop state alone is not evidence that chat is still on screen.
+        self._last_anti_idle=time.monotonic()
+        frame=self.capture.screenshot()
+        if self.should_stop() or not self.navigator.classifier._clan_chat_anchor_visible(frame):
+            return
+
         w = self.config.frame_width or 1853
         h = self.config.frame_height or 1048
         if "chat_panel" in self.config.rois:
@@ -778,7 +829,7 @@ class DonationBot:
         dist = random.randint(45, 90)
         logger.debug("Anti-idle nudge at ({}, {})", cx, cy)
         self.nav_input.swipe(cx, cy + dist // 2, cx, cy - dist // 2, duration_ms=200)
-        time.sleep(0.12)
+        if interrupted_sleep(.12,self.should_stop):return
         self.nav_input.swipe(cx, cy - dist // 2, cx, cy + dist // 2, duration_ms=200)
         self._last_anti_idle = time.monotonic()
 
@@ -987,6 +1038,12 @@ class DonationBot:
 
         recorder.note_event("recovery", state=self._state)
         self.game_state.transition(GameState.RECOVERING, reason="watchdog/desync")
+        from coc_bot.upgrades.runner import UpgradeRunner
+        upgrade=UpgradeRunner(self.config,self.capture,self.nav_input,self.navigator).state().get('pending')
+        if upgrade:
+            from coc_bot.runtime.verification import record_failure
+            record_failure(self.config,'home.recovery','Unresolved upgrade blocks generic navigation',pending=upgrade)
+            raise RuntimeError('Unresolved Home upgrade receipt; generic recovery navigation is blocked')
         from coc_bot.accounts.store import read
         layout=read(self.config.data_dir/'layouts/state.json',{})
         if layout.get('pending') or layout.get('last_survey',{}).get('payment'):
@@ -1011,6 +1068,7 @@ class DonationBot:
             # Let failure reach the controller: no repeated generic BACK/chat
             # loop when attack recovery is blocked or checkpoint is corrupt.
             recover_attack(context(self.farmer), tracker=self.tracker)
+            self._farm_chat_check_due=True
             self.set_mode(BotMode.DONATE)
             self.game_state.transition(GameState.CLAN_CHAT, reason='interrupted attack recovered')
             self._set_state('scan_chat')

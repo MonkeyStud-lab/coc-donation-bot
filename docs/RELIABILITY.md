@@ -21,8 +21,10 @@ tab closure leaves the server/bot running.
 
 Settings Save & restart uses a safe action boundary, not an immediate mid-attack
 restart. Stop cancels that pending change/restart. Revision validation prevents
-one browser silently overwriting another's draft. Farm/session clocks preserve
-paused time; an already-started break uses its real-time end timestamp.
+one browser silently overwriting another's draft. Settings and setup load within
+one account scope; an account change preserves an unsaved draft but blocks applying
+it to the new account. The session clock preserves paused time; an already-started
+break uses its real-time end timestamp. Resource demand replaces farm timers.
 
 ## Capture and recognition
 
@@ -36,9 +38,36 @@ success. Mode/phase narrows recognition; action-specific anchors provide additio
 checks. High-level GameState unexpected-transition warnings are diagnostic and do
 not themselves block input. Learned model predictions are observation-only.
 
+Several recognizers can share one observation while the interface is unchanged.
+Navigation invalidates planned chooser coordinates after input or scrolling;
+fresh frames establish the next screen. Identical chooser pixels may reuse name
+OCR, but independent player-tag reads, payment receipts and donation resource-mode
+checks retain their own verification. A sequence of taps is not evidence that
+the intended screens loaded or the action succeeded.
+
 Donate candidates need verified text, not green color alone. Button-label OCR has
 a two-second subprocess budget and a bounded crop cache; ambiguous results expire
 quickly and do not authorize a donation. Optional capacity OCR is separate.
+The default install uses Tesseract/OpenCV; EasyOCR/Torch are optional. Missing
+optional models never initiate a download inside the device worker.
+
+Unreadable display-only resource history cannot break status or Stop. Invalid
+visit cursors and transaction data remain blocking rather than being skipped.
+Fleet chat checks run inside ordinary loop recovery: a failed check remains due,
+is logged in the account's verification history, and cannot count as clear chat
+or authorize an account switch.
+
+The army picker can dim the My Army header. Its foreground Info controls and
+heading must first agree before two brightness-normalized capacity reads are
+accepted. A covering inactivity/confirmation dialog cannot authorize army edits
+or closing a dimmed X. Cleanup dismisses the verified picker before closing the
+editor. Normal account handoffs have their own log message; actual worker failures
+write their traceback to the rotating bot log without dumping local variables.
+
+Anti-idle swipes require fresh clan-chat evidence and are suppressed during
+pending upgrade/layout operations. Stop cancels the wait between the two swipes.
+Generic recovery cannot dismiss an unresolved Home upgrade payment; its receipt
+must be reconciled through the upgrade workflow before ordinary navigation.
 
 Before filling, selected-elixir evidence must match. If necessary, a precise
 elixir-button tap is followed by a fresh selected-state check. Missing references
@@ -62,7 +91,7 @@ Home/clan chat and camera restoration must be verified before normal work resume
 
 Durable checkpoints and intent journals precede game input. A failure to persist
 required intent blocks the input. Restart recovery inspects the live state,
-advances the interval once per recorded attack identity, and never restarts the
+records completion once per attack identity, and never restarts the
 army recipe. Corrupt/foreign-device markers are preserved for inspection.
 
 Camera restoration normally requires a measured scale within 3% and bounded
@@ -102,6 +131,11 @@ Android account data needs separate protection. See [backup scope](RUNNING.md#ba
 
 ## Storage and private data
 
+- Verification failures appear as warnings and persist per account in
+  `data/verification/failures.json` (100 distinct records, repeated observations
+  deduplicated). An unresolved Builder receipt pauses that account's Builder Base
+  work after a verified safe Home return; it is never treated as a successful
+  purchase. An unsettled payment/placement/battle still blocks navigation.
 - Application logs rotate at 10 MB with seven-day retention.
 - Generated attack survey/execution evidence is pruned between operations, with
   seven-day, 1 GiB, and forty-group targets. The newest three groups per family

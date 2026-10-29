@@ -448,7 +448,6 @@ class DebugSession:
                 not result.interval_recorded and not pending(self.config)):
             tracker = RuntimeTracker(self.config)
             tracker.mark_farm_success()
-            tracker.pause_farm_clock()
         if stop is not None and stop():
             msg = f"Farm one-shot: stopped ({result.reason})"
             return False, msg

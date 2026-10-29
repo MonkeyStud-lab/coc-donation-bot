@@ -186,7 +186,7 @@ def execute_preview(session, ident, expected):
         if executor.result.first_deploy_at or executor.result.uncertain_tap:
             from coc_bot.runtime.tracker import RuntimeTracker
             tracker=RuntimeTracker(session.config)
-            tracker.mark_farm_success(attack_id=checkpoint.load()['id']);tracker.pause_farm_clock()
+            tracker.mark_farm_success(attack_id=checkpoint.load()['id'])
     # Even a preflight failure can leave the game in an opponent. Finish that
     # match before returning control to donations, unless Stop was requested.
     try:

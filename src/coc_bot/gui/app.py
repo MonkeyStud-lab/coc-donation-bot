@@ -40,31 +40,17 @@ from coc_bot.gui.calib_backup import (
     rename_backup,
     restore_backup,
 )
-from coc_bot.gui.debug_actions import DEBUG_GROUPS, DebugSession, run_debug_action
+from coc_bot.gui.debug_actions import DebugSession, run_debug_action
 from coc_bot.gui.debug_export import export_debug_bundle
 from coc_bot.gui.notify import notify
 import coc_bot.gui.theme as theme
-from coc_bot.gui.settings_fields import (
-    SETTINGS,
-    current_setting_values,
-    is_raw_timing_field,
-    save_settings_from_gui,
-)
+from coc_bot.gui.settings_fields import SETTINGS, current_setting_values, save_settings_from_gui
 from coc_bot.gui.setup_calib import (
     calibrate_part_in_app,
     part_supports_in_app,
     should_calibrate_part,
 )
-from coc_bot.gui.theme import (
-    active_layout,
-    apply_theme,
-    bind_yview_mousewheel,
-    finish_scrollable,
-    make_scrollable,
-    normalize_theme_id,
-    theme_label,
-    ui_font,
-)
+from coc_bot.gui.theme import active_layout, apply_theme, normalize_theme_id, theme_label, ui_font
 from coc_bot.gui.ui_helpers import (
     GuiWindowState,
     adb_status_label,
@@ -78,17 +64,7 @@ from coc_bot.gui.calib_instructions import (
     format_step_instruction,
     part_instruction,
 )
-from coc_bot.gui.ux_helpers import (
-    FIXIT_RECIPES,
-    FarmReadiness,
-    FixItRecipe,
-    MissingCalibration,
-    break_timer_caption,
-    farm_readiness,
-    live_status_label,
-    next_missing_calibration,
-    settings_snapshot,
-)
+from coc_bot.gui.ux_helpers import FarmReadiness, FixItRecipe, MissingCalibration, break_timer_caption, farm_readiness, live_status_label, next_missing_calibration, settings_snapshot
 from coc_bot.gui.util import calibrate_script, open_in_terminal
 from coc_bot.gui.widgets import HelpTip, ToggleSwitch
 

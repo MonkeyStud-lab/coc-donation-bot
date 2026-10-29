@@ -57,13 +57,6 @@ class RotationStore:
     def pause(self, now):
         state=self.load();state['paused_at']=now;write(self.path,state)
 
-    def farm_remaining(self,ident,now):
-        state=self.load();due=state['visits'].get(ident,{}).get('next_farm_at')
-        if type(due) not in (int,float):return None
-        paused=state.get('paused_at')
-        reference=paused if type(paused) in (int,float) and 0<=paused<=now else now
-        return max(0,due-reference)
-
     def next_account(self, now):
         state=self.load()
         eligible=[a for a in self.accounts.load()['accounts'] if a['id']!=state['primary_id'] and
@@ -159,9 +152,13 @@ class AccountFleet:
                     state['last_donation_detour_at']=now;write(self.rotation.path,state)
                     logger.warning('Donation detour cancelled: donor clan membership changed or is unverified')
                     return self._next!=account['id']
+            between_attacks=getattr(self.current,'_farm_chat_check_due',False) is True
+            if between_attacks:self._chat_due=True
             if getattr(self,'_chat_due',False) and not state.get('donation_detour'):
-                self._chat_due=False;self._next=account['id']
-                self._check_chat_before_switch(account)
+                self._next=account['id']
+                if between_attacks:logger.info('Between attacks: checking clan chat before another refill battle')
+                if self._check_chat_before_switch(account):
+                    self._chat_due=False;self.current._farm_chat_check_due=False
                 if self._next!=account['id']:return True
         detour=state.get('donation_detour')
         if detour and detour.get('phase')=='returning' and account['id']==detour['resume']:
@@ -203,37 +200,39 @@ class AccountFleet:
 
     def _check_chat_before_switch(self,account):
         """Called only after all battle/payment journals pass the idle guard."""
+        if self.cancel.is_set() or self.finish_action:return False
         state=self.rotation.load()
-        if state.get('donation_detour'):return
+        if state.get('donation_detour'):return False
         from coc_bot.accounts.clan import donors_for,membership
         donors=donors_for(self.store,account,self.clock())
-        if not donors:return
-        nav=self.current.navigator;frame=self.current.capture.screenshot()
-        if not nav.classifier._clan_chat_anchor_visible(frame):
-            from coc_bot.vision.battle_menu import home_build_control_visible
-            if not home_build_control_visible(frame):raise ValueError('Home not verified before rotation chat check')
-            nav._open_clan_chat(frame)
-            self.current._sleep(.5)
-            frame=self.current.capture.screenshot()
-        if not nav.classifier._clan_chat_anchor_visible(frame):
-            raise ValueError('Clan chat could not be verified before switching accounts')
-        request=self.current.chat_monitor.find_donate_request(frame)
-        if request is None:return
+        if not donors:
+            logger.info('Clan chat check skipped: no verified same-clan donor is available')
+            return True
+        from coc_bot.donation.chat_check import peek_requests
+        stop=lambda:self.cancel.is_set() or self.finish_action
+        try:
+            request=peek_requests(self.current.capture,self.current.navigator,self.current.chat_monitor,stop)
+        except ValueError as exc:
+            from coc_bot.runtime.verification import record_failure
+            record_failure(self.current.config,'accounts.chat_check',str(exc))
+            raise  # The bot's loop recovery must prove Home before any work resumes.
+        if stop():return False
+        if request is None:
+            logger.info('Clan chat check complete: no donation request found')
+            return True
         if 'donating' in account['roles']:
             self.current._visit_chat_pending=True
-            self._next=account['id'];return
+            self._next=account['id'];return True
         # A request that cannot be filled must not create an endless detour.
-        if self.clock()-state.get('last_donation_detour_at',0)<180:return
+        if self.clock()-state.get('last_donation_detour_at',0)<180:return True
         donor=random.choice(donors)
         state['donation_detour']={'donor':donor['id'],'resume':self._next,'source':account['id'],
                                   'signature':request.signature,'at':self.clock(),
                                   'clan':membership(self.store,account,self.clock())}
         write(self.rotation.path,state)
         self._next=donor['id']
-
-    @property
-    def farm_remaining_seconds(self):
-        return None  # Storage demand replaces the attack interval.
+        logger.info('Clan chat request found: detouring to a verified same-clan donor; this visit will resume afterward')
+        return True
 
     def run(self):
         from coc_bot.accounts.navigation import AccountNavigator
@@ -247,13 +246,17 @@ class AccountFleet:
         with self.store.scope():session=DebugSession()
         self.rotation.resume(self.clock())
         try:
-            with DeviceLease(session.config.adb_device):
+            with DeviceLease(session.config.adb_device) as lease:
+                verified_handoff=None
                 while not self.cancel.is_set() and not self.finish_action:
                     account=self.store.account()
                     if account is None:raise ValueError('No saved account is selected')
                     with self.store.scope(account['id']):
                         self.store.require_ready(allow_layout_recovery=True)
                         self.current=self._new_bot()
+                        if verified_handoff is not None:
+                            self.current._verified_handoff=verified_handoff
+                            verified_handoff=None
                         if self.cancel.is_set() or self.finish_action:
                             self.current.request_stop()
                             break
@@ -293,5 +296,8 @@ class AccountFleet:
                         identity=nav.switch(target)
                         if self.cancel.is_set():break
                         self.store.complete(identity['tag'],hall=identity.get('hall'))
+                        from coc_bot.accounts.handoff import VerifiedHandoff
+                        verified_handoff=VerifiedHandoff(identity['tag'],self.store.profile(target)/'data',
+                                                         session.config.adb_device,lease)
         finally:
             self.rotation.pause(self.clock())

@@ -141,6 +141,16 @@ class GoalFleetTests(ClanRoutingTests):
                          (self.same['id'],self.source['id'],'#PYLQG'))
         self.assertEqual(fleet.current._visit.order(),('farm',))
 
+    def test_attack_completion_forces_chat_check_even_when_step_notification_was_missing(self):
+        fleet=self.fleet(self.source);fleet.current._farm_chat_check_due=True
+        fleet.current.navigator.seek_donation_requests_step.return_value='jump'
+        fleet.current.chat_monitor.find_donate_request.side_effect=[None,SimpleNamespace(signature='after-attack')]
+        fleet.current._visit.finish_step('farm',repeat=True)
+        self.assertTrue(fleet._checkpoint(self.source,900))
+        self.assertFalse(fleet.current._farm_chat_check_due)
+        self.assertEqual(fleet.rotation.load()['donation_detour']['resume'],self.source['id'])
+        self.assertEqual(fleet.current._visit.order(),('farm',))
+
     def test_changed_donor_clan_cancels_before_any_donation(self):
         fleet=self.fleet(self.same);fleet._clan_checked=False
         state=fleet.rotation.load();state['donation_detour']={'donor':self.same['id'],
@@ -228,6 +238,8 @@ class BuilderChecklistTests(unittest.TestCase):
         runner.config=SimpleNamespace(dry_run=False,builder_base_collect_resources=False,
             builder_base_attacks_enabled=True,builder_base_upgrades_enabled=True,
             builder_base_research_enabled=True,builder_base_progression_enabled=False)
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        runner.config.data_dir=Path(temp.name)
         runner.record={};runner.enter=Mock();runner.finish=Mock();runner.phase=Mock()
         runner.refill_resources=Mock(return_value={'retry_at':2000,'message':'unreadable storage'})
         runner.capture=Mock();runner.input=Mock();runner.nav=Mock();runner.stop=lambda:False
@@ -249,6 +261,8 @@ class HomeChecklistTests(unittest.TestCase):
         bot.config=SimpleNamespace(dry_run=False,upgrade_buildings_enabled=True,
             upgrade_research_enabled=True,upgrade_pets_enabled=True,upgrade_interval_seconds=60,
             donation_enabled=False,progression_enabled=False)
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        bot.config.data_dir=Path(temp.name)
         bot._state='scan_chat';bot._stop_requested=False;bot._next_upgrade_check=0
         bot._visit_retry_at=None;bot._visit_reason=None
         bot.should_stop=lambda:False;bot._has_donate_request=Mock(return_value=False)

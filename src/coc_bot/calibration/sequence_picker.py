@@ -60,41 +60,6 @@ def draw_numbered_jitter_circles(
         )
 
 
-def draw_jitter_demo(
-    canvas,
-    *,
-    jitter_px: int,
-    width: int = 420,
-    height: int = 160,
-) -> None:
-    """Abstract Settings demo: muted strip + three numbered jitter circles."""
-    canvas.delete("all")
-    canvas.configure(width=width, height=height)
-    canvas.create_rectangle(0, 0, width, height, fill="#1b2838", outline="")
-    # Fake “map” band
-    canvas.create_rectangle(8, 20, width - 8, height - 36, fill="#2a475e", outline="#3d6a8a")
-    # Fake army bar
-    canvas.create_rectangle(8, height - 32, width - 8, height - 8, fill="#171a21", outline="#3d4450")
-    demo_pts = [
-        (int(width * 0.22), int(height * 0.42)),
-        (int(width * 0.50), int(height * 0.55)),
-        (int(width * 0.78), int(height * 0.38)),
-    ]
-    draw_numbered_jitter_circles(
-        canvas, demo_pts, jitter_px=jitter_px, scale=1.0, tag="demo"
-    )
-    canvas.create_text(
-        width // 2,
-        10,
-        text=(
-            f"Farm deploy jitter demo — radius = ±{max(0, int(jitter_px))} px "
-            "(max axis offset; sequence taps only)"
-        ),
-        fill="#c7d5e0",
-        font=("Segoe UI", 9),
-    )
-
-
 class SequencePicker:
     """
     Multi-click editor over a battle screenshot.

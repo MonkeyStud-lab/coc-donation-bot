@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 from loguru import logger
 from coc_bot.accounts.store import read,write
-from coc_bot.upgrades.vision import crop,text,compact
+from coc_bot.upgrades.vision import crop, text
 from coc_bot.stop import interrupted_sleep
 
 

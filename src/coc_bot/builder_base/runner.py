@@ -3,7 +3,6 @@
 The journal is written before leaving Home Village. Interrupted visits recover
 without redeploying troops or repeating spending and never enter home recovery.
 """
-from pathlib import Path
 import json
 import time
 import uuid
@@ -41,7 +40,9 @@ def state(config):
 
 
 def pending(config):
-    return bool(state(config).get('phase') or read(config.data_dir/'builder_base/upgrades.json',{}).get('pending'))
+    from coc_bot.builder_base.verification import deferred
+    return bool(state(config).get('phase') or
+                read(config.data_dir/'builder_base/upgrades.json',{}).get('pending') and not deferred(config))
 
 
 def deployment_points(frame):
@@ -454,7 +455,51 @@ class BuilderBaseRunner:
                 self.wait(2)
         raise ValueError('Builder Base battle did not reach verified results/home within eight minutes')
 
+    def pause_upgrades(self, result):
+        """Retain the receipt; release only after an independently verified Home return.
+
+        An unknown screen, held placement, battle or stopped operation still owns
+        recovery. No exception is converted into permission to spend again.
+        """
+        from coc_bot.runtime.verification import record_failure, fingerprint
+        from coc_bot.builder_base.progression import BuilderProgressionRunner
+        from coc_bot.builder_base.verification import paused_result
+        path=self.config.data_dir/'builder_base/upgrades.json'
+        if self.record.get('phase') in ('battle','matchmaking','leaving_results','collection_needs_review'):
+            raise ValueError('Builder recovery checkpoint cannot be deferred as an upgrade failure')
+        journal=read(path,{})
+        payment=journal.get('pending')
+        if not isinstance(payment,dict) or payment.get('kind') not in ('construction','wall','buildings','research'):
+            raise ValueError('Unknown Builder receipt cannot be deferred safely')
+        message=result.get('message') or 'Builder upgrade outcome could not be verified'
+        failure=record_failure(self.config,'builder_base.upgrades',message,pending=payment,evidence=self.folder)
+        self.evidence(self.frame(),'verification-failed')
+        receipt=BuilderProgressionRunner(self.config,self.capture,self.input,self.nav,self.stop)
+        receipt.close()
+        for _ in range(2):
+            frame=self.frame()
+            if (not self.reader.home(frame) or receipt.construction_controls(frame) is not None
+                or self.reader.battle(frame) or self.reader.result_button(frame)):
+                raise ValueError('Builder verification failed on an unsettled screen; safe return is not verified')
+        self.finish()
+        for _ in range(2):
+            frame=self.frame()
+            if not (self.home_village(frame) or self.nav.classifier._clan_chat_anchor_visible(frame)):
+                raise ValueError('Home Village not independently verified; Builder receipt remains blocking')
+        # Re-read before writing so a changed transaction cannot inherit this
+        # receipt's Home proof. Interrupted navigation never writes this marker.
+        journal=read(path,{})
+        if journal.get('pending')!=payment:
+            raise ValueError('Builder receipt changed while returning Home')
+        journal['deferred_receipt']={'account':getattr(self.config,'account_tag',None),
+            'fingerprint':fingerprint(payment),'failure_id':failure,'home_verified_at':time.time()}
+        write_json(path,journal)
+        logger.warning('Builder upgrades paused [{}]; Home Village verified, continuing safe account work',failure)
+        return paused_result(self.config)
+
     def recover(self):
+        from coc_bot.builder_base.verification import deferred
+        if not self.record.get('phase') and deferred(self.config):return
         payment=read(self.config.data_dir/'builder_base/upgrades.json',{}).get('pending')
         if not self.record.get('phase') and not payment:
             return
@@ -483,9 +528,12 @@ class BuilderBaseRunner:
             kind=payment.get('kind')
             if kind not in ('construction','wall','buildings','research'):
                 raise ValueError('Unknown Builder payment category; no recovery input sent')
-            receipt.run('research' if kind=='research' else 'buildings',execute=False)
+            try:
+                result=receipt.run('research' if kind=='research' else 'buildings',execute=False)
+            except ValueError as exc:
+                result={'status':'needs_review','message':str(exc)}
             if receipt.state().get('pending'):
-                raise ValueError('Builder payment needs receipt verification before leaving this account')
+                return self.pause_upgrades(result)
         from coc_bot.builder_base.onboarding import BuilderOnboarding
         flow=BuilderOnboarding(self)
         if flow.state().get('phase') not in (None,'complete'):
@@ -542,9 +590,10 @@ class BuilderBaseRunner:
     def run(self, *, refill=False):
         if self.config.dry_run:
             return {'status':'practice_skipped'}
+        from coc_bot.builder_base.verification import deferred,paused_result
+        if not self.record.get('phase') and deferred(self.config):return paused_result(self.config)
         if self.record.get('phase') or pending(self.config):
-            self.recover()
-            return {'status':'recovered'}
+            return self.recover() or {'status':'recovered'}
         self.enter()
         report = {}
         if getattr(self.config, 'builder_base_collect_resources', False):
@@ -571,6 +620,8 @@ class BuilderBaseRunner:
             paused=[]
             for kind in choices:
                 result=runner.run(kind,execute=True)
+                from coc_bot.runtime.verification import log_result
+                log_result(self.config,'builder_base.'+kind,result,pending=runner.state().get('pending'))
                 logger.info('Builder Base {} upgrade: {}',kind,result.get('status'))
                 if result.get('status') in ('started','built','recovered'):
                     completed.append(result)
@@ -591,6 +642,8 @@ class BuilderBaseRunner:
                   getattr(self.config,'builder_base_research_enabled',False))
         if upgrades:
             report['upgrade']=upgrade()
+            if read(self.config.data_dir/'builder_base/upgrades.json',{}).get('pending'):
+                return report|self.pause_upgrades(report['upgrade'])
             if refill and report['upgrade'].get('paused_operations'):
                 report.update(retry_at=time.time()+900,message='Some Builder upgrade checks need another observation')
         if self.config.builder_base_attacks_enabled and not refill:

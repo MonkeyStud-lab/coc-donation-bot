@@ -1,6 +1,5 @@
 """Single-worker API. Device operations are serialized by ControlService."""
 from contextlib import asynccontextmanager
-from dataclasses import asdict
 from pathlib import Path
 import asyncio
 import json
@@ -523,17 +522,20 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
         return service.events.since(max(0, after))
 
     gallery_lock = threading.Lock()
-    gallery_cache = {"at": 0, "paths": [], "index": {}}
+    gallery_cache = {"root":None,"at": 0, "paths": [], "index": {}}
     def collection_images():
         base = project_root() / "data/collection"
         # Paths never come from the browser. Only enumerated files below the
         # collection root can be served, including when a folder is symlinked.
         with gallery_lock:
-            if time.monotonic() - gallery_cache["at"] > 5:
-                paths = [p for p in base.rglob("*.png")
-                         if p.resolve().is_relative_to(base.resolve()) and p.is_file()]
-                paths.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-                gallery_cache.update(at=time.monotonic(), paths=paths,
+            if gallery_cache['root']!=base.resolve() or time.monotonic() - gallery_cache["at"] > 5:
+                observed=[]
+                for p in base.rglob('*.png'):
+                    try:
+                        if p.resolve().is_relative_to(base.resolve()) and p.is_file():observed.append((p.stat().st_mtime,p))
+                    except OSError:continue  # Collection retention may remove a frame during enumeration.
+                paths=[p for _,p in sorted(observed,key=lambda v:v[0],reverse=True)]
+                gallery_cache.update(root=base.resolve(),at=time.monotonic(), paths=paths,
                     index={hashlib.sha256(str(p).encode()).hexdigest(): p for p in paths})
             return list(gallery_cache["paths"])
 
@@ -544,11 +546,23 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
         status_path = project_root() / "data/collection/status.json"
         try:
             collection = json.loads(status_path.read_text(encoding="utf-8"))
+            if not isinstance(collection,dict):raise ValueError('Invalid collection status')
+            json.dumps(collection,allow_nan=False)
         except (OSError, ValueError):
             collection = None
         return {"total": len(paths), "collection": collection, "images": [
             {"id": hashlib.sha256(str(p).encode()).hexdigest(), "label": p.name}
             for p in page]}
+
+    @app.get('/api/workspace')
+    def workspace():
+        # One request pins one account context. Separate concurrent settings,
+        # checklist and library requests could otherwise span a fleet handoff.
+        from coc_bot.accounts.store import selected_account
+        with service.lock:
+            account=selected_account.get()
+            return {'account':{k:account[k] for k in ('id','nickname')} if account else None,
+                    'settings':settings_snapshot(),'setup':checklist(),'backups':backups(),'library':library()}
 
     @app.get("/api/library/images/{ident}")
     def library_image(ident: str):

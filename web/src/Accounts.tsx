@@ -1,4 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
+import {EmptyState,Icon} from './ui';
 
 const roles = {donating:'Donating', farming:'Farming', upgrading:'Upgrading', builder_base:'Builder Base'};
 type Account = {id:string;tag:string;nickname:string;roles:string[];clan_tag?:string|null};
@@ -42,14 +43,13 @@ export function Accounts({api,locked,result,operation,working,jobError,live,onCh
     {result?.accounts&&<p role="status">{result.message}</p>}
     {working&&accountJob&&<p role="status">Reading the village and confirming its saved Supercell ID. Keep Live view control released.</p>}
     {switching&&<div className="notice">Switching to {target?.nickname||'the selected account'} is unfinished. Release Live view control, then press Finish switch to reload and verify it.</div>}
-    <div className="toolbar">
-      <button disabled={disabled||!data?.active||!!data?.pending} onClick={()=>act('add')}>Add account</button>
+    <div className="page-actions">
+      <span className="item-count">{data?.accounts.length??0} accounts</span><div className="action-spacer"/>
       {!adding&&<button className={switching?'primary':undefined} disabled={disabled||!data?.active} onClick={()=>act('verify')}>
-        {switching?'Finish switch':'Check loaded account'}</button>}
-      <button onClick={live}>Live view</button>
-      <button className="danger" onClick={stop}>Stop</button>
+        <Icon name="refresh" size={17}/>{switching?'Finish switch':'Verify account'}</button>}
+      <button className="primary" disabled={disabled||!data?.active||!!data?.pending} onClick={()=>act('add')}><Icon name="plus" size={17}/>Add account</button>
     </div>
-    {adding&&<section>
+    {adding&&<section className="panel account-onboarding">
       <ol>
         <li>{data?.accounts.length?'In Live view, choose Log in to Supercell ID and sign in to the new account.':'Open your own home village in Live view.'}</li>
         <li>Return to the home village, close any game menus, then release Live view control.</li>
@@ -64,19 +64,21 @@ export function Accounts({api,locked,result,operation,working,jobError,live,onCh
         <p>Choose that account in the game's Supercell ID menu, return to its home village, and release Live view control.</p>
         <button disabled={disabled} onClick={()=>act('verify')}>Confirm saved account</button></details>}
     </section>}
-    {data?.accounts.map(account=><section key={account.id}>
-      <div className="toolbar"><strong>{account.nickname}</strong><span>{account.tag}</span>
-        {account.clan_tag&&<span title="Verified in the game's My Clan page">Clan {account.clan_tag}</span>}
-        {data.active===account.id?<span className="chip">{data.pending?'Previous account':'Ready'}</span>:<button disabled={disabled||!!data.pending} onClick={()=>act('switch',account.id)}>Switch</button>}
-        <button disabled={disabled||!!data.pending} onClick={()=>{setEditing(account.id);setName(account.nickname);setChosen(account.roles);}}>Edit</button></div>
+    <div className="accounts-grid">{data?.accounts.map(account=><section className={'panel account-card '+(data.active===account.id?'current-account':'')} key={account.id}>
+      <div className="account-card-heading"><span className="avatar">{account.nickname.slice(0,2).toUpperCase()}</span><div className="account-identity"><strong>{account.nickname}</strong><span>{account.tag}</span></div>
+        {data.active===account.id&&<span className="badge current-badge"><i className="status-dot connected"/>{data.pending?'Previous':'Current'}</span>}
+        <button className="icon-button" aria-label={'Edit '+account.nickname} title="Edit account" disabled={disabled||!!data.pending} onClick={()=>{setEditing(account.id);setName(account.nickname);setChosen(account.roles);}}><Icon name="edit" size={17}/></button></div>
       {editing===account.id?<>
-        <label>Name<input value={name} maxLength={60} onChange={e=>setName(e.target.value)}/></label>
+        <label className="stacked-label">Name<input value={name} maxLength={60} onChange={e=>setName(e.target.value)}/></label>
         <div className="toolbar">{Object.entries(roles).map(([key,label])=><label className="toggle" key={key}><input type="checkbox" checked={chosen.includes(key)} onChange={e=>setChosen(old=>e.target.checked?[...old,key]:old.filter(x=>x!==key))}/>{label}</label>)}</div>
-        <button disabled={disabled||!name.trim()} onClick={async()=>{setBusy(true);try{await api('accounts/'+account.id,'PUT',{nickname:name,roles:chosen});setEditing(null);await refresh();await onChanged();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>Save</button>
-        <button onClick={()=>setEditing(null)}>Cancel</button>
-      </>:<p>{account.roles.map(r=>roles[r as keyof typeof roles]).join(' · ')||'No automatic tasks'}</p>}
-    </section>)}
-    {data&&data.accounts.length>1&&<section>
+        <div className="toolbar"><button className="primary" disabled={disabled||!name.trim()} onClick={async()=>{setBusy(true);try{await api('accounts/'+account.id,'PUT',{nickname:name,roles:chosen});setEditing(null);await refresh();await onChanged();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>Save</button>
+        <button onClick={()=>setEditing(null)}>Cancel</button></div>
+      </>:<><div className="role-badges">{account.roles.length?account.roles.map(r=><span className={'role-badge role-'+r} key={r}><Icon name={{donating:'heart',farming:'swords',upgrading:'hammer',builder_base:'castle'}[r]||'settings'} size={13}/>{roles[r as keyof typeof roles]||r}</span>):<span className="muted">No automatic tasks</span>}</div>
+        <div className="account-card-bottom"><span className="clan-tag">{account.clan_tag?<><Icon name="castle" size={14}/>{account.clan_tag}</>:'Clan not yet verified'}</span>
+          {data.active!==account.id&&<button disabled={disabled||!!data.pending} onClick={()=>act('switch',account.id)}>Switch<Icon name="chevron" size={14}/></button>}</div></>}
+    </section>)}</div>
+    {!data&&!error&&<EmptyState icon="accounts">Loading accounts…</EmptyState>}
+    {data&&data.accounts.length>1&&<section className="panel rotation-card">
       <label className="toggle"><input type="checkbox" disabled={disabled||!!data.pending}
         checked={!!data.rotation?.enabled} onChange={async e=>{
           const primary=data.rotation?.primary_id||data.accounts.find(a=>a.roles.includes('donating'))?.id;

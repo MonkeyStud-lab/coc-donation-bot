@@ -66,7 +66,7 @@ def prune_attack_diagnostics(data_dir, *, policy=RetentionPolicy(), now=None, dr
                     children = list(directory.iterdir())
                     # Only flat generated reports; never recurse into an
                     # unexpected directory, junction, symlink or retained copy.
-                    pattern = (r'\d{3}-(?:boat-not-found|battle-results|stage-view|unsupported-army|deployment-confirmed|slot-\d+-attempt-\d+)\.png'
+                    pattern = (r'\d{3}-(?:boat-not-found|battle-results|stage-view|unsupported-army|deployment-confirmed|verification-failed|slot-\d+-attempt-\d+)\.png'
                                if family == 'builder-base' else
                                r'(?:reference|before|after|mosaic|overlay|view-\d+)\.(?:png|json)|camera\.json')
                     if all(p.is_file() and not p.is_symlink() and

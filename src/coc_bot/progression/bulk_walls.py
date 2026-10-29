@@ -3,7 +3,6 @@ from pathlib import Path
 import re
 import time
 import cv2
-import numpy as np
 
 
 def controls(frame, name, bounds=(0,.66,.72,.90)):

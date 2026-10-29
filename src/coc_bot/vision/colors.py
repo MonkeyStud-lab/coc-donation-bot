@@ -9,27 +9,6 @@ def bgr_to_hsv_pixel(bgr: tuple[int, int, int]) -> np.ndarray:
     return cv2.cvtColor(pixel, cv2.COLOR_BGR2HSV)[0][0]
 
 
-def hsv_distance(a: np.ndarray, b: np.ndarray) -> float:
-    diff = np.abs(a.astype(float) - b.astype(float))
-    if diff[0] > 90:
-        diff[0] = 180 - diff[0]
-    return float(np.linalg.norm(diff))
-
-
-def cell_center_hsv(cell: np.ndarray) -> np.ndarray:
-    if cell.size == 0:
-        return np.zeros(3, dtype=float)
-    h, w = cell.shape[:2]
-    cy, cx = h // 2, w // 2
-    margin_y = max(2, h // 6)
-    margin_x = max(2, w // 6)
-    patch = cell[cy - margin_y : cy + margin_y, cx - margin_x : cx + margin_x]
-    if patch.size == 0:
-        patch = cell
-    mean_bgr = np.mean(patch.reshape(-1, 3), axis=0)
-    return bgr_to_hsv_pixel(tuple(mean_bgr.astype(int)))
-
-
 class SlotColorDetector:
     """
     Detect donatable donation-panel slots.

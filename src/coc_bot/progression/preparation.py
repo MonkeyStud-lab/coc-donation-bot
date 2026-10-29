@@ -26,9 +26,19 @@ def capacity_digit_variants():
 def capacity(frame, stop=None):
     # The game widens the hero panel while the troop army is empty. Read the
     # same header row in both inspected layouts; disagreement stays unknown.
-    values=[value for box in ((.315,.205,.45,.255),(.45,.205,.57,.255))
-            if (value:=_capacity_area(crop(frame,box),stop)) is not None]
-    return values[0] if values and len(set(values))==1 else None
+    boxes=((.315,.205,.45,.255),(.45,.205,.57,.255))
+    def read(image):
+        values=[value for box in boxes if (value:=_capacity_area(crop(image,box),stop)) is not None]
+        return values[0] if values and len(set(values))==1 else None
+    value=read(frame)
+    if value is not None:return value
+    # A real foreground picker dims the army header. Normalize only after its
+    # heading and independent bright Info controls prove that drawer is open.
+    # Two bounded preprocessing levels must agree; never invent a digit/count.
+    if not (army_editor_close_button(frame,stop) or picker_editor_visible(frame,stop)):return None
+    values=[read(cv2.convertScaleAbs(frame,alpha=scale)) for scale in (1.1,1.3,1.5)]
+    known=[v for v in values if v is not None]
+    return known[0] if len(known)>=2 and len(set(known))==1 else None
 
 
 def _capacity_area(area, stop=None):
@@ -107,14 +117,16 @@ def army_editor_close_button(frame, stop=None):
 def army_page(frame, stop=None):
     if capacity(frame,stop) is None:return False
     if army_heading_visible(frame,stop):return True
-    for bounds in ((.40,.075,.61,.13),(.13,.075,.29,.13)):
-        # The troop picker dims the header while preserving capacity/card UI.
-        # Require its real grid as well as the exact dimmed heading.
-        if len(picker_boxes(frame))>=3:
-            mask=cv2.inRange(cv2.cvtColor(crop(frame,bounds),cv2.COLOR_BGR2HSV),
-                              (0,0,90),(180,70,255))
-            if compact(text(255-mask,stop=stop))=='myarmy':return True
-    return False
+    return picker_editor_visible(frame,stop)
+
+
+def picker_editor_visible(frame, stop=None):
+    """A picker may dim its parent; a covering dialog dims the picker too."""
+    if not isinstance(frame,np.ndarray) or stop and stop():return False
+    boxes=picker_boxes(frame)
+    if len(boxes)<3:return False
+    if sum(info_point(frame[y:y+h,x:x+w]) is not None for x,y,w,h in boxes)<2:return False
+    return army_heading_visible(cv2.convertScaleAbs(frame,alpha=1.25),stop)
 
 
 def edit_army_button(frame, stop=None):
@@ -371,7 +383,9 @@ class ArmyPreparation:
         if army_page(frame,self.stop):
             self.tap((round(frame.shape[1]*.50),round(frame.shape[0]*.17)))
             frame=self.frame()
-            if not army_page(frame,self.stop):raise ValueError('My Army disappeared before closing')
+            # Counts may be unreadable while the drawer settles. Closing is a
+            # non-spending action proved by the heading and X below, not counts.
+            if not army_heading_visible(frame,self.stop):raise ValueError('My Army disappeared before closing')
         point=army_editor_close_button(frame,self.stop)
         if point:
             if army_editor_close_button(self.frame(),self.stop)!=point:

@@ -122,38 +122,26 @@ def read_short_label(roi_bgr: np.ndarray, *, timeout_seconds=2.0, stop_check=Non
     return remember(texts[0])
 
 
-def is_donate_button_label(roi_bgr: np.ndarray) -> bool | None:
-    """
-    True if OCR says Donate, False if Trade, None if unavailable / inconclusive.
-
-    Only return False on a clear Trade read — inconclusive must not block real Donate.
-    """
-    text = read_short_label(roi_bgr)
-    if text is None:
-        return None
-    has_trade = "trade" in text
-    has_donate = "donat" in text
-    if has_trade and not has_donate:
-        return False
-    if has_donate:
-        return True
-    logger.debug("Green button OCR inconclusive: {!r}", text)
-    return None
-
-
 class QuantityOCR:
     """Extract digit quantities from badge regions using EasyOCR with fallback."""
 
     def __init__(self, confidence_threshold: float = 0.5) -> None:
         self.confidence_threshold = confidence_threshold
         self._reader = None
+        self._reader_unavailable = False
 
     def _get_reader(self):
+        if self._reader_unavailable:
+            raise RuntimeError('Optional EasyOCR is unavailable; use Tesseract or install/preload the ocr extra')
         if self._reader is None:
-            import easyocr
-
-            logger.info("Loading EasyOCR model (first time can take 1–3 minutes on CPU)...")
-            self._reader = easyocr.Reader(["en"], gpu=False, verbose=False)
+            try:
+                import easyocr
+                # Network/model installation belongs to setup, not a device
+                # worker where a download could prevent Stop for minutes.
+                self._reader = easyocr.Reader(["en"], gpu=False, verbose=False,download_enabled=False)
+            except (ImportError,RuntimeError,FileNotFoundError,OSError):
+                self._reader_unavailable=True
+                raise
             logger.info("EasyOCR model ready")
         return self._reader
 

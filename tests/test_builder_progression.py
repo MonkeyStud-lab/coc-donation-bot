@@ -10,6 +10,20 @@ from coc_bot.upgrades.vision import Candidate,compact
 
 
 class BuilderProgressionTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('tesseract'),'OCR executable is required')
+    def test_green_seventeen_wall_stack_is_read_without_relaxing_digit_thresholds(self):
+        from coc_bot.progression.reader import wall_quantity
+        frame=self.fixture('free-wall-seventeen.png');reader=BuilderProgressionReader()
+        walls=[v for v in reader.rows(frame) if compact(v['name'])=='wall' and v.get('new')]
+        self.assertEqual(len(walls),1)
+        self.assertEqual((walls[0]['quantity'],walls[0]['cost'],walls[0]['currency']),(17,0,'free'))
+        title=frame[536:570,round(1853*.775):round(1853*.925)]
+        hsv=cv2.cvtColor(title,cv2.COLOR_BGR2HSV)
+        letters=cv2.inRange(hsv,(0,0,205),(180,80,255))|cv2.inRange(hsv,(35,80,170),(90,255,255))
+        self.assertEqual(wall_quantity('Wall x 17',letters,extra_templates=reader.wall_digit_templates()),17)
+        self.assertIsNone(wall_quantity('Wall x 12',letters,extra_templates=reader.wall_digit_templates()))
+        self.assertEqual(reader.wall_digit_templates().keys(),{'1_builder_wall','7_builder_wall'})
+
     def test_last_wall_requires_exact_native_word_and_no_quantity_suffix(self):
         frame=self.fixture('last-new-wall.png');reader=BuilderProgressionReader()
         row={'new':True,'box':(1358,117,495,68)}
@@ -231,5 +245,21 @@ class BuilderProgressionTests(unittest.TestCase):
                 self.assertEqual(BuilderConstruction(r).reconcile()['status'],status)
             write(r.path,{'pending':pending})
             r.scan.return_value={'complete':True,'rows':[row]};r.reader.rows.return_value=[row|{'quantity':8}]
+            self.assertEqual(BuilderConstruction(r).reconcile()['status'],'needs_review')
+        r.input.tap.assert_not_called()
+
+    def test_known_remaining_stack_does_not_require_recognizing_an_unrelated_new_building(self):
+        r=self.r;r.reader=Mock();r.open_menu=Mock();r.scan=Mock();r.find_row=Mock(return_value=({},object()))
+        pending={'kind':'construction','row':{'name':'Wall','cost':0,'currency':'free','quantity':18},
+                 'before':{'gold':5000,'elixir':8053,'gems':297}}
+        row={'name':'Wall','new':True,'quantity':17,'currency':'free','cost':0}
+        unknown={'name':'','new':True,'quantity':None,'currency':'elixir','cost':4000000}
+        r.scan.return_value={'complete':True,'rows':[row,unknown]};r.reader.rows.return_value=[row,unknown]
+        with patch('coc_bot.builder_base.resources.ResourceReader') as resource:
+            resource.return_value.balances.return_value=pending['before']
+            write(r.path,{'pending':pending})
+            self.assertEqual(BuilderConstruction(r).reconcile()['status'],'started')
+            pending['row']['quantity']=1;write(r.path,{'pending':pending})
+            r.scan.return_value={'complete':True,'rows':[unknown]}
             self.assertEqual(BuilderConstruction(r).reconcile()['status'],'needs_review')
         r.input.tap.assert_not_called()

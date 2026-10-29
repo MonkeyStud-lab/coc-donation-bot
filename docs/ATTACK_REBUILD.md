@@ -27,8 +27,8 @@ Extra troop types, unrecognized cards and unsupported spells (including Recall)
 are left unused rather than cancelling the dragon attack. They never authorize
 selection or serve as army-scroll anchors. Multiple supported siege cards and
 incomplete opponent maps still block deployment. Skipped
-matches are allowed to finish, followed by home/camera/chat recovery; they advance
-the farm interval so an unsupported army is not retried repeatedly.
+matches use the bounded leave/recovery path, followed by home/camera/chat verification.
+Unsuccessful attempts use a retry cooldown before resource-driven farming retries.
 
 Normal game connection and Farm navigation calibration are still needed. Artwork
 recognition uses the installed icon pack and any existing reviewed card references,
@@ -332,9 +332,9 @@ owner checks this marker and the existing camera recovery marker. Recovery:
   still requires a fresh clan-chat confirmation before it can clear. Missing,
   corrupt or foreign references, unstable views and Stop cannot take this path.
   The explicit **Restore camera** tool continues to require the old view.
-- Advances the farm interval once for a potentially fought battle. Its attack ID
-  is persisted so a crash between saving the interval and clearing the checkpoint
-  does not roll a second interval.
+- Records a potentially fought battle once by attack ID. A crash between recording
+  completion and clearing the checkpoint cannot record another completion. Future
+  attacks follow verified storage demand, with a cooldown after failed attempts.
 - Stops after three unknown-screen/cancel attempts, three results taps, or four
   minutes waiting. If blocked, open the home village manually and press Start.
   A corrupt/foreign-device checkpoint is preserved and needs inspection; it is

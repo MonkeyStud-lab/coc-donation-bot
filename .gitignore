@@ -16,6 +16,7 @@ data/builder_base/
 data/layouts/
 data/resources/
 data/visits/
+data/verification/
 data/clan/
 data/accounts/
 data/account_backups/
@@ -25,6 +26,7 @@ data/calibration_backups/
 data/templates/
 data/icons/
 data/bot.log
+data/bot.*.log
 data/user_settings.yaml
 data/web-auth.json
 data/web-auth.new

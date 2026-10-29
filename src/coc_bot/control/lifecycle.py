@@ -200,10 +200,17 @@ class BotController:
                 bot.run()
         except Exception as exc:
             from coc_bot.adb.client import AdbStopped
+            report=False
             with self._lock:
                 if not (self._cancel.is_set() and isinstance(exc, AdbStopped)):
                     self._error = str(exc)
                     self._error_traceback = traceback.format_exc()
+                    report=True
+            if report:
+                # Persist failures even with no browser polling; snapshots alone
+                # disappear on the next Start. Do not hold the Stop lock for IO.
+                from loguru import logger
+                logger.opt(exception=True).error('Controller worker failed: {}',exc)
         finally:
             with self._lock:
                 self._bot = None

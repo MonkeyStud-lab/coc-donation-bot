@@ -4,6 +4,7 @@ import json
 import os
 import threading
 import time
+import math
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,9 +23,8 @@ class RuntimeState:
     cycle_count: int
     break_until: str | None = None
     last_farm_at: str | None = None  # UTC ISO timestamp of last successful farm
-    # When set, farm interval clock is frozen at this UTC time (bot stopped).
+    # Read-only legacy fields retained for old saved-state compatibility.
     farm_paused_at: str | None = None
-    # Rolled wait until the next auto farm (base interval ± variance); None = roll on read.
     next_farm_interval_seconds: int | None = None
     # Rolled session length before break (base limit ± variance); None = roll on read.
     next_session_limit_seconds: int | None = None
@@ -41,7 +41,7 @@ class RuntimeState:
         next_interval: int | None
         try:
             next_interval = int(raw_next) if raw_next is not None else None
-        except (TypeError, ValueError):
+        except (TypeError, ValueError,OverflowError):
             next_interval = None
         if next_interval is not None and next_interval < 60:
             next_interval = None
@@ -50,14 +50,22 @@ class RuntimeState:
         next_limit: int | None
         try:
             next_limit = int(raw_limit) if raw_limit is not None else None
-        except (TypeError, ValueError):
+        except (TypeError, ValueError,OverflowError):
             next_limit = None
         if next_limit is not None and next_limit < 60:
             next_limit = None
 
+        active=float(data.get('active_seconds',0))
+        if isinstance(data.get('active_seconds'),bool) or not math.isfinite(active) or active<0:
+            raise ValueError('Invalid active runtime')
+        for name in ('last_break_seconds','cycle_count'):
+            value=data.get(name,0)
+            if isinstance(value,bool) or int(value)<0:raise ValueError('Invalid runtime counter')
+        for name in ('session_started_at','break_until','last_farm_at','farm_paused_at','last_completed_attack_id'):
+            if data.get(name) is not None and not isinstance(data[name],str):raise ValueError('Invalid runtime text field')
         return cls(
             session_started_at=data.get("session_started_at", datetime.now(timezone.utc).isoformat()),
-            active_seconds=float(data.get("active_seconds", 0)),
+            active_seconds=active,
             last_break_seconds=int(data.get("last_break_seconds", 0)),
             cycle_count=int(data.get("cycle_count", 0)),
             break_until=data.get("break_until"),
@@ -94,7 +102,7 @@ def load_runtime_state(path: Path) -> RuntimeState:
         return RuntimeState.fresh()
     try:
         return RuntimeState.from_dict(data)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError,OverflowError) as exc:
         # e.g. ``"active_seconds": null`` — a corrupt field should not block startup.
         logger.warning("Runtime state {} has bad fields ({}) — starting fresh", path, exc)
         return RuntimeState.fresh()

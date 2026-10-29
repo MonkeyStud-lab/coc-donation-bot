@@ -12,6 +12,38 @@ from coc_bot.progression.space import obstacle,SpaceMaker,home_gems,free_builder
 
 
 class ArmyRecoveryTests(TestCase):
+    @skipUnless(shutil.which('tesseract'),'Tesseract required for native army headings')
+    def test_real_dimmed_picker_keeps_its_capacity_but_a_covering_popup_does_not(self):
+        from coc_bot.progression.preparation import capacity,picker_editor_visible
+        root=Path(__file__).parent/'fixtures/progression'
+        frame=cv2.imread(str(root/'army-dimmed-165-175.png'))
+        self.assertTrue(picker_editor_visible(frame))
+        self.assertEqual(capacity(frame),(165,175));self.assertTrue(army_page(frame))
+        changed=cv2.imread(str(root/'army-dimmed-161-175.png'))
+        self.assertEqual(capacity(changed),(161,175));self.assertTrue(army_page(changed))
+        # Only the drawer's safe backdrop dismissal may undim this X.
+        self.assertIsNone(army_editor_close_button(frame))
+        covered=cv2.imread(str(root/'army-covered-inactivity.png'))
+        self.assertFalse(picker_editor_visible(covered));self.assertIsNone(capacity(covered))
+        self.assertFalse(army_page(covered));self.assertIsNone(army_editor_close_button(covered))
+        for area in ((0,65,650,145),(0,595,1853,1048)):
+            bad=frame.copy();x,y,u,v=area;bad[y:v,x:u]=0
+            self.assertFalse(picker_editor_visible(bad));self.assertFalse(army_page(bad))
+
+    @skipUnless(shutil.which('tesseract'),'Tesseract required for native army headings')
+    def test_cleanup_dismisses_verified_picker_before_closing_the_army_editor(self):
+        from coc_bot.progression.preparation import ArmyPreparation
+        root=Path(__file__).parent/'fixtures/progression'
+        picker=cv2.imread(str(root/'army-dimmed-165-175.png'))
+        editor=cv2.imread(str(root/'army-editor.png'))
+        prep=ArmyPreparation.__new__(ArmyPreparation);prep.stop=lambda:False;prep.s=Mock();prep.tap=Mock()
+        prep.frame=Mock(side_effect=[picker,editor,editor,editor])
+        with patch('coc_bot.progression.preparation.read_info',return_value=None),\
+             patch('coc_bot.progression.preparation.direct_match_button',return_value=None),\
+             patch('coc_bot.progression.home.ensure_home',return_value=True):prep.close()
+        self.assertEqual(prep.tap.call_count,2)
+        self.assertEqual(prep.tap.call_args_list[0].args[0],(round(picker.shape[1]*.5),round(picker.shape[0]*.17)))
+
     def test_home_star_bonus_needs_its_title_delivery_message_and_enabled_okay(self):
         from coc_bot.vision.notices import home_star_bonus_button
         frame=cv2.imread(str(Path(__file__).parent/'fixtures/progression/home-star-bonus.png'))

@@ -3,17 +3,17 @@ from __future__ import annotations
 import random
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from loguru import logger
 
 from coc_bot.config import BotConfig
-from coc_bot.runtime.persistence import RuntimeState, load_runtime_state, save_runtime_state
+from coc_bot.runtime.persistence import load_runtime_state, save_runtime_state
 
 
-def roll_farm_interval_seconds(base: int, variance: int) -> int:
-    """Pick a wait in [base-variance, base+variance], never below 60s."""
+def roll_session_limit_seconds(base: int, variance: int) -> int:
+    """Pick a session length in [base-variance, base+variance], never below 60s."""
     base = max(60, int(base))
     variance = max(0, int(variance))
     if variance <= 0:
@@ -23,11 +23,6 @@ def roll_farm_interval_seconds(base: int, variance: int) -> int:
     if hi < lo:
         return lo
     return random.randint(lo, hi)
-
-
-def roll_session_limit_seconds(base: int, variance: int) -> int:
-    """Pick a session length in [base-variance, base+variance], never below 60s."""
-    return roll_farm_interval_seconds(base, variance)
 
 
 def format_duration_short(seconds: float) -> str:
@@ -191,24 +186,17 @@ class RuntimeTracker:
                 active += time.monotonic() - self._loop_start
             return max(0.0, self.effective_session_limit_seconds() - active)
 
-    def last_farm_at(self) -> datetime | None:
-        raw = self.state.last_farm_at
-        if not raw:
-            return None
-        try:
-            return datetime.fromisoformat(raw)
-        except ValueError:
-            return None
 
     def mark_farm_success(self, *, attack_id=None) -> None:
         """Record that a farm battle was fought (success or post-deploy leave fail)."""
         with self._lock:
             if attack_id and self.state.last_completed_attack_id == attack_id:
                 return
+            previous=(self.state.last_farm_at,self.state.farm_paused_at,
+                      self.state.next_farm_interval_seconds,self.state.last_completed_attack_id)
             self.state.last_farm_at = datetime.now(timezone.utc).isoformat()
             self.state.farm_paused_at = None
-            rolled = self._roll_next_farm_interval()
-            self.state.next_farm_interval_seconds = rolled
+            self.state.next_farm_interval_seconds = None
             if attack_id:
                 from dataclasses import asdict
                 from coc_bot.attack.recovery import atomic_json
@@ -216,105 +204,11 @@ class RuntimeTracker:
                 try:
                     atomic_json(self.state_path, asdict(self.state))
                 except OSError:
-                    self.state.last_completed_attack_id = None
+                    (self.state.last_farm_at,self.state.farm_paused_at,
+                     self.state.next_farm_interval_seconds,self.state.last_completed_attack_id)=previous
                     raise
             else:
                 save_runtime_state(self.state_path, self.state)
         # Legacy interval fields remain readable for old state files. Normal
         # automation schedules its next attack from verified storage demand.
         logger.info("Recorded farm completion at {} — refill follows resource levels", self.state.last_farm_at)
-
-    def pause_farm_clock(self) -> None:
-        """Freeze the farm interval while the bot is stopped (no wall-clock drift)."""
-        with self._lock:
-            if self.state.farm_paused_at:
-                return
-            if not self.state.last_farm_at:
-                return
-            self.state.farm_paused_at = datetime.now(timezone.utc).isoformat()
-            save_runtime_state(self.state_path, self.state)
-            logger.debug("Farm interval clock paused at {}", self.state.farm_paused_at)
-
-    def resume_farm_clock(self) -> None:
-        """
-        Unfreeze the farm interval, preserving remaining wait from when we paused.
-
-        Shifts ``last_farm_at`` forward by the pause duration so Start continues
-        from the same countdown the Home timer showed while stopped.
-        """
-        with self._lock:
-            raw_pause = self.state.farm_paused_at
-            if not raw_pause:
-                return
-            try:
-                paused_at = datetime.fromisoformat(raw_pause)
-            except ValueError:
-                self.state.farm_paused_at = None
-                save_runtime_state(self.state_path, self.state)
-                return
-            now = datetime.now(timezone.utc)
-            if paused_at.tzinfo is None:
-                paused_at = paused_at.replace(tzinfo=timezone.utc)
-            pause_seconds = max(0.0, (now - paused_at).total_seconds())
-            last = self.last_farm_at()
-            if last is not None and pause_seconds > 0:
-                if last.tzinfo is None:
-                    last = last.replace(tzinfo=timezone.utc)
-                self.state.last_farm_at = (last + timedelta(seconds=pause_seconds)).isoformat()
-            self.state.farm_paused_at = None
-            save_runtime_state(self.state_path, self.state)
-            logger.debug(
-                "Farm interval clock resumed (shifted last_farm_at by {:.0f}s)",
-                pause_seconds,
-            )
-
-    def _roll_next_farm_interval(self) -> int:
-        return roll_farm_interval_seconds(
-            self.config.farm_interval_seconds,
-            self.config.farm_interval_variance_seconds,
-        )
-
-    def effective_farm_interval_seconds(self) -> int:
-        """
-        Wait used for the current auto-farm countdown.
-
-        Persists a rolled value so status text and due-checks stay aligned until
-        the next fought farm re-rolls it.
-        """
-        with self._lock:
-            stored = self.state.next_farm_interval_seconds
-            if stored is not None and int(stored) >= 60:
-                return int(stored)
-            rolled = self._roll_next_farm_interval()
-            self.state.next_farm_interval_seconds = rolled
-            save_runtime_state(self.state_path, self.state)
-            logger.debug(
-                "Rolled farm interval target {}s (base {} ± {})",
-                rolled,
-                max(60, int(self.config.farm_interval_seconds)),
-                max(0, int(self.config.farm_interval_variance_seconds)),
-            )
-            return rolled
-
-    def seconds_since_last_farm(self) -> float | None:
-        """Seconds since last fought farm battle, or None if never farmed.
-
-        While the farm clock is paused (bot stopped), uses the pause timestamp
-        as \"now\" so remaining wait does not shrink until Start.
-        """
-        last = self.last_farm_at()
-        if last is None:
-            return None
-        if last.tzinfo is None:
-            last = last.replace(tzinfo=timezone.utc)
-        now = datetime.now(timezone.utc)
-        raw_pause = self.state.farm_paused_at
-        if raw_pause:
-            try:
-                paused_at = datetime.fromisoformat(raw_pause)
-                if paused_at.tzinfo is None:
-                    paused_at = paused_at.replace(tzinfo=timezone.utc)
-                now = paused_at
-            except ValueError:
-                pass
-        return max(0.0, (now - last).total_seconds())

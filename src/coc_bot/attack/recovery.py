@@ -16,7 +16,7 @@ import cv2
 from loguru import logger
 
 from coc_bot.attack.army import check_stop
-from coc_bot.vision.screens import BotMode, ScreenType
+from coc_bot.vision.screens import BotMode
 
 
 class RecoveryRequired(ValueError):
@@ -107,10 +107,7 @@ def finish_attack(session, *, tracker=None):
         if tracker is None:
             from coc_bot.runtime.tracker import RuntimeTracker
             tracker = RuntimeTracker(session.config)
-            tracker.mark_farm_success(attack_id=state['id'])
-            tracker.pause_farm_clock()
-        else:
-            tracker.mark_farm_success(attack_id=state['id'])
+        tracker.mark_farm_success(attack_id=state['id'])
     checkpoint.complete()
 
 

@@ -271,7 +271,7 @@ class ReliabilityTests(unittest.TestCase):
                 path.write_text(value)
                 self.assertEqual(load_runtime_state(path).active_seconds, 0)
 
-    def test_paused_farm_clock_resumes_without_countdown_jump(self):
+    def test_stop_start_keeps_the_actual_farm_completion_timestamp(self):
         from coc_bot.runtime.tracker import RuntimeTracker
         with tempfile.TemporaryDirectory() as tmp:
             config = load_config()
@@ -280,12 +280,13 @@ class ReliabilityTests(unittest.TestCase):
             start = datetime(2026, 1, 1, tzinfo=timezone.utc)
             tracker.state.last_farm_at = start.isoformat()
             tracker.state.farm_paused_at = (start + timedelta(seconds=100)).isoformat()
-            with patch("coc_bot.runtime.tracker.datetime") as clock:
-                clock.fromisoformat = datetime.fromisoformat
-                clock.now.return_value = start + timedelta(seconds=500)
-                self.assertEqual(tracker.seconds_since_last_farm(), 100)
-                tracker.resume_farm_clock()
-                self.assertEqual(tracker.seconds_since_last_farm(), 100)
+            with patch('coc_bot.runtime.tracker.time.monotonic',side_effect=[100,200,1200,1300]):
+                tracker.resume();tracker.pause()
+                self.assertEqual(tracker.active_seconds,100)
+                tracker.resume();tracker.pause()
+            self.assertEqual(tracker.active_seconds,200)
+            self.assertEqual(tracker.state.last_farm_at,start.isoformat())
+            self.assertEqual(load_runtime_state(tracker.state_path).last_farm_at,start.isoformat())
 
 
 if __name__ == "__main__":

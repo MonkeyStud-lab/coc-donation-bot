@@ -1,14 +1,13 @@
 """Learn the native My Clan tag; names and cached guesses never route donations."""
 import csv
 import io
-import re
 import tempfile
 import time
 from pathlib import Path
 import cv2
 from coc_bot.accounts.store import read, write, TAG
 from coc_bot.accounts.navigation import AccountNavigator, find, read_tag
-from coc_bot.upgrades.vision import crop, text, compact
+from coc_bot.upgrades.vision import compact
 from coc_bot.runtime.processes import run_process
 
 

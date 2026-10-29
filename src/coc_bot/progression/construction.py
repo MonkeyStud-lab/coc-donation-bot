@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 import time
 import cv2
-from coc_bot.upgrades.vision import crop, Candidate, resource_amount
+from coc_bot.upgrades.vision import crop, Candidate
 from coc_bot.upgrades.runner import write_json
 from coc_bot.progression.reader import balance_amount
 

@@ -15,15 +15,17 @@ SKIP_ICONS=0
 SKIP_APT=0
 TESTED_DEPS=0
 WEB=0
+OCR=0
 for arg in "$@"; do
   case "$arg" in
     --force) FORCE=1 ;;
     --tested-deps) TESTED_DEPS=1 ;;
     --web) WEB=1 ;;
+    --ocr) OCR=1 ;;
     --skip-icons) SKIP_ICONS=1 ;;
     --skip-apt) SKIP_APT=1 ;;
     -h|--help)
-      echo "Usage: $0 [--force] [--skip-icons] [--skip-apt] [--tested-deps] [--web]"
+      echo "Usage: $0 [--force] [--skip-icons] [--skip-apt] [--tested-deps] [--web] [--ocr]"
       exit 0
       ;;
     *)
@@ -48,13 +50,6 @@ fi
 if [[ ! -f /etc/debian_version ]] && [[ ! -f /etc/lsb-release ]]; then
   warn "Non-Debian Linux detected — apt package install may fail; continuing best-effort."
 fi
-
-need_sudo() {
-  if [[ "$(id -u)" -eq 0 ]]; then
-    return 1
-  fi
-  return 0
-}
 
 run_root() {
   if [[ "$(id -u)" -eq 0 ]]; then
@@ -87,7 +82,7 @@ stamp_fingerprint() {
   setup_hash="$(cksum "$ROOT/scripts/setup_linux.sh" 2>/dev/null | awk '{print $1}')"
   local constraints_hash
   constraints_hash="$(cksum "$ROOT/constraints/linux-py314.txt" 2>/dev/null | awk '{print $1}')"
-  printf 'pyproject=%s setup=%s constraints=%s tested=%s\n' "$pyproject_hash" "$setup_hash" "$constraints_hash" "$TESTED_DEPS"
+  printf 'pyproject=%s setup=%s constraints=%s tested=%s web=%s ocr=%s\n' "$pyproject_hash" "$setup_hash" "$constraints_hash" "$TESTED_DEPS" "$WEB" "$OCR"
 }
 
 setup_complete() {
@@ -105,9 +100,6 @@ setup_complete() {
 }
 
 if setup_complete; then
-  if [[ "$WEB" -eq 1 ]]; then
-    "$VENV_PY" -m pip install -e "$ROOT[web]"
-  fi
   log "Linux setup already complete — skipping (use --force to redo)"
   exit 0
 fi
@@ -134,27 +126,33 @@ if [[ "$FORCE" -eq 1 ]] || [[ ! -x "$VENV_PY" ]]; then
   python3 -m venv "$ROOT/.venv"
 fi
 
-log "Installing Python packages into .venv (EasyOCR/torch can take several minutes)…"
+log "Installing Python packages into .venv…"
 # shellcheck disable=SC1091
 source "$ROOT/.venv/bin/activate"
 python -m pip install --upgrade pip setuptools wheel
-if [[ "$WEB" -eq 1 ]]; then
-  python -m pip install -e "$ROOT[web]"
+EXTRAS=()
+[[ "$WEB" -eq 1 ]] && EXTRAS+=(web)
+[[ "$OCR" -eq 1 ]] && EXTRAS+=(ocr)
+INSTALL_TARGET="$ROOT"
+if [[ "${#EXTRAS[@]}" -gt 0 ]]; then
+  INSTALL_TARGET="$ROOT[$(IFS=,; echo "${EXTRAS[*]}")]"
 fi
 if [[ "$TESTED_DEPS" -eq 1 ]]; then
   python -c 'import sys; assert sys.version_info[:2] == (3, 14), "--tested-deps requires Python 3.14; omit this option for other versions"'
-  python -m pip install -c "$ROOT/constraints/linux-py314.txt" -e "$ROOT"
+  python -m pip install -c "$ROOT/constraints/linux-py314.txt" -e "$INSTALL_TARGET"
 else
-  python -m pip install -e "$ROOT"
+  python -m pip install -e "$INSTALL_TARGET"
 fi
 
 # Warm EasyOCR model download so first bot run is not stuck downloading quietly.
+if [[ "$OCR" -eq 1 ]]; then
 log "Preloading EasyOCR English model (first time can take 1–3 minutes)…"
-python - <<'PY' || warn "EasyOCR preload failed — bot can still run; capacity OCR may download later"
+python - <<'PY' || warn "EasyOCR preload failed — using Tesseract; rerun setup --ocr --force to retry"
 import easyocr
 easyocr.Reader(["en"], gpu=False, verbose=False)
 print("EasyOCR model ready")
 PY
+fi
 
 # --- Game data + icons ---
 log "Syncing unit housing data…"

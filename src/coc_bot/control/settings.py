@@ -2,7 +2,7 @@
 from dataclasses import asdict
 import hashlib
 import math
-from coc_bot.config import load_config, user_settings_path
+from coc_bot.config import user_settings_path
 from coc_bot.control.settings_fields import (
     SETTINGS, current_setting_values, save_settings_from_gui, parse_int_pair,
     is_raw_timing_field,

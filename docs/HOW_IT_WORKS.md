@@ -201,15 +201,15 @@ spending targets. See [upgrades](UPGRADES.md).
 
 ## Scheduling and persisted state
 
-`runtime/tracker.py` tracks active session time and farm intervals, including
-separate plus/minus variance. Stop freezes scheduling; resume accounts for paused
-time. An already-started break retains its real-time end. Break handling closes
+`runtime/tracker.py` tracks active session time and the session-limit variance.
+Stop pauses the active-session clock. An already-started break retains its real-time end. Break handling closes
 Clash, waits, relaunches, and reopens verified chat.
 
-A fought or entered-skipped automatic match advances its interval to avoid tight
-retry loops. Failures before entering a battle use the configured retry cooldown.
-Recovery persists completed attack identity to prevent a crash rolling a second
-interval. Invalid runtime JSON can be preserved/recovered to defaults; that does
+A completed attack records its actual completion time and durable attack identity.
+Automatic farming uses verified storage demand; old farm clocks do not reschedule
+attacks or change their historical timestamps. Failed attempts use the configured
+retry cooldown. Recovery records each attack identity once. Invalid runtime JSON
+is logged and recovered to defaults; that does
 not mean uncertain attack or spending journals may be silently discarded.
 
 `runtime/game_state.py` logs allowed/unexpected high-level transitions. It is a

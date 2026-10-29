@@ -11,15 +11,18 @@ from coc_bot.upgrades.vision import Candidate
 
 
 class VisitTests(unittest.TestCase):
-    def test_orphaned_builder_payment_blocks_handoff_and_never_repeats_spending(self):
+    def test_orphaned_builder_payment_uses_safe_deferral_without_repeating_spending(self):
         from coc_bot.accounts.store import write
         from coc_bot.builder_base.runner import pending
         write(self.config.data_dir/'builder_base/upgrades.json',{'pending':{'kind':'construction'}})
         self.assertTrue(pending(self.config))
         self.runner.reader.home=MagicMock(return_value=True)
+        self.runner.pause_upgrades=MagicMock(return_value={'status':'deferred'})
         with patch('coc_bot.builder_base.progression.BuilderProgressionRunner') as recovery:
             recovery.return_value.state.return_value={'pending':{'kind':'construction'}}
-            with self.assertRaisesRegex(ValueError,'receipt verification'):self.runner.run()
+            recovery.return_value.run.return_value={'status':'needs_review','message':'Unreadable receipt'}
+            self.assertEqual(self.runner.run(),{'status':'deferred'})
+            self.runner.pause_upgrades.assert_called_once_with({'status':'needs_review','message':'Unreadable receipt'})
             recovery.return_value.run.assert_called_once_with('buildings',execute=False)
         self.runner.enter.assert_not_called();self.runner.attack.assert_not_called();self.runner.finish.assert_not_called()
 
@@ -100,7 +103,7 @@ class VisitTests(unittest.TestCase):
 
     def test_pending_visit_recovers_before_new_work(self):
         self.runner.record = {'phase': 'collecting_resources'}
-        self.runner.recover = MagicMock()
+        self.runner.recover = MagicMock(return_value=None)
         self.assertEqual(self.runner.run(), {'status': 'recovered'})
         self.runner.recover.assert_called_once()
         self.runner.enter.assert_not_called()

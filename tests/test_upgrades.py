@@ -369,6 +369,8 @@ class UpgradeSchedulingTests(unittest.TestCase):
         bot=object.__new__(DonationBot)
         bot.config=SimpleNamespace(dry_run=False,upgrade_buildings_enabled=False,
                                    upgrade_research_enabled=True,upgrade_interval_seconds=900)
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        bot.config.data_dir=Path(temp.name)
         bot._state='scan_chat'
         bot._stop_requested=False
         bot._next_upgrade_check=0

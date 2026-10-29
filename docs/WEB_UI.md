@@ -32,7 +32,7 @@ with `config/` and writable `data/`; it does not create a complete profile for y
 
 For ordinary source runs, open Waydroid and Clash manually as the desktop session
 owner. In **Settings → Advanced**, set the ADB address and save, then run
-**Diagnostics → Check device**. CasaOS instead uses its managed runtime and host
+**Tools → Device → Check device**. CasaOS instead uses its managed runtime and host
 helper; its default dashboard port is **8767**. See [CasaOS](CASAOS_PACKAGE.md).
 
 ## Open from another device
@@ -75,18 +75,24 @@ need a different permitted network path. No external STUN/TURN service is config
 
 ## Pages and ownership
 
-- **Dashboard:** Start/Stop, Farm now, practice mode, Live view, timers, and activity.
+- **Overview:** Start/Stop, Farm now, practice mode, resource readings, the break
+  countdown, and one activity feed. Live view is available from every page.
+- **Accounts:** saved villages, roles, verified clan groups, and automatic visits.
 - **Attacks:** Automatic attack, opponent preparation, army review, map editing,
   saved routines, supervised execution, and camera restoration.
-- **Settings:** common/advanced controls, choices, timing presets, raw developer
-  values, themes, upgrades, and collection limits.
-- **Setup:** direct part selection or Calibrate missing/all. Follow instructions,
+- **Settings:** category navigation, search across visible settings, and help
+  beside each field. Advanced controls and raw developer values retain their
+  existing switches. Changing categories preserves unsaved edits.
+- **Setup:** direct part selection, Set up missing, or Recalibrate all. Follow instructions,
   capture, click/draw on the image, and save. Grid parts include row/column counts.
-- **Library:** calibration backups, safety restores, named profiles, ZIP sharing,
-  rename/delete, and a paged screenshot gallery/status.
-- **Diagnostics:** device/screen checks, navigation tests, current screenshot,
-  screenshot-based manual viewer, upgrades, activity/report downloads, and
-  explicit close-game/Waydroid actions.
+- **Library:** Calibrations and Screenshots tabs. Backups, safety restores,
+  named profiles, ZIP sharing, and rename/delete remain available.
+- **Tools:** Upgrades, Device, Donations, Attacks, and System categories. Existing
+  checks, navigation tests, screenshots, reports, and explicit close-game actions
+  use the same backend operations.
+
+The navigation collapses to icons at smaller widths. Existing theme choices
+still apply to all pages; no fonts or icon services need an internet connection.
 
 One device operation owns Android at a time. Calibration writes, tools, normal
 operation, standalone attacks, and manual input cannot compete. Other browser
@@ -108,12 +114,14 @@ without starting. **Save & restart** while running validates the draft, waits fo
 the current action to finish, and restarts with the same practice/run options.
 **Stop** cancels the pending save/restart. Release manual control and finish
 standalone tools before saving. A stale revision from another browser requires
-Reload; edits made while applying remain unsaved drafts.
+reloading the draft; edits made while applying remain unsaved drafts.
 
-Stopped farm and session-limit countdowns freeze and resume without consuming the
-paused duration. An already-started break expires by real time. Farm interval and
-session-limit variance are separate settings. Farm now is an explicit request,
-not a change to the saved schedule or selected attack method.
+Farming follows verified resource levels, rather than an interval countdown.
+Configure its start/target percentages under Settings → Attacks. The Overview
+shows the last observed balances and capacities; hover Resources for its read
+time. The session-limit countdown freezes while stopped; an already-started
+break expires by real time. Farm now remains an explicit attack request using
+the selected attack method.
 
 ## Calibration and backups
 
@@ -146,12 +154,12 @@ downloads a portable ZIP; **Import calibration** creates a stored backup and
 **Restore** applies it, with a safety snapshot first. **Save profile** names an
 interface calibration snapshot. These are not full-profile/game backups: settings,
 planner artwork/routines, and Android account data need separate protection.
-Use **Diagnostics → Check calibration** to inspect required fields/bounds; also
+Use **Tools → Device → Check calibration** to inspect required fields/bounds; also
 visually verify the actual game layout.
 
 ## Upgrades and game updates
 
-**Diagnostics → Building upgrades / Army research → Check upgrades** reads
+**Tools → Upgrades → Building upgrades / Army research → Check upgrades** reads
 Suggested entries without spending. **Start recommended upgrade** is separate
 and requires fresh checks. Automatic categories are disabled by default; enable
 in Settings only after reviewing reserves and exclusions. See [upgrades](UPGRADES.md).
@@ -162,7 +170,7 @@ manual input before using it. It is an APK update, not a calibration repair. See
 
 ## Prepare screens from the browser
 
-**Diagnostics → Open game** is the slower screenshot viewer, capped at one frame
+**Tools → Device → Open game** is the slower screenshot viewer, capped at one frame
 per second. Stop fully first. Click to tap, drag to swipe, and use explicit Android
 Back/Home buttons. Close it before capturing calibration. It is distinct from video.
 
@@ -171,7 +179,7 @@ it after executing input returns. Automation does not resume automatically.
 
 ## Experimental live video
 
-**Dashboard → Live view** streams the existing Android display using scrcpy and
+**Overview → Live view** streams the existing Android display using scrcpy and
 WebRTC. Viewing can coexist with automation. Stop fully, then choose **Take control**
 for taps/swipes and Android Back/Home. Releasing control, closing the view,
 disconnecting, or Stop cancels manual control and queued gestures; it never
@@ -199,7 +207,7 @@ this is not a guarantee across Android encoders, firewalls, or browser versions.
 
 ## First-launch testing and updates
 
-Enable Dev options and Save, then **Diagnostics → Simulate first launch**. This
+Enable Dev options and Save, then **Tools → System → Simulate first launch**. This
 opens Setup in a disposable profile without calibration/settings/runtime history.
 Entering from the normal interface resets that test profile. **Exit first-launch
 test** returns to normal. Temporary data is removed on clean shutdown. Both

@@ -8,7 +8,7 @@ import uuid
 
 import cv2
 
-from coc_bot.attack.army import ArmyCard, UnitCatalog, read_army, agree_cards, correct_cards, check_stop
+from coc_bot.attack.army import ArmyCard, read_army, agree_cards, correct_cards, check_stop
 from coc_bot.attack.mapping import observe_boundary, draw_observation
 from coc_bot.vision.battle_menu import army_confirmation_button, battlefield_ready
 

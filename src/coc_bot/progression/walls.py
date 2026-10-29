@@ -4,7 +4,6 @@ import time
 from coc_bot.upgrades.vision import crop, text, compact, resource_amount, currency, Candidate
 from coc_bot.upgrades.runner import write_json
 from coc_bot.progression.reader import selected_title, balance_amount
-from coc_bot.vision.battle_menu import _white_label
 
 
 def wall_panel(frame, stop=None):

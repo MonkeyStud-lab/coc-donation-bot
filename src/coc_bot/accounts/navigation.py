@@ -8,6 +8,9 @@ from pathlib import Path
 import re
 import time
 import tempfile
+import hashlib
+from collections import OrderedDict
+from loguru import logger
 import cv2
 import numpy as np
 from coc_bot.accounts.store import tag
@@ -183,7 +186,7 @@ def profile_uncovered(frame):
     return True
 
 
-def picker_rows(frame, stop=None):
+def picker_rows(frame, stop=None, *, include_game_name=True):
     """Return visible Supercell ID names only; never parse login/email fields."""
     if not find(frame, 'switch_heading', (.71, .30, 1, .48)):
         raise ValueError('Saved-account chooser is not visible')
@@ -202,7 +205,7 @@ def picker_rows(frame, stop=None):
         if 'town hall' not in detail.lower():
             continue
         name = text(canvas[top+17:top+46, 1445:1745], stop=stop).strip()
-        game_name = text(canvas[top+45:top+68, 1480:1770], stop=stop).strip()
+        game_name = text(canvas[top+45:top+68, 1480:1770], stop=stop).strip() if include_game_name else ''
         if name and len(name) <= 60:
             hall = re.fullmatch(r'town hall\s*:\s*(\d{1,2})', detail.strip(), re.IGNORECASE)
             result.append({'name': name, 'game_name': game_name,
@@ -217,6 +220,10 @@ class AccountNavigator:
         self.capture = session.capture
         # Practice mode still navigates; only donation/deployment inputs are dry-run.
         self.input = getattr(session, 'nav_input', None) or session.input
+        self._picker_cache=OrderedDict()
+        self._chooser_observation=None
+        self._names_only=False
+        self.metrics={'captures':0,'chooser_reads':0,'chooser_cache_hits':0}
 
     def check(self):
         if self.stop():
@@ -225,17 +232,19 @@ class AccountNavigator:
     def frame(self):
         self.check()
         frame = self.capture.screenshot()
+        if 'metrics' in self.__dict__:self.metrics['captures']+=1
         self.check()
         return frame
 
     def tap(self, point):
         self.check()
+        self._chooser_observation=None
         self.input.tap(*point, jitter=0)
         if interrupted_sleep(.5, self.stop):
             self.check()
 
-    def button(self, name, bounds=(0, 0, 1, 1)):
-        point = find(self.frame(), name, bounds)
+    def button(self, name, bounds=(0, 0, 1, 1), *, frame=None):
+        point = find(self.frame() if frame is None else frame, name, bounds)
         if not point:
             raise ValueError('Account controls changed or are covered; open your home village and retry')
         self.tap(point)
@@ -285,7 +294,7 @@ class AccountNavigator:
             self.button('switch_close', (.94, 0, 1, .12))
             frame = self.frame()
         if find(frame, 'my_profile', (.1, .02, .24, .13)) and find(frame, 'menu_close', (.84, .02, .91, .14)):
-            return
+            return frame
         # A rejected army read can leave My Army open. Close only its exact
         # heading and visible X, independent of uncertain troop/capacity reads.
         from coc_bot.progression.preparation import army_editor_close_button
@@ -315,10 +324,11 @@ class AccountNavigator:
         frame = self.frame()
         if not find(frame, 'my_profile', (.1, .02, .24, .13)) or not find(frame, 'menu_close', (.84, .02, .91, .14)):
             raise ValueError('Could not open the account menu')
+        return frame
 
     def identity(self):
-        self.menu()
-        self.button('my_profile', (.1, .02, .24, .13))
+        frame=self.menu()
+        self.button('my_profile', (.1, .02, .24, .13),frame=frame)
         frame = self.frame()
         first = read_tag(frame, (315/1853, 309/1048, 650/1853, 345/1048), self.stop)
         if not first:
@@ -377,20 +387,24 @@ class AccountNavigator:
         return {'tag': first, 'name': settings_name or name.strip()}
 
     def chooser(self):
+        self._chooser_observation=None
         frame = self.frame()
         if not find(frame, 'switch_heading', (.71,.30,1,.48)):
-            self.menu()
-            self.button('settings_tab', (.45, .02, .85, .13))
+            menu=self.menu()
+            self.button('settings_tab', (.45, .02, .85, .13),frame=menu)
             self.button('id_switch', (.62, .13, .70, .25))
+            frame=None
         previous = None
         for _ in range(8):
-            frame = self.frame()
+            if frame is None:frame=self.frame()
             if find(frame, 'switch_heading', (.71, .30, 1, .48)):
-                names = [r['name'] for r in picker_rows(frame,self.stop)]
-                if names and names == previous:
+                rows=self._read_cards(frame)
+                if rows and previous is not None and self._same_cards(previous,rows):
+                    self._chooser_observation=(frame,rows)
                     return frame
-                previous = names
+                previous = rows
             interrupted_sleep(.5, self.stop)
+            frame=None
         raise ValueError('Saved-account chooser did not open')
 
     def learn(self):
@@ -413,13 +427,16 @@ class AccountNavigator:
         return identity
 
     def switch(self, account):
-        rows = self.saved_cards()
-        matches = [r for r in rows if self.card_key(r) == self.card_key({'name':account.get('selector','')})]
-        if len(matches) != 1:
-            raise ValueError('Saved account card is not uniquely visible. Choose it in Live view, return home and release control, then retry in Accounts.')
-        # Discovery points expire as soon as the chooser scrolls. Locate the
-        # unique card again on two fresh frames before tapping it.
-        self.tap(self.card_point(matches[0]))
+        started=time.monotonic()
+        # Registration still inventories all IDs. Routine switching only needs
+        # a stable visible candidate; its independently read player tag remains
+        # mandatory after loading, regardless of the chooser's displayed name.
+        self._names_only=True
+        try:card=self.target_card({'name':account.get('selector','')})
+        finally:self._names_only=False
+        selected=time.monotonic()
+        logger.info('Account switch timing: chooser selection {:.2f}s',selected-started)
+        self.tap(card['point'])
         # A village can be under attack when its saved account is opened.
         # Allow that defense to finish and the independently recognized summary
         # to close; do not mistake a one-minute load deadline for failed login.
@@ -435,11 +452,15 @@ class AccountNavigator:
             home = home_build_control_visible(frame) and self.session.navigator.classifier._open_chat_icon_visible(frame)
             menu = find(frame,'my_profile',(.1,.02,.24,.13)) and not find(frame,'switch_heading',(.71,.30,1,.48))
             if home or menu:
+                loaded=time.monotonic()
+                logger.info('Account switch timing: account loading {:.2f}s',loaded-selected)
                 identity = self.identity()
                 if identity['tag'] != account['tag']:
                     raise ValueError('A different account loaded; automation remains paused')
                 self.button('menu_close', (.84, .02, .91, .14))
-                return identity|{'hall':matches[0].get('hall')}
+                logger.info('Account switch timing: identity verification {:.2f}s; total {:.2f}s; {}',
+                            time.monotonic()-loaded,time.monotonic()-started,getattr(self,'metrics',{}))
+                return identity|{'hall':card.get('hall')}
             interrupted_sleep(1, self.stop)
         raise ValueError('Account did not finish loading. Return to its home village in Live view, release control, then retry in Accounts.')
 
@@ -450,17 +471,68 @@ class AccountNavigator:
         # identity, which is proved from the reloaded village's player tag.
         return ''.join(c for c in row['name'].casefold() if not c.isspace())
 
+    def _read_cards(self,frame):
+        """Reuse OCR for identical chooser pixels, never for player-tag proof.
+
+        Fresh screenshots still establish visibility and scroll stability. This
+        cache is local to one navigator and cannot authorize a post-input tap.
+        """
+        self.check()
+        if not find(frame,'switch_heading',(.71,.30,1,.48)):
+            raise ValueError('Saved-account chooser is not visible')
+        cache=self.__dict__.setdefault('_picker_cache',OrderedDict())
+        summary=self.__dict__.get('_names_only',False)
+        canvas=cv2.resize(frame,(1853,1048))
+        key=(frame.shape,summary,hashlib.sha256(canvas[490:1040,1340:1833].tobytes()).digest())
+        if key in cache:
+            cache.move_to_end(key)
+            if 'metrics' in self.__dict__:self.metrics['chooser_cache_hits']+=1
+            return [dict(row) for row in cache[key]]
+        rows=picker_rows(frame,self.stop,include_game_name=not summary)
+        self.check()
+        if 'metrics' in self.__dict__:self.metrics['chooser_reads']+=1
+        cache[key]=[dict(row) for row in rows]
+        while len(cache)>24:cache.popitem(last=False)
+        return rows
+
+    @classmethod
+    def _same_cards(cls,first,second):
+        return ([cls.card_key(r) for r in first]==[cls.card_key(r) for r in second]
+                and all(abs(a['point'][0]-b['point'][0])<=4 and abs(a['point'][1]-b['point'][1])<=4
+                        and a.get('hall')==b.get('hall') for a,b in zip(first,second)))
+
+    def target_card(self,wanted):
+        """Use one stable viewport when possible; reacquire after any scrolling."""
+        if not wanted.get('name','').strip():raise ValueError('Saved account selector is empty')
+        self.chooser()
+        observation=self.__dict__.get('_chooser_observation')
+        frame,rows=observation if observation is not None else self.stable_cards()
+        matches=[r for r in rows if self.card_key(r)==self.card_key(wanted)]
+        if len(matches)>1:raise ValueError('Saved account cards have duplicate names; no account was selected')
+        if matches:return matches[0]
+        self.chooser_top()
+        previous=None
+        for _ in range(16):
+            _,rows=self.stable_cards()
+            matches=[r for r in rows if self.card_key(r)==self.card_key(wanted)]
+            if len(matches)>1:raise ValueError('Saved account cards have duplicate names; no account was selected')
+            if matches:return matches[0]
+            keys=[self.card_key(r) for r in rows]
+            if keys==previous:break
+            previous=keys;self.scroll_cards()
+        raise ValueError('Saved account moved or disappeared; no account was selected')
+
     def stable_cards(self):
         frame = self.frame()
-        first = picker_rows(frame, self.stop)
-        second = picker_rows(self.frame(), self.stop)
-        if not first or [self.card_key(r) for r in first] != [self.card_key(r) for r in second]:
+        first = self._read_cards(frame)
+        fresh=self.frame()
+        second = self._read_cards(fresh)
+        if not first or frame.shape!=fresh.shape or not self._same_cards(first,second):
             raise ValueError('Saved-account cards have not settled; no account was selected')
-        if any(abs(a['point'][1]-b['point'][1])>4 for a,b in zip(first,second)):
-            raise ValueError('Saved-account list is moving; no account was selected')
-        return frame, second
+        return fresh, second
 
     def scroll_cards(self, *, top=False):
+        self._chooser_observation=None
         frame = self.frame()
         if not find(frame, 'switch_heading', (.71,.30,1,.48)):
             raise ValueError('Saved-account chooser closed; no scrolling input sent')
@@ -524,6 +596,18 @@ def verify_session(session, stop=lambda: False):
         if (session.config.data_dir/'accounts/registry.json').exists():
             raise ValueError('Managed accounts must be started from the web app')
         return
+    from coc_bot.accounts.handoff import VerifiedHandoff
+    proof=session.__dict__.pop('_verified_handoff',None)
+    if isinstance(proof,VerifiedHandoff) and proof.consume(session.config):
+        if stop():raise ValueError('Account operation stopped before handoff confirmation')
+        frame=session.capture.screenshot()
+        if stop():raise ValueError('Account operation stopped during handoff confirmation')
+        from coc_bot.vision.battle_menu import home_build_control_visible
+        if ((home_build_control_visible(frame) and session.navigator.classifier._open_chat_icon_visible(frame))
+            or session.navigator.classifier._clan_chat_anchor_visible(frame)):
+            logger.info('Account handoff: reusing fresh same-lease identity proof after a current village check')
+            return
+        logger.info('Account handoff screen changed; repeating full identity verification')
     nav = AccountNavigator(session, stop)
     if nav.identity()['tag'] != expected:
         raise ValueError('Loaded account differs from the selected profile. Open Accounts to finish adding or confirm the loaded account.')

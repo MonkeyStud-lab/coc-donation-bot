@@ -27,6 +27,16 @@ class FakeBot:
 
 
 class ControllerTests(unittest.TestCase):
+    def test_worker_failure_is_logged_without_requiring_status_polling(self):
+        def fail(options):raise ValueError('verification test failure')
+        controller=self.make_controller(fail)
+        with patch('loguru.logger.opt') as log:
+            self.assertTrue(controller.start());self.assertTrue(controller.wait(3))
+        log.assert_called_once_with(exception=True)
+        self.assertEqual(log.return_value.error.call_args.args[0],'Controller worker failed: {}')
+        self.assertEqual(controller.snapshot().state,RunState.FAILED)
+        self.assertEqual(controller.snapshot().error,'verification test failure')
+
     def make_controller(self, factory):
         controller = BotController(factory)
         self.addCleanup(controller.wait, 3)

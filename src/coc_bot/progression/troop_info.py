@@ -5,7 +5,6 @@ import os
 import re
 from pathlib import Path
 import cv2
-import numpy as np
 from coc_bot.attack.army import ArmyCard
 from coc_bot.progression.army import HOUSING
 from coc_bot.upgrades.runner import write_json

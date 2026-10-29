@@ -13,7 +13,7 @@ from coc_bot.attack.camera import compare_camera,compare_zoom,compare_home_zoom
 from coc_bot.attack.executor import VerifiedExecutor
 from coc_bot.attack.survey import survey
 from coc_bot.control.attack_planner import load_template, learned_catalog
-from coc_bot.vision.screens import BotMode, ScreenType
+from coc_bot.vision.screens import BotMode
 from coc_bot.runtime.game_state import GameState
 
 

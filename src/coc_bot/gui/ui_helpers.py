@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -126,18 +126,6 @@ def save_gui_window_state(path: Path, state: GuiWindowState) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = asdict(state)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-
-
-def load_window_geometry(path: Path) -> str | None:
-    """Load saved window geometry from JSON, or ``None`` on any error."""
-    return load_gui_window_state(path).geometry
-
-
-def save_window_geometry(path: Path, geometry: str) -> None:
-    """Persist window geometry, preserving other GUI window state fields."""
-    state = load_gui_window_state(path)
-    state.geometry = geometry
-    save_gui_window_state(path, state)
 
 
 def adb_status_label(ok: bool | None) -> tuple[str, ColorRole]:

@@ -10,7 +10,6 @@ from coc_bot.upgrades.vision import crop,compact,text,currency,resource_amount
 from coc_bot.progression.reader import balance_amount
 from coc_bot.progression.space import home_gems,home_builder_visible,ORDINARY,removal_digit_variants
 from coc_bot.vision.battle_menu import home_build_control_visible
-from coc_bot.attack.camera import compare_camera
 from coc_bot.stop import interrupted_sleep
 
 

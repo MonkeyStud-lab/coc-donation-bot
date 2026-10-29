@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {AttackObservation} from './AttackObservation';
 import {mapTransform,inverse,transform} from './attackGeometry';
+import {Icon} from './ui';
 
 type Point={x:number;y:number};
 type Step={action:string;unit_id:string;quantity:number;points:Point[];seconds:number};
@@ -56,17 +57,16 @@ export function AttackPlanner({api,base,result,locked,stop,operation}:{api:(p:st
     setReport(updated);setDirty(false);if(routine)setSaved(true);setMessage(routine?'Routine saved.':'Preview validated. Ready for a supervised attack.');
   }
   return <>
-    <div className="toolbar">
-      <button disabled={disabled} onClick={()=>action(()=>api('attack-planner/automatic','POST'))}>Automatic attack</button>
+    <section className="attack-launch panel"><span className="tool-icon"><Icon name="swords" size={25}/></span><div><strong>Automatic farming</strong><span className="badge">{saved?'Custom routine saved':'No saved routine needed'}</span></div>
+      <button className="primary" disabled={disabled} onClick={()=>action(()=>api('attack-planner/automatic','POST'))}><Icon name="play" size={17}/>Attack now</button>
+      <button className="danger" disabled={!locked} onClick={stop}><Icon name="stop" size={16}/>Stop</button></section>
+    <details className="attack-advanced" open={!!report}><summary>Custom attack</summary><div className="toolbar">
       <button disabled={disabled} onClick={()=>action(()=>api('diagnostics/prepare_attack','POST'))}>Prepare opponent</button>
       <button disabled={disabled} onClick={()=>action(()=>api('diagnostics/survey_attack','POST'))}>Map current opponent</button>
       <button disabled={disabled} onClick={()=>action(()=>api('diagnostics/restore_attack_camera','POST'))}>Restore camera</button>
-      <button className="danger" onClick={stop}>Stop</button>
-      <span>{saved?'Routine saved':'No saved routine'}</span>
-    </div>
+    </div></details>
     {result?.automatic_attack&&<p role="status">{result.message}</p>}
-    {operation==='automatic_attack'&&locked&&<p role="status">Automatic attack running. Follow progress in Dashboard activity.</p>}
-    {!report&&<p>Automatic attack uses this account’s farming army. Village progression prepares troops from verified unlocks. For custom steps, choose Prepare opponent.</p>}
+    {operation==='automatic_attack'&&locked&&<p role="status">Automatic attack running. Follow progress in Overview activity.</p>}
     {report&&<>
       <details open={!report.plan}><summary>Review army · {report.cards.filter((c:any)=>c.confirmed).length}/{report.cards.length} checked</summary>
         <AttackObservation report={report} base={base} save={async(id,revision,corrections)=>{const updated=await api('attack-observations/'+id,'PATCH',{revision,corrections});setReport(updated);setDirty(true);return updated;}}/>

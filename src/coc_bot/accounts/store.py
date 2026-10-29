@@ -198,6 +198,9 @@ class AccountStore:
             destination = self.profile(account)
             if not first:
                 destination.mkdir(parents=True, exist_ok=False)
+                # A fresh, uncalibrated installation may have none of the
+                # optional data folders copied below. Settings still need one.
+                (destination/'data').mkdir()
                 shutil.copytree(self.root/'config', destination/'config')
                 for name in ('calibrated.yaml', 'templates', 'icons', 'game', 'live'):
                     source = self.root/'data'/name

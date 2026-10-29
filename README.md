@@ -183,7 +183,7 @@ the documented installation route; a published registry release is not assumed.
    installations, run `waydroid status` to find its IP address. In
    **Settings → Advanced**, set **ADB device** to that address followed by
    `:5555`, then save. CasaOS manages its device address during startup.
-2. **Check the connection.** Use **Diagnostics → Check device**. For a manual
+2. **Check the connection.** Use **Tools → Device → Check device**. For a manual
    installation, these Terminal commands also help:
 
    ```bash
@@ -193,7 +193,7 @@ the documented installation route; a published registry release is not assumed.
 
    Replace `ANDROID_IP`. A working connection appears with the word `device`.
 3. **Calibrate the interface.** Stop automation and release manual control.
-   Choose **Setup → Calibrate missing**. Each part tells you which game screen
+   Choose **Setup → Set up missing**. Each part tells you which game screen
    to open. Capture it, click the requested button or draw its screen area, and
    save. Select a single part directly when needed; Skip/Cancel preserves its
    existing calibration. No separate image editor is needed.
@@ -214,26 +214,26 @@ recalibrate changed parts.
 
 ## Everyday controls
 
-- **Dashboard:** Start, Stop, Farm now, practice mode, Live view, countdowns, and
-  one activity log.
+- **Overview:** Start, Stop, Farm now, practice mode, resource readings, a break
+  countdown, and one activity log. Live view is available on every page.
 - **Accounts:** save the current village, add another Supercell ID, switch saved
   accounts, and choose each account's roles. See [Accounts](docs/ACCOUNTS.md).
 - **Attacks:** run an automatic attack or prepare, review, and edit a custom
   map-based routine.
-- **Settings:** donations, attack method/schedule, breaks, upgrades, themes,
-  timing presets, and collection limits. Advanced reveals less common options;
-  Dev options exposes raw timing values.
+- **Settings:** categorized donations, resource refill targets, breaks, upgrades,
+  themes, timing presets, and collection limits. Field help opens on demand;
+  Advanced and Dev options retain their existing controls.
 - **Setup:** guided calibration or direct access to one calibration part.
   Advanced reveals older-UI and fallback controls. The programmed deploy
   sequence is shown normally only for the sequence attack method.
-- **Library:** calibration backups/profiles, ZIP import/export, rename/delete,
-  and the screenshot collection gallery.
-- **Diagnostics:** device/screen checks, current screenshot, navigation tests,
+- **Library:** separate Calibrations and Screenshots tabs, with backups/profiles,
+  ZIP import/export, rename/delete, and the screenshot collection gallery.
+- **Tools:** device/screen checks, current screenshot, navigation tests,
   upgrade previews, reports, and game/session controls.
 
 **Stop** interrupts normal operation, standalone attacks, and tools. It leaves
 Clash open and does not finish a battle for you. **Close Waydroid and Clash** is
-a separate Diagnostics action. Closing a browser tab leaves automation running.
+a separate Tools action. Closing a browser tab leaves automation running.
 
 Settings remain editable while the bot runs. **Save & restart** validates changes,
 waits for the current donation/attack to finish, then restarts with the new settings.
@@ -251,14 +251,14 @@ the offline preview below for tests without a game connection.
 
 ### Live view
 
-Dashboard's **Live view** uses WebRTC video rather than screenshot polling.
+Overview's **Live view** uses WebRTC video rather than screenshot polling.
 Watch during automation; to tap or swipe, stop the bot and choose **Take control**.
 Release control before starting the bot, calibrating, or running another tool.
 Releasing control does not restart automation.
 
 Only one live stream/manual controller is supported at a time. Video requires
 a working Android encoder and a permitted local WebRTC connection.
-**Diagnostics → Current screenshot** or **Open game** provides a screenshot-based
+**Tools → Device → Current screenshot** or **Open game** provides a screenshot-based
 alternative. See [Live view setup](docs/WEB_UI.md#experimental-live-video).
 
 ## Attacks
@@ -331,7 +331,7 @@ editing are not fully validated. See [Home Village progression](docs/HOME_PROGRE
 before enabling it on an account.
 
 Building/research/pet automation is **off by default**. First stop the bot and use
-**Diagnostics → Building upgrades / Army research / Pet upgrades → Check upgrades**. This reads
+**Tools → Upgrades → Building upgrades / Army research / Pet upgrades → Check upgrades**. This reads
 eligible entries without spending. **Start recommended upgrade** is a separate
 action with confirmation and fresh checks.
 
@@ -437,7 +437,7 @@ the app does not update the separately installed host helper. See the
 
 After an initially trusted installation, CasaOS checks for newer Clash APKs when
 its managed runtime starts. You can also stop the bot and choose
-**Diagnostics → Update Clash**. The updater uses a third-party APK source and
+**Tools → System → Update Clash**. The updater uses a third-party APK source and
 checks the package, newer version, and signing certificate before installing.
 It does not uninstall Clash or clear account data. Initial installation still
 requires your trusted APK archive; import remains the fallback.
@@ -467,7 +467,7 @@ and [UI compatibility](docs/UI_COMPATIBILITY.md).
   screenshot helps distinguish a video problem from a stopped game.
 - **Settings do not apply:** click Save or Save & restart. Resolve conflicts by
   reloading before editing again, and release manual control before saving.
-- **Reporting a problem:** export activity and download the Diagnostics report.
+- **Reporting a problem:** export activity and download the Tools report.
   Include the visible screen, intended action, and actual result. Remove private
   account/chat details before sharing screenshots or logs.
 
@@ -488,7 +488,13 @@ corepack pnpm run build
 cd ..
 ```
 
-Commit rebuilt assets with the frontend change. For offline Python checks:
+Commit rebuilt assets with the frontend change.
+
+The default install uses Tesseract/OpenCV without EasyOCR/Torch. Enhanced capacity
+OCR is optional; `bash scripts/setup_linux.sh --web --ocr` installs and preloads
+it. See [Contributing](docs/CONTRIBUTING.md) for the optional CasaOS image build.
+
+For offline Python checks:
 
 ```bash
 source .venv/bin/activate

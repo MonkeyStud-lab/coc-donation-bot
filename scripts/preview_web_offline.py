@@ -10,7 +10,7 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 import uvicorn
-from coc_bot.config import project_root
+from coc_bot.config import project_root,load_config
 from coc_bot.control.lifecycle import BotController
 from coc_bot.control.service import ControlService
 from coc_bot.web.server import create_app
@@ -19,9 +19,8 @@ from coc_bot.web.server import create_app
 class FakeBot:
     def __init__(self, options):
         self.cancel = threading.Event()
-        self.config = SimpleNamespace(farm_enabled=True)
-        self.tracker = SimpleNamespace(seconds_since_last_farm=lambda: 20,
-            effective_farm_interval_seconds=lambda: 7200, peek_remaining_seconds=lambda: 14400)
+        self.config = load_config()
+        self.tracker = SimpleNamespace(peek_remaining_seconds=lambda:14400)
     def run(self):
         self.cancel.wait()
     def request_stop(self):
@@ -61,7 +60,8 @@ def main():
                 capture=SimpleNamespace(screenshot=lambda: frame.copy()),
                 prepare_farm_program_deploy=lambda: {"frame": frame.copy()})
         with patch.dict(os.environ, {"COC_BOT_HOME": str(root),
-                                    "COC_BOT_CONFIG": str(root / "data/calibrated.yaml")}):
+                                    "COC_BOT_CONFIG": str(root / "data/calibrated.yaml"),
+                                    'COC_HOST_SOCKET':'','ADB_DEVICE':'offline-browser-qa'}):
             service = ControlService(BotController(FakeBot), session_factory=session)
             from coc_bot.adb.client import AdbClient
             with patch.object(AdbClient, "run", side_effect=AssertionError("Live ADB forbidden")):

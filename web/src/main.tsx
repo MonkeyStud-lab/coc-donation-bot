@@ -2,13 +2,15 @@ import React, {useEffect, useRef, useState} from 'react';
 import {AttackObservation} from './AttackObservation';
 import {AttackPlanner} from './AttackPlanner';
 import {Accounts} from './Accounts';
+import {SettingsPanel} from './SettingsPanel';
+import {EmptyState,Icon,pageIcons,pageLabels,ResourceLevels,ResourceStatus} from './ui';
 import {createRoot} from 'react-dom/client';
 import './style.css';
 
 type Status = {active:boolean; state:string; operation:string|null; activity:string|null; result:any; error:string|null;
   account?:{id:string;nickname:string;tag:string};account_pending?:boolean;
   timers:{farm_seconds:number|null;break_seconds:number|null}; manual_control:boolean;on_break:boolean;settings_update:string|null;
-  resource_farming?:{enabled:boolean;start_percent:number;target_percent:number;status:string;message?:string};
+  resource_farming?:ResourceStatus;
   platform:{stage:string;message:string;ready:boolean;busy:boolean;error:string|null;game_update?:string|null}|null};
 type Entry = {id:number; level:string; text:string; at:string};
 type Field = {key:string;label:string;description:string;kind:string;choices:string[];section:string;advanced:boolean};
@@ -22,12 +24,16 @@ const BASE=FIRST_LAUNCH?'/first-launch':'';
 const BASIC_SETTINGS=new Set(['gui_timing_preset','donate_open_requests','farm_enabled','farm_engine',
   'farm_resource_start_percent','farm_resource_target_percent','session_limit_seconds',
   'session_limit_variance_seconds','gui_theme','gui_show_debug_activity','gui_dev_options']);
+const toolCategory=(id:string)=>['health_check','classify_screen','zoom_home'].includes(id)?'Device':
+  ['open_clan_chat','find_classify_request','open_donation','close_donation','scroll_chat','anti_idle'].includes(id)?'Donations':
+  ['inspect_attack','farm_open_attack','farm_start_search','farm_classify','farm_deploy_dry','farm_clear_deploy'].includes(id)?'Attacks':'System';
 async function api(path:string, method='GET', body?:unknown) {
   const response=await fetch(BASE+'/api/'+path,{method,headers:{
     'Content-Type':'application/json',...(method==='GET'?{}:{'X-CSRF-Token':csrf})},
     body:body===undefined?undefined:JSON.stringify(body)});
   if(!response.ok) {
-    const text=await response.text();
+    let text=await response.text();
+    try{const parsed=JSON.parse(text);if(typeof parsed.detail==='string')text=parsed.detail;}catch{}
     if(response.status===401) window.dispatchEvent(new Event('session-expired'));
     throw new Error(text || 'Request failed');
   }
@@ -66,6 +72,9 @@ function App(){
   const [dirty,setDirty]=useState(false),[search,setSearch]=useState(''),[advanced,setAdvanced]=useState(false);
   const [savingSettings,setSavingSettings]=useState(false);
   const draftVersion=useRef(0);
+  const loadVersion=useRef(0);
+  const [workspaceAccount,setWorkspaceAccount]=useState<{id:string;nickname:string}|null>(null);
+  const [workspaceLoaded,setWorkspaceLoaded]=useState(false);
   const [setup,setSetup]=useState<SetupData|null>(null),[selected,setSelected]=useState('');
   const [queue,setQueue]=useState<string[]>([]),[collection,setCollection]=useState<any>(null);
   const [galleryOffset,setGalleryOffset]=useState(0),[galleryTotal,setGalleryTotal]=useState(0);
@@ -75,6 +84,7 @@ function App(){
   const [practice,setPractice]=useState(false),[busy,setBusy]=useState(false);
   const [viewer,setViewer]=useState(false);
   const [live,setLive]=useState(false);
+  const [libraryTab,setLibraryTab]=useState('Calibrations'),[toolGroup,setToolGroup]=useState('Upgrades');
   const [captureIntent,setCaptureIntent]=useState<Part|null>(null);
   const pendingCapture=useRef(false),logEnd=useRef<HTMLDivElement>(null);
   function acceptSession(x:{csrf:string;password_required:boolean}){
@@ -92,7 +102,12 @@ function App(){
     finally{setBusy(false);}
   }
   async function reload(){
-    const [a,b,c,d]=await Promise.all([api('settings'),api('setup'),api('backups'),api('library')]);
+    const version=++loadVersion.current;
+    const draft=draftVersion.current;
+    const workspace=await api('workspace');
+    if(version!==loadVersion.current||draft!==draftVersion.current)return;
+    const {settings:a,setup:b,backups:c,library:d}=workspace;
+    setWorkspaceAccount(workspace.account);setWorkspaceLoaded(true);
     draftVersion.current++;
     setSettings(a);setValues(a.values);setSetup(b);setBackups(c);setGallery(d.images);setDirty(false);
     setCollection(d.collection);setGalleryTotal(d.total);setGalleryOffset(0);
@@ -130,11 +145,15 @@ function App(){
     return ()=>{stopped=true;clearTimeout(reconnect);socket?.close();};
   },[signed]);
   useEffect(()=>{
+    if(signed&&status&&workspaceLoaded&&!dirty&&!editor&&!status.account_pending
+      &&(workspaceAccount?.id??null)!==(status?.account?.id??null))attempt(reload);
+  },[signed,workspaceLoaded,dirty,editor,status?.account?.id,status?.account_pending,workspaceAccount?.id]);
+  useEffect(()=>{
     const handler=(e:BeforeUnloadEvent)=>{if(dirty||editor){e.preventDefault();}};
     window.addEventListener('beforeunload',handler);
     return ()=>window.removeEventListener('beforeunload',handler);
   },[dirty,editor]);
-  useEffect(()=>{if(scroll)logEnd.current?.scrollIntoView({block:'nearest'});},[logs,scroll]);
+  useEffect(()=>{const feed=logEnd.current?.parentElement;if(scroll&&feed)feed.scrollTop=feed.scrollHeight;},[logs,scroll]);
   useEffect(()=>{
     if(!pendingCapture.current||status?.active||status?.operation!=='capture')return;
     pendingCapture.current=false;
@@ -143,8 +162,8 @@ function App(){
   },[status]);
   useEffect(()=>{
     const theme=settings?.themes.find(t=>t.label===values.gui_theme);
-    if(theme)for(const key of ['bg','sidebar','surface','text','border','accent','danger','field_bg','text_secondary'])
-      document.documentElement.style.setProperty('--'+key.replace('_','-'),theme[key]);
+    if(theme)for(const key of ['bg','sidebar','surface','text','border','accent','danger','field_bg','text_secondary','accent_fg','success'])
+      if(theme[key])document.documentElement.style.setProperty('--'+key.replaceAll('_','-'),theme[key]);
   },[values.gui_theme,settings]);
   async function captureScreen(part:Part|null=null,pan=false){
     setCaptureIntent(part);pendingCapture.current=true;
@@ -160,15 +179,16 @@ function App(){
   const setupSteps=(setup?.steps??[]).map(s=>({...s,parts:s.parts.filter(p=>advancedSetup||!p.advanced)})).filter(s=>s.parts.length);
   function advance(){
     if(queue.length){setSelected(queue[0]);setQueue(queue.slice(1));}
-    else {const all=setupSteps.flatMap(s=>s.parts);if(all.length)setSelected(all[(all.findIndex(p=>p.key===selected)+1)%all.length].key);}
+    else {const all=setupSteps.flatMap(s=>s.parts);if(all.length)setSelected(all[(all.findIndex(p=>p.key===(part?.key||selected))+1)%all.length].key);}
   }
   function beginSetup(missing:boolean){
     const keys=setupSteps.flatMap(s=>s.parts).filter(p=>!missing||(!p.configured&&!p.optional)).map(p=>p.key);
     if(!keys.length){setNotice('All required calibration parts are saved');return;}
     setSelected(keys[0]);setQueue(keys.slice(1));
   }
-  const locked=!!status?.active||!!status?.manual_control||!!status?.settings_update||!!status?.platform?.busy||busy||!online;
-  const part=setup?.steps.flatMap(s=>s.parts).find(p=>p.key===selected);
+  const accountChanged=workspaceLoaded&&(workspaceAccount?.id??null)!==(status?.account?.id??null);
+  const locked=!!status?.active||!!status?.manual_control||!!status?.settings_update||!!status?.platform?.busy||busy||!online||accountChanged;
+  const part=setupSteps.flatMap(s=>s.parts).find(p=>p.key===selected)||setupSteps[0]?.parts[0];
   async function save(){
     const version=draftVersion.current;
     setSavingSettings(true);
@@ -203,18 +223,22 @@ function App(){
     value={password} onChange={e=>setPassword(e.target.value)} required/></label>
     <button className="primary" disabled={busy}>Sign in</button><p role="alert">{notice}</p></form></main>;
   const fields=settings?.fields.filter(f=>(!f.advanced||values.gui_dev_options)&&
-    (advanced||BASIC_SETTINGS.has(f.key)||f.key.startsWith('upgrade_')||f.key.startsWith('progression_')||f.key.startsWith('builder_base_')||f.key.startsWith('layouts_'))&&
+    (advanced||BASIC_SETTINGS.has(f.key)||f.key.startsWith('upgrade_')||f.key.startsWith('progression_')||f.key.startsWith('builder_base_')||f.key.startsWith('layouts_')||f.key.startsWith('collection_'))&&
     (f.label+' '+f.description).toLowerCase().includes(search.toLowerCase()))||[];
-  return <div className="app"><aside><a className="brand" href="#" onClick={e=>e.preventDefault()}>CoC Bot</a>
-    <nav>{['Dashboard','Accounts','Attacks','Settings','Setup','Library','Diagnostics'].map(p=><button key={p}
-      className={page===p?'selected':''} onClick={()=>navigate(p)}>{p}</button>)}</nav>
+  return <div className="app"><a className="skip-link" href="#main-content">Skip to content</a><aside className="sidebar"><a className="brand" href="#" onClick={e=>{e.preventDefault();navigate('Dashboard');}}><span className="brand-icon"><Icon name="castle" size={23}/></span><span>CoC Bot</span></a>
+    <nav className="primary-nav" aria-label="Main navigation">{['Dashboard','Accounts','Attacks','Settings','Setup','Library','Diagnostics'].map(p=><button key={p}
+      aria-label={pageLabels[p]} title={pageLabels[p]} aria-current={page===p?'page':undefined} className={page===p?'selected':''} onClick={()=>navigate(p)}><Icon name={pageIcons[p]}/><span>{pageLabels[p]}</span>{page===p&&<i/>}</button>)}</nav>
+    <div className="sidebar-bottom"><button className="account-shortcut" onClick={()=>navigate('Accounts')}><span className="avatar">{status?.account?.nickname?.slice(0,2).toUpperCase()||'CC'}</span><span><strong>{status?.account?.nickname||'No account selected'}</strong><small><i className={'status-dot '+(online?'connected':'')}/>{online?'Connected':'Reconnecting'}</small></span><Icon name="chevron" size={15}/></button>
     {FIRST_LAUNCH&&<button disabled={locked} onClick={()=>location.assign('/')}>Exit first-launch test</button>}
-    {passwordRequired&&<button onClick={()=>attempt(async()=>{await api('logout','POST');expired();})}>Sign out</button>}</aside>
-    <main>{FIRST_LAUNCH&&<div className="notice">First-launch test · changes are kept separate from your saved setup.</div>}
-    <header><h1>{page}</h1><span className={'connection '+(online?'connected':'')}>
-      {status?.account&&<span>{status.account.nickname} · </span>}
-      {online?'Connected':'Reconnecting'}</span></header>
-    {notice&&<div className="notice" role="status">{notice}<button aria-label="Dismiss message" onClick={()=>setNotice('')}>×</button></div>}
+    {passwordRequired&&<button className="quiet" onClick={()=>attempt(async()=>{await api('logout','POST');expired();})}><Icon name="logout" size={17}/>Sign out</button>}</div></aside>
+    <main id="main-content" className={'page page-'+page.toLowerCase()}>{FIRST_LAUNCH&&<div className="notice">First-launch test · changes are kept separate from your saved setup.</div>}
+    <header className="page-header"><h1>{pageLabels[page]||page}</h1><div className="header-actions">
+      {status?.account&&<button className="header-account quiet" title={status.account.nickname} onClick={()=>navigate('Accounts')}><span className="avatar">{status.account.nickname.slice(0,2).toUpperCase()}</span><span>{status.account.nickname}</span></button>}
+      {!online&&<span className="connection"><i className="status-dot working"/>Reconnecting</span>}
+      {page!=='Dashboard'&&page!=='Attacks'&&status?.active&&<button className="danger" disabled={!online} onClick={()=>command('stop')}><Icon name="stop" size={16}/>Stop</button>}
+      <button className="live-button" disabled={!online} onClick={()=>setLive(true)}><Icon name="video" size={18}/><span>Live view</span></button>
+    </div></header>
+    {notice&&<div className="notice" role="status"><span>{notice}</span><button className="icon-button" aria-label="Dismiss message" onClick={()=>setNotice('')}><Icon name="close" size={17}/></button></div>}
     {status?.account_pending&&page!=='Accounts'&&<div className="notice">Finish account setup before starting automation.<button onClick={()=>navigate('Accounts')}>Accounts</button></div>}
     {status?.platform&&!status.platform.ready&&<div className="notice" role="status">{status.platform.message}
       {!status.platform.busy&&<button disabled={locked} onClick={()=>command('runtime/retry')}>Retry startup</button>}
@@ -225,65 +249,57 @@ function App(){
       {status.platform.busy&&<button className="danger" disabled={!online} onClick={()=>command('stop')}>Stop</button>}
     </div>}
     {page==='Dashboard'&&<>
-      <section className="play"><span className="chip">{status?.active?
-        (status.state==='running'&&status.activity?status.activity:status.operation+' · '+status.state):status?.state||'Stopped'}</span>
-      <div className="controls"><button className="primary" disabled={locked||!!(status?.platform&&!status.platform.ready)} onClick={()=>command('start',{practice})}>Start</button>
-        <button className="danger" disabled={!online||(!status?.active&&!status?.manual_control&&!status?.settings_update&&!savingSettings)} onClick={()=>command('stop')}>Stop</button>
+      <section className={'play panel '+(status?.active?'is-running':'')}>
+      <div className="run-state"><span className={'run-indicator '+(status?.active?'running':status?.error?'failed':'')}><Icon name={status?.active?'refresh':status?.error?'info':'castle'} size={23}/></span>
+        <div><div className="run-status"><span className={'status-dot '+(status?.active?'connected':status?.error?'failed':'')}/>{status?.manual_control?'Manual control':status?.active?(status.state==='running'?(status.on_break?'On break':'Running'):status.state.replaceAll('_',' ')):status?.state==='failed'?'Needs attention':'Stopped'}{practice&&<span className="badge">Practice</span>}</div>
+        <strong className="run-activity">{status?.manual_control?'You have control':status?.active?(status.state==='stopping'?'Stopping safely…':status.activity||'Preparing automation'):status?.error?'Automation paused':status?.platform?.busy?'Preparing the game':'Ready when you are'}</strong></div>
+      </div>
+      <div className="controls"><button className="primary" disabled={locked||!!(status?.platform&&!status.platform.ready)} onClick={()=>command('start',{practice})}><Icon name="play" size={17}/>Start</button>
+        <button className="danger" disabled={!online||(!status?.active&&!status?.manual_control&&!status?.settings_update&&!savingSettings)} onClick={()=>command('stop')}><Icon name="stop" size={16}/>Stop</button>
         <button disabled={!online||busy||status?.manual_control||!!(status?.platform&&!status.platform.ready)||
           (status?.active&&(status.operation!=='bot'||status.state!=='running'))}
-          onClick={()=>attempt(()=>api('farm','POST'))}>Farm now</button>
-        <button disabled={!online} onClick={()=>setLive(true)}>Live view</button></div>
-      <div className="timers"><span>Resources <strong title={status?.resource_farming?.message}>{status?.resource_farming?.enabled?
-        `${status.resource_farming.start_percent}% → ${status.resource_farming.target_percent}% · ${status.resource_farming.status}`:'Auto refill off'}</strong></span>
-        <span>{status?.on_break?'Break ends':'Next break'} <strong>{fmt(status?.timers.break_seconds??null)}</strong></span></div>
-      <label className="toggle"><input type="checkbox" checked={practice} disabled={!!status?.active} onChange={e=>setPractice(e.target.checked)}/>Practice mode</label>
-      {status?.error&&<p role="alert">{status.error}</p>}</section>
-      <section className="activity"><div className="toolbar"><span>Activity</span>
+          onClick={()=>attempt(()=>api('farm','POST'))}><Icon name="swords" size={17}/>Farm now</button></div>
+      {status?.error&&<div className="run-error" role="alert"><Icon name="info" size={17}/>{status.error}</div>}</section>
+      <div className="dashboard-grid"><section className="activity panel"><div className="panel-label activity-controls"><span>Activity <span className="live-indicator"><i className={'status-dot '+(online?'connected':'')}/></span></span><div className="activity-options">
         <label className="toggle"><input type="checkbox" checked={debug} onChange={e=>setDebug(e.target.checked)}/>Debug</label>
         <label className="toggle"><input type="checkbox" checked={scroll} onChange={e=>setScroll(e.target.checked)}/>Auto-scroll</label>
-        <button onClick={()=>navigator.clipboard.writeText(logs.map(x=>x.at+' '+x.level+' '+x.text).join('\n')).catch(()=>setNotice('Clipboard unavailable. Use Export in Diagnostics.'))}>Copy</button></div>
-        <div className="log">{logs.filter(x=>debug||x.level!=='DEBUG').map(x=><div key={x.id}><time>{new Date(x.at).toLocaleTimeString()}</time> {x.text}</div>)}<div ref={logEnd}/></div></section>
+        <button className="icon-button" aria-label="Copy activity" title="Copy activity" onClick={()=>navigator.clipboard.writeText(logs.map(x=>x.at+' '+x.level+' '+x.text).join('\n')).catch(()=>setNotice('Clipboard unavailable. Use Export in Tools.'))}><Icon name="copy" size={17}/></button></div></div>
+        <div className="log" role="log" aria-label="Bot activity" aria-live="off">{logs.filter(x=>debug||x.level!=='DEBUG').map(x=><div className={'log-entry '+x.level.toLowerCase()} key={x.id}><time>{new Date(x.at).toLocaleTimeString(undefined,{hour12:false})}</time><i className="log-dot"/><span>{x.text}</span></div>)}
+        {!logs.filter(x=>debug||x.level!=='DEBUG').length&&<EmptyState icon="overview">Activity will appear here</EmptyState>}<div ref={logEnd}/></div></section>
+      <div className="overview-side"><ResourceLevels data={status?.resource_farming}/><section className="session-card panel"><div className="panel-label"><span>{status?.on_break?'Break ends':'Next break'}</span><Icon name="clock" size={18}/></div><strong className="countdown">{fmt(status?.timers.break_seconds??null)}</strong>
+      <div className="session-practice"><label className="toggle"><span>Practice mode</span><input type="checkbox" checked={practice} disabled={!!status?.active} onChange={e=>setPractice(e.target.checked)}/></label></div></section></div></div>
     </>}
     {page==='Attacks'&&<AttackPlanner api={api} base={BASE} result={status?.result} locked={locked} operation={status?.operation} stop={()=>command('stop')}/>}
     {page==='Accounts'&&<Accounts api={api} locked={locked} result={status?.result} operation={status?.operation||null}
       working={!!status?.active} jobError={status?.error||null} live={()=>setLive(true)} onChanged={reload} stop={()=>command('stop')}/>}
-    {page==='Settings'&&<>
-      <div className="toolbar"><input aria-label="Search settings" placeholder="Search settings" value={search} onChange={e=>setSearch(e.target.value)}/>
-        <label className="toggle"><input type="checkbox" checked={advanced} onChange={e=>setAdvanced(e.target.checked)}/>Advanced</label>
-        <button disabled={!online||busy||savingSettings||!!status?.settings_update||!!status?.manual_control||!dirty} className="primary" onClick={save}>
-          {savingSettings||status?.settings_update?'Applying…':status?.active&&status.operation==='bot'?'Save & restart':'Save'}</button>
-        <button disabled={busy||savingSettings||!!status?.settings_update} onClick={()=>{if(!dirty||confirm('Discard unsaved settings?'))attempt(reload);}}>Reload</button>
-        {(savingSettings||status?.settings_update)&&<button className="danger" disabled={!online} onClick={()=>command('stop')}>Stop</button>}</div>
-      {status?.settings_update&&<p role="status">{status.settings_update}</p>}
-      <section className="settings">{fields.map(f=><div className="setting" key={f.key}>
-        <label htmlFor={f.key}>{f.label}<span>{f.description}</span></label>
-        {f.kind==='bool'?<input id={f.key} className="switch" type="checkbox" checked={!!values[f.key]}
-          onChange={e=>editSetting(f.key,e.target.checked)}/>:
-        f.kind==='choice'?<select id={f.key} value={values[f.key]}
-          onChange={e=>editSetting(f.key,e.target.value)}>
-          {f.choices.map(c=><option key={c}>{c}</option>)}</select>:
-        <input id={f.key} value={values[f.key]??''} type={['int','float'].includes(f.kind)?'number':'text'}
-          min={0} step={f.kind==='float'?'any':1} onChange={e=>editSetting(f.key,e.target.value)}/>}
-      </div>)}</section>
-    </>}
-    {page==='Setup'&&<><div className="toolbar">
+    {accountChanged&&dirty&&<div className="notice" role="status">Your unsaved settings belong to {workspaceAccount?.nickname||'the previous profile'}. The active account has changed.
+      <button onClick={()=>{if(confirm('Discard this draft and load the active account?'))attempt(reload);}}>Load active account</button></div>}
+    {page==='Settings'&&<SettingsPanel fields={fields} values={values} search={search} setSearch={setSearch} advanced={advanced} setAdvanced={setAdvanced}
+      dirty={dirty} saving={savingSettings||!!status?.settings_update} restarting={!!status?.active&&status.operation==='bot'}
+      saveDisabled={!online||busy||savingSettings||!!status?.settings_update||!!status?.manual_control||!!status?.account_pending||accountChanged||!dirty}
+      resetDisabled={busy||savingSettings||!!status?.settings_update} save={save} reset={()=>{if(!dirty||confirm('Discard unsaved settings?'))attempt(reload);}}
+      edit={editSetting} account={workspaceAccount?.nickname} updateMessage={status?.settings_update} stop={()=>command('stop')}/>}
+    {page==='Setup'&&<><div className="page-actions">
       <label className="toggle"><input type="checkbox" checked={advancedSetup} onChange={e=>{setAdvancedSetup(e.target.checked);setQueue([]);setSelected('');}}/>Advanced</label>
-      <button disabled={locked||!setup} onClick={()=>beginSetup(true)}>Calibrate missing</button>
-      <button disabled={locked||!setup} onClick={()=>beginSetup(false)}>Calibrate all</button>
+      <span className="item-count">{setupSteps.flatMap(s=>s.parts).filter(p=>p.configured).length} / {setupSteps.flatMap(s=>s.parts).length} configured</span><div className="action-spacer"/>
+      <button disabled={locked||!setup} onClick={()=>beginSetup(false)}>Recalibrate all</button>
+      <button className="primary" disabled={locked||!setup} onClick={()=>beginSetup(true)}><Icon name="setup" size={17}/>Set up missing</button>
       {!!queue.length&&<button onClick={()=>setQueue([])}>Exit guided setup</button>}</div>
-      <div className="setup"><section className="checklist">
-      {setupSteps.map(s=><details open key={s.id}><summary>{s.label}</summary>{s.parts.map(p=><button key={p.key}
-      className={selected===p.key?'selected':''} onClick={()=>{setSelected(p.key);setQueue([]);}}>
-        <span className={p.configured?'complete':'missing'}>{p.configured?'✓':'○'}</span>{p.label}</button>)}</details>)}
-      </section><section className="guide">{part&&<>
+      <div className="setup"><section className="checklist panel" aria-label="Calibration steps">
+      {setupSteps.map(s=><details open key={s.id}><summary><span>{s.label}</span><small>{s.parts.filter(p=>p.configured).length}/{s.parts.length}</small></summary>{s.parts.map(p=><button key={p.key}
+      aria-current={part?.key===p.key?'step':undefined} className={part?.key===p.key?'selected':''} onClick={()=>{setSelected(p.key);setQueue([]);}}>
+        <span className={p.configured?'complete':'missing'}>{p.configured?<Icon name="check" size={14}/>:<i/>}</span><span>{p.label}</span></button>)}</details>)}
+      </section><section className="guide panel">{part?<>
+        <div className="guide-state"><span className={'badge '+(part.configured?'configured':'')}>{part.configured?'Configured':'Not configured'}</span>{part.optional&&<span className="badge">Optional</span>}</div>
         <h2>{part.label}</h2><p className="instructions">{part.instructions}</p>
         <div className="toolbar"><button className="primary" disabled={locked} onClick={()=>captureScreen(part)}>Capture screen</button>
         {part.key==='deploy_sequence'&&<button disabled={locked} onClick={()=>captureScreen(part,true)}>Pan and capture</button>}
-        <button onClick={advance}>Skip</button>
+        <button onClick={advance}>Skip<Icon name="chevron" size={15}/></button>
         </div>
-      </>}</section></div></>}
+      </>:<EmptyState icon="setup">Loading setup…</EmptyState>}</section></div></>}
     {page==='Library'&&<>
-      <div className="toolbar"><button disabled={locked} onClick={()=>attempt(async()=>{await api('backups','POST');await reload();})}>Back up calibration</button>
+      <div className="page-actions"><div className="tabs" aria-label="Library views">{['Calibrations','Screenshots'].map(tab=><button key={tab} aria-pressed={libraryTab===tab} className={libraryTab===tab?'selected':''} onClick={()=>setLibraryTab(tab)}>{tab}</button>)}</div><div className="action-spacer"/><button className="icon-button" aria-label="Refresh library" onClick={()=>attempt(reload)}><Icon name="refresh" size={18}/></button></div>
+      {libraryTab==='Calibrations'&&<><div className="toolbar"><button className="primary" disabled={locked} onClick={()=>attempt(async()=>{await api('backups','POST');await reload();})}><Icon name="plus" size={17}/>Back up calibration</button>
         <button disabled={locked} onClick={()=>{const name=prompt('Profile name');if(name)attempt(async()=>{await api('profiles','POST',{name});await reload();});}}>Save profile</button>
         <label className="upload">Import calibration<input type="file" accept=".zip" disabled={locked} onChange={e=>{
           const file=e.target.files?.[0];if(!file)return;const name=prompt('Imported calibration name',file.name.replace(/\.zip$/i,''));
@@ -291,27 +307,29 @@ function App(){
             method:'POST',headers:{'X-CSRF-Token':csrf,'Content-Type':'application/zip'},body:file});
             if(!response.ok)throw new Error(await response.text());await reload();});e.target.value='';
         }}/></label>
-        <button onClick={()=>attempt(reload)}>Refresh</button></div>
-      <section>{backups.map(b=><div className="setting" key={b.id}><span>{b.label}</span><div className="toolbar">
+        </div>
+      <section className="backup-list panel">{backups.map(b=><div className="setting backup-row" key={b.id}><span><Icon name="library" size={18}/>{b.label}</span><div className="toolbar">
         <button disabled={locked} onClick={()=>confirm('Restore this calibration? A safety backup will be saved.')&&attempt(async()=>{await api('backups/'+b.id+'/restore','POST');await reload();})}>Restore</button>
         <a href={BASE+'/api/backups/'+b.id+'/export'} download>Export</a>
         <button disabled={locked} onClick={()=>{const name=prompt('Calibration name',b.label);if(name)attempt(async()=>{await api('backups/'+b.id,'PATCH',{name});await reload();});}}>Rename</button>
-        <button disabled={locked} onClick={()=>confirm('Delete this saved calibration?')&&attempt(async()=>{await api('backups/'+b.id,'DELETE');await reload();})}>Delete</button>
-      </div></div>)}</section>
-      {collection&&<p>{collection.paused?'Collection paused: '+collection.paused:
-        'Collection active'} · {collection.stats?.saved??0} saved · {Math.round((collection.approximate_storage_bytes??0)/1024/1024)} MB</p>}
+        <button className="danger-quiet" disabled={locked} onClick={()=>confirm('Delete this saved calibration?')&&attempt(async()=>{await api('backups/'+b.id,'DELETE');await reload();})}>Delete</button>
+      </div></div>)}{!backups.length&&<EmptyState icon="library">No saved calibrations</EmptyState>}</section></>}
+      {libraryTab==='Screenshots'&&<>{collection&&<div className="collection-status"><span className={'status-dot '+(!collection.paused?'connected':'')}/>{collection.paused?'Paused: '+collection.paused:
+        'Collecting'}<span>{collection.stats?.saved??0} saved</span><span>{Math.round((collection.approximate_storage_bytes??0)/1024/1024)} MB</span></div>}
       <div className="gallery">{gallery.map(x=><a key={x.id} href={BASE+'/api/library/images/'+x.id} target="_blank" rel="noreferrer">
         <img src={BASE+'/api/library/images/'+x.id} alt={x.label} loading="lazy"/><span>{x.label}</span></a>)}</div>
+      {!gallery.length&&<EmptyState icon="image">No screenshots collected yet</EmptyState>}
       {galleryTotal>24&&<div className="toolbar">{[-24,24].map(delta=><button key={delta}
         disabled={galleryOffset+delta<0||galleryOffset+delta>=galleryTotal}
         onClick={()=>attempt(async()=>{const next=galleryOffset+delta,data=await api('library?offset='+next);setGallery(data.images);setGalleryOffset(next);})}>
-        {delta<0?'Previous':'Next'}</button>)}</div>}
+        {delta<0?'Previous':'Next'}</button>)}</div>}</>}
     </>}
     {page==='Diagnostics'&&<>
-      {(['buildings','research','pets'] as const).map(kind=>{
+      <div className="page-actions"><div className="tabs" aria-label="Tool categories">{['Upgrades','Device','Donations','Attacks','System'].map(group=><button key={group} aria-pressed={toolGroup===group} className={toolGroup===group?'selected':''} onClick={()=>setToolGroup(group)}>{group}</button>)}</div></div>
+      {toolGroup==='Upgrades'&&<div className="upgrade-grid">{(['buildings','research','pets'] as const).map(kind=>{
         const report=status?.result?.upgrade_report&&status.result.kind===kind?status.result:null;
-        return <section key={kind}>
-          <div className="toolbar"><span>{{buildings:'Building upgrades',research:'Army research',pets:'Pet upgrades'}[kind]}</span>
+        return <section key={kind} className="panel upgrade-card">
+          <div className="upgrade-card-label"><span className="tool-icon"><Icon name={{buildings:'hammer',research:'swords',pets:'heart'}[kind]} size={23}/></span><span>{{buildings:'Building upgrades',research:'Army research',pets:'Pet upgrades'}[kind]}</span></div><div className="upgrade-actions">
             <button disabled={locked} onClick={()=>command('upgrades/preview',{kind})}>Check upgrades</button>
             <button disabled={locked||report?.status!=='ready'||!report?.token} onClick={()=>{
               const item=report.selected;
@@ -326,13 +344,13 @@ function App(){
             </div>)}
           </div>}
         </section>;
-      })}
-      {status?.platform&&<div className="toolbar">
+      })}</div>}
+      {toolGroup==='System'&&status?.platform&&<div className="toolbar">
         <button disabled={locked} onClick={()=>command('runtime/update-game')}>Update Clash</button>
         {status.platform.game_update&&<span role="status">{status.platform.game_update}</span>}
       </div>}
-      <div className="toolbar"><button disabled={locked} onClick={()=>captureScreen()}>Current screenshot</button>
-        <button disabled={locked} onClick={()=>setViewer(true)}>Open game</button>
+      {(toolGroup==='Device'||toolGroup==='System')&&<div className="toolbar">{toolGroup==='Device'&&<><button disabled={locked} onClick={()=>captureScreen()}><Icon name="image" size={17}/>Current screenshot</button>
+        <button disabled={locked} onClick={()=>setViewer(true)}>Open game</button></>}
         {!!values.gui_dev_options&&<button disabled={locked} onClick={()=>attempt(async()=>{
           if(!FIRST_LAUNCH)await api('first-launch/reset','POST');
           location.assign(FIRST_LAUNCH?'/':'/first-launch/');
@@ -340,17 +358,17 @@ function App(){
           {FIRST_LAUNCH?'Exit first-launch test':'Simulate first launch'}</button>}
         <button onClick={()=>attempt(async()=>{const data=await api('readiness');setNotice(data.issues.length?data.issues.join(' · '):'Calibration checks passed');})}>Check calibration</button>
         <button onClick={()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([logs.map(x=>x.at+' '+x.level+' '+x.text).join('\n')],{type:'text/plain'}));a.download='bot-activity.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}}>Export activity</button>
-        <a href={BASE+'/api/report'} download="bot-report.json">Download report</a></div>
-      <section>{[['health_check','Check device'],['classify_screen','Recognize screen'],['zoom_home','Test zoom out at home'],['inspect_attack','Inspect army and opponent map'],['open_clan_chat','Open clan chat'],
+        <a href={BASE+'/api/report'} download="bot-report.json">Download report</a></div>}
+      <section className="diagnostic-list">{[['health_check','Check device'],['classify_screen','Recognize screen'],['zoom_home','Test zoom out at home'],['inspect_attack','Inspect army and opponent map'],['open_clan_chat','Open clan chat'],
         ['find_classify_request','Inspect request'],['open_donation','Open donation'],['close_donation','Close donation'],
         ['scroll_chat','Scroll chat'],['anti_idle','Test inactivity nudge'],['farm_open_attack','Open Attack menu'],
         ['farm_start_search','Start opponent search'],['farm_classify','Recognize battle'],
         ['farm_deploy_dry','Preview deploy taps'],['farm_clear_deploy','Clear deploy sequence'],
         ['force_stop','Close Clash'],['close_waydroid','Close Waydroid and Clash'],
-        ['relaunch','Relaunch Clash'],['break_cycle','Test break cycle']].map(([id,label])=>
-        <div className="setting" key={id}><span>{label}</span><button disabled={locked}
+        ['relaunch','Relaunch Clash'],['break_cycle','Test break cycle']].filter(([id])=>toolCategory(id)===toolGroup).map(([id,label])=>
+        <button className="diagnostic-action panel" key={id} disabled={locked}
           onClick={()=>{if(id==='farm_clear_deploy'&&!confirm('Remove your saved farm deploy sequence?'))return;
-            attempt(()=>api('diagnostics/'+id,'POST'));}}>Run</button></div>)}</section>
+            attempt(()=>api('diagnostics/'+id,'POST'));}}><Icon name={pageIcons[toolGroup==='Device'?'Diagnostics':toolGroup==='Attacks'?'Attacks':'Setup']} size={19}/><span>{label}</span><Icon name="chevron" size={16}/></button>)}</section>
       {status?.result?.attack_observation&&<AttackObservation report={status.result} base={BASE}
         save={(id,revision,corrections)=>api('attack-observations/'+id,'PATCH',{revision,corrections})}/>}
       {status?.result&&!status.result?.id&&!status.result?.upgrade_report&&!status.result?.attack_observation&&<pre className="result">{typeof status.result==='string'?status.result:JSON.stringify(status.result,null,2)}</pre>}

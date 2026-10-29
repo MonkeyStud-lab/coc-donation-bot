@@ -20,11 +20,12 @@ class AccountsTests(TestCase):
         from coc_bot.accounts.navigation import AccountNavigator
         import numpy as np
         s=Mock();n=AccountNavigator(s)
-        n.saved_cards=Mock(return_value=[{'name':'Other','hall':10}])
-        n.card_point=Mock(return_value=(100,100));n.tap=Mock();n.button=Mock()
+        n.target_card=Mock(return_value={'name':'Other','hall':10,'point':(100,100)})
+        n.tap=Mock();n.button=Mock()
         n.frame=Mock(return_value=np.zeros((1048,1853,3),np.uint8))
         n.identity=Mock(return_value={'tag':'#PYLQG'})
-        with patch('coc_bot.accounts.navigation.time.monotonic',side_effect=[0,65,66]),\
+        # Loading can exceed sixty seconds; the verification deadline remains 240s.
+        with patch('coc_bot.accounts.navigation.time.monotonic',side_effect=[0,0,0,65,66,66,66,66]),\
              patch('coc_bot.accounts.navigation.interrupted_sleep',return_value=False),\
              patch('coc_bot.progression.home.recover_home_overlay',side_effect=[True,False]),\
              patch('coc_bot.vision.battle_menu.home_build_control_visible',return_value=True):

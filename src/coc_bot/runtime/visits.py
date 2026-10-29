@@ -1,5 +1,6 @@
 """Goal-based, restartable visits shared by single-account and fleet runs."""
 import time
+import math
 from coc_bot.accounts.store import read, write
 
 STEPS = ('farm', 'requests', 'upgrades', 'builder_base', 'layouts')
@@ -17,6 +18,18 @@ class Visit:
         state = read(self.path, {})
         if state and (state.get('account') != self.config.account_tag or state.get('version') != VERSION):
             raise ValueError('Visit identity/version changed; review the saved visit before continuing')
+        if state:
+            if (type(state.get('step')) is not int or not 0<=state['step']<=len(STEPS)
+                or not isinstance(state.get('outcomes'),dict) or not isinstance(state.get('deferred'),dict)):
+                raise ValueError('Visit journal is invalid; review it before continuing')
+            for name in ('started_at','finished_at','next_check_at'):
+                value=state.get(name)
+                if value is not None and (type(value) not in (int,float) or not math.isfinite(value) or value<0):
+                    raise ValueError('Visit timing is invalid; review it before continuing')
+            for name,value in state['deferred'].items():
+                if (name not in STEPS or not isinstance(value,dict) or type(value.get('retry_at')) not in (int,float)
+                    or not math.isfinite(value['retry_at']) or value['retry_at']<0):
+                    raise ValueError('Deferred visit step is invalid; review it before continuing')
         return state or {'version': VERSION, 'account': self.config.account_tag, 'step': 0,
                          'started_at': self.clock(), 'outcomes': {}, 'deferred': {}}
 

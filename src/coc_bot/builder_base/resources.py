@@ -8,7 +8,6 @@ import math
 import time
 
 import cv2
-import numpy as np
 from loguru import logger
 
 from coc_bot.builder_base.vision import ASSETS

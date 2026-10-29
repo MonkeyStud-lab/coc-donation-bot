@@ -92,7 +92,13 @@ The bot opens the saved-ID chooser and selects its learned card. After the
 village loads, it checks the player tag again. It stays stopped; press Start
 when you are ready to run that account's enabled tasks.
 
-Start also verifies identity from the Home Village account menu. If a previous
+An ordinary Start verifies identity from the Home Village account menu. During
+continuous rotation, the just-completed switch can hand its verification to the
+next worker once, within 30 seconds, on the same thread, device, profile and
+still-held device lease. A fresh Home/clan-chat screenshot is still required.
+Expired proofs, restarts, changed screens and interrupted layout recovery use
+the full Profile/Settings check again. These proofs are never saved to disk.
+If a previous
 run stopped in a battle or another screen that covers this menu, return home
 through Live view before starting. Do not switch accounts directly in the game
 while automation is running.
@@ -102,10 +108,16 @@ An interrupted Build, Research, or Pets sidebar can be closed after its exact
 heading and bright close control match on two fresh frames. The bot then verifies
 the ordinary Home Village anchors before opening the account menu.
 
-The chooser is scanned through bounded overlapping pages, so a saved account
-below the first four cards can be learned and located again after scrolling.
+Adding an account scans the full chooser through bounded overlapping pages.
+Routine switches first inspect the current stable viewport and search further
+only when needed. Card positions are reacquired after scrolling. Identical
+chooser pixels can share name OCR within one operation; player-tag reads are
+independent and are not served from that cache.
 Names only nominate a card; two-screen tag verification still establishes
 identity. Distinct Supercell ID names are required.
+
+Activity logs include chooser selection, game loading and identity-verification
+timings for switches, plus capture/cache counts for diagnosis.
 
 Unknown screens, ambiguous names, missing account cards, stopped
 operations, and mismatched tags leave automation blocked. Use Live view to
@@ -175,6 +187,10 @@ protected web API. No endpoint accepts login secrets or arbitrary ADB commands.
 
 Between checklist steps (including individual attacks and bounded Builder Base
 batches), and before a scheduled switch, the bot checks verified clan chat.
+A completed or recovered Home attack explicitly queues this check before the
+next refill battle, including manual attacks. The check follows a visible
+request-jump icon once and reads a fresh frame, so an old chat scroll position
+does not hide a request. Activity logs show the between-attack check and outcome.
 A visible request detours to a randomly selected Donating-role account in the
 same clan. Membership is learned from two fresh native My Clan tag reads;
 names do not establish membership. Unknown/stale clan identities are excluded,

@@ -56,18 +56,19 @@ os._exit(17)
                 with self.assertRaises(RecoveryRequired): c.load()
                 self.assertTrue(c.path.exists())
 
-    def test_interval_id_survives_repeated_recovery_and_tracker_restart(self):
+    def test_completion_id_survives_repeated_recovery_and_tracker_restart(self):
         with TemporaryDirectory() as folder:
             config = replace(load_config(), data_dir=Path(folder))
             tracker = RuntimeTracker(config)
             tracker.mark_farm_success(attack_id='same-attack')
-            first = tracker.state.last_farm_at, tracker.state.next_farm_interval_seconds
+            first = tracker.state.last_farm_at
             tracker = RuntimeTracker(config)
-            with patch.object(tracker, '_roll_next_farm_interval', side_effect=AssertionError('must not reroll')):
+            with patch('coc_bot.attack.recovery.atomic_json',side_effect=AssertionError('must not record twice')):
                 tracker.mark_farm_success(attack_id='same-attack')
-            self.assertEqual(first, (tracker.state.last_farm_at, tracker.state.next_farm_interval_seconds))
+            self.assertEqual(first,tracker.state.last_farm_at)
+            self.assertIsNone(tracker.state.next_farm_interval_seconds)
 
-    def test_failed_interval_save_keeps_checkpoint_and_can_retry(self):
+    def test_failed_completion_save_keeps_checkpoint_and_can_retry(self):
         with TemporaryDirectory() as folder:
             config = replace(load_config(), data_dir=Path(folder))
             checkpoint = AttackCheckpoint(config)

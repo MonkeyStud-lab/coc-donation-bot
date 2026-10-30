@@ -75,6 +75,11 @@ need a different permitted network path. No external STUN/TURN service is config
 
 ## Pages and ownership
 
+The **Interface** selector in the header switches immediately between **Original**,
+**Watchtower**, and **Harbor** without restarting automation or discarding edits.
+This choice stays in the current browser and includes the matching color palette.
+See [web interface variants](UI_INTERFACES.md).
+
 - **Overview:** Start/Stop, Farm now, practice mode, resource readings,
   and one activity feed. Live view is available from every page.
 - **Accounts:** saved villages, roles, verified clan groups, and automatic visits.
@@ -90,11 +95,11 @@ need a different permitted network path. No external STUN/TURN service is config
   use the same backend operations. Attacks contains opponent preparation, army
   review, map editing, saved routines, supervised execution, and camera restoration.
 
-The navigation collapses to icons at smaller widths. Existing theme choices
-still apply to all pages; no fonts or icon services need an internet connection.
+Navigation adapts to the available width: Original collapses to icons, while the
+new interfaces keep scrollable labels. No fonts or icon services need an internet connection.
 The active account appears in navigation, rather than above every settings group.
-Save and Discard appear when settings have edits. Themes preview immediately;
-**Save changes** persists theme, debug-display defaults, and developer options
+Save and Discard appear when settings have edits. **Save changes** persists
+debug-display defaults and developer options
 without stopping automation. Changes to bot behavior still use **Save & restart**
 while running and wait for the current action to finish. Mixing appearance and
 behavior changes in one save follows that same safe restart path.

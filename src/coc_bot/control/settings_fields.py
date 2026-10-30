@@ -381,7 +381,7 @@ SETTINGS: list[SettingField] = [
     SettingField(
         "gui_theme",
         "Theme",
-        "Color palette for the entire app. All themes use the same compact layout. "
+        "Color palette for the desktop app. The web app pairs colors with its Interface choice. "
         "Previews immediately. Save changes keeps it without restarting the bot.",
         "choice",
         lambda c: theme_label(c.gui_theme),

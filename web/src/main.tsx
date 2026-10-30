@@ -1,11 +1,14 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {AttackObservation} from './AttackObservation';
 import {AttackPlanner} from './AttackPlanner';
 import {Accounts} from './Accounts';
 import {SettingsPanel} from './SettingsPanel';
+import {InterfacePicker,useInterface} from './InterfacePicker';
+import {interfacePalette,paletteProperties} from './interfacePalettes';
 import {EmptyState,Icon,pageIcons,pageLabels,ResourceLevels,ResourceStatus} from './ui';
 import {createRoot} from 'react-dom/client';
 import './style.css';
+import './interfaces.css';
 
 type Status = {active:boolean; state:string; operation:string|null; activity:string|null; result:any; error:string|null;
   account?:{id:string;nickname:string;tag:string};account_pending?:boolean;
@@ -60,6 +63,7 @@ function useDialog(ref:React.RefObject<HTMLElement|null>,close:()=>void){
 }
 
 function App(){
+  const [interfaceId,chooseInterface]=useInterface(FIRST_LAUNCH);
   const [signed,setSigned]=useState(false),[password,setPassword]=useState('');
   const [passwordRequired,setPasswordRequired]=useState(true),[checkingSession,setCheckingSession]=useState(true);
   const [page,setPage]=useState(FIRST_LAUNCH?'Setup':'Dashboard'),[notice,setNotice]=useState('');
@@ -157,11 +161,13 @@ function App(){
     if(status.result?.id){setCapture(status.result);setEditor(captureIntent);}
     else setNotice(status.error||'Screenshot could not be captured');
   },[status]);
-  useEffect(()=>{
-    const theme=settings?.themes.find(t=>t.label===values.gui_theme);
-    if(theme)for(const key of ['bg','sidebar','surface','text','border','accent','danger','field_bg','text_secondary','accent_fg','success'])
-      if(theme[key])document.documentElement.style.setProperty('--'+key.replaceAll('_','-'),theme[key]);
-  },[values.gui_theme,settings]);
+  useLayoutEffect(()=>{
+    const palette=interfacePalette(interfaceId);
+    document.documentElement.dataset.appearance=palette.appearance;
+    document.documentElement.style.colorScheme=palette.appearance;
+    for(const [key,value] of Object.entries(paletteProperties(palette)))
+      document.documentElement.style.setProperty(key,value);
+  },[interfaceId]);
   async function captureScreen(part:Part|null=null,pan=false){
     setCaptureIntent(part);pendingCapture.current=true;
     const result=await attempt(()=>api('capture'+(pan?'/pan':''),'POST'));
@@ -216,13 +222,21 @@ function App(){
       setStatus(await response.json());setNotice('Game archive imported. Preparing Clash…');
     });
   }
+  const activityPanel=(<section key="activity" className="activity panel"><div className="panel-label activity-controls"><span>Activity <span className="live-indicator"><i className={'status-dot '+(online?'connected':'')}/></span></span><div className="activity-options">
+        <label className="toggle"><input type="checkbox" checked={debug} onChange={e=>setDebug(e.target.checked)}/>Debug</label>
+        <label className="toggle"><input type="checkbox" checked={scroll} onChange={e=>setScroll(e.target.checked)}/>Auto-scroll</label>
+        <button className="icon-button" aria-label="Copy activity" title="Copy activity" onClick={()=>navigator.clipboard.writeText(logs.map(x=>x.at+' '+x.level+' '+x.text).join('\n')).catch(()=>setNotice('Clipboard unavailable. Use Export in Tools.'))}><Icon name="copy" size={17}/></button></div></div>
+        <div className="log" role="log" aria-label="Bot activity" aria-live="off">{logs.filter(x=>debug||x.level!=='DEBUG').map(x=><div className={'log-entry '+x.level.toLowerCase()} key={x.id}><time>{new Date(x.at).toLocaleTimeString(undefined,{hour12:false})}</time><i className="log-dot"/><span>{x.text}</span></div>)}
+        {!logs.filter(x=>debug||x.level!=='DEBUG').length&&<EmptyState icon="overview">Activity will appear here</EmptyState>}<div ref={logEnd}/></div></section>);
+  const resourcePanel=(<div key="resources" className="overview-side"><ResourceLevels data={status?.resource_farming}/>
+      <label className="toggle overview-practice"><span>Practice mode</span><input type="checkbox" checked={practice} disabled={!!status?.active} onChange={e=>setPractice(e.target.checked)}/></label></div>);
   if(checkingSession||(!signed&&!passwordRequired))return <main className="login" role="status">Connecting…</main>;
   if(!signed)return <main className="login"><form onSubmit={e=>{e.preventDefault();attempt(async()=>{
     const result=await api('login','POST',{password});csrf=result.csrf;setSigned(true);setPassword('');
   });}}><h1>CoC Bot</h1><label>Password<input type="password" autoComplete="current-password"
     value={password} onChange={e=>setPassword(e.target.value)} required/></label>
     <button className="primary" disabled={busy}>Sign in</button><p role="alert">{notice}</p></form></main>;
-  const fields=settings?.fields.filter(f=>(!f.advanced||values.gui_dev_options)&&
+  const fields=settings?.fields.filter(f=>f.key!=='gui_theme'&&(!f.advanced||values.gui_dev_options)&&
     (advanced||!f.expert)&&
     (advanced||BASIC_SETTINGS.has(f.key)||f.key.startsWith('upgrade_')||f.key.startsWith('progression_')||f.key.startsWith('builder_base_')||f.key.startsWith('layouts_')||f.key.startsWith('collection_'))&&
     (f.label+' '+f.description).toLowerCase().includes(search.toLowerCase()))||[];
@@ -234,6 +248,7 @@ function App(){
     {passwordRequired&&<button className="quiet" onClick={()=>attempt(async()=>{await api('logout','POST');expired();})}><Icon name="logout" size={17}/>Sign out</button>}</div></aside>
     <main id="main-content" className={'page page-'+page.toLowerCase()}>{FIRST_LAUNCH&&<div className="notice">First-launch test · changes are kept separate from your saved setup.</div>}
     <header className="page-header"><h1>{pageLabels[page]||page}</h1><div className="header-actions">
+      <InterfacePicker value={interfaceId} onChange={chooseInterface}/>
       {status?.account&&<button className="header-account quiet" title={status.account.nickname} onClick={()=>navigate('Accounts')}><span className="avatar">{status.account.nickname.slice(0,2).toUpperCase()}</span><span>{status.account.nickname}</span></button>}
       {!online&&<span className="connection"><i className="status-dot working"/>Reconnecting</span>}
       {page!=='Dashboard'&&canStop&&<button className="danger" disabled={!online} onClick={()=>command('stop')}><Icon name="stop" size={16}/>Stop</button>}
@@ -260,14 +275,7 @@ function App(){
           (status?.active&&(status.operation!=='bot'||status.state!=='running'))}
           onClick={()=>attempt(()=>api('farm','POST'))}><Icon name="swords" size={17}/>Farm now</button></div>
       {status?.error&&<div className="run-error" role="alert"><Icon name="info" size={17}/>{status.error}</div>}</section>
-      <div className="dashboard-grid"><section className="activity panel"><div className="panel-label activity-controls"><span>Activity <span className="live-indicator"><i className={'status-dot '+(online?'connected':'')}/></span></span><div className="activity-options">
-        <label className="toggle"><input type="checkbox" checked={debug} onChange={e=>setDebug(e.target.checked)}/>Debug</label>
-        <label className="toggle"><input type="checkbox" checked={scroll} onChange={e=>setScroll(e.target.checked)}/>Auto-scroll</label>
-        <button className="icon-button" aria-label="Copy activity" title="Copy activity" onClick={()=>navigator.clipboard.writeText(logs.map(x=>x.at+' '+x.level+' '+x.text).join('\n')).catch(()=>setNotice('Clipboard unavailable. Use Export in Tools.'))}><Icon name="copy" size={17}/></button></div></div>
-        <div className="log" role="log" aria-label="Bot activity" aria-live="off">{logs.filter(x=>debug||x.level!=='DEBUG').map(x=><div className={'log-entry '+x.level.toLowerCase()} key={x.id}><time>{new Date(x.at).toLocaleTimeString(undefined,{hour12:false})}</time><i className="log-dot"/><span>{x.text}</span></div>)}
-        {!logs.filter(x=>debug||x.level!=='DEBUG').length&&<EmptyState icon="overview">Activity will appear here</EmptyState>}<div ref={logEnd}/></div></section>
-      <div className="overview-side"><ResourceLevels data={status?.resource_farming}/>
-      <label className="toggle overview-practice"><span>Practice mode</span><input type="checkbox" checked={practice} disabled={!!status?.active} onChange={e=>setPractice(e.target.checked)}/></label></div></div>
+      <div className="dashboard-grid">{interfaceId==='harbor'?[resourcePanel,activityPanel]:[activityPanel,resourcePanel]}</div>
     </>}
     {page==='Accounts'&&<Accounts api={api} locked={locked} result={status?.result} operation={status?.operation||null}
       working={!!status?.active} jobError={status?.error||null} live={()=>setLive(true)} onChanged={reload} stop={()=>command('stop')}/>}

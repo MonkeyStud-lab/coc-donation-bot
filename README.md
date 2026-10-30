@@ -30,7 +30,7 @@ automation is stopped.
   reserves. Pet upgrades use a separate slot and prefer unassigned pets.
   Previewing and starting an upgrade are separate actions.
 - **Browser controls:** Start/Stop, resource refill status, activity logs,
-  responsive settings, themes, guided calibration, and calibration backups.
+  responsive settings, switchable interfaces, guided calibration, and calibration backups.
 - **Builder Base (experimental):** account-visit checks for an equipped
   six-Night-Witch/Battle-Machine army, resource collection, supported Suggested
   building upgrades, and Night Witch research. Handles both battle stages,
@@ -219,7 +219,7 @@ recalibrate changed parts.
 - **Accounts:** save the current village, add another Supercell ID, switch saved
   accounts, and choose each account's roles. See [Accounts](docs/ACCOUNTS.md).
 - **Settings:** categorized donations, resource refill targets, upgrades,
-  themes, timing presets, and collection limits. Field help opens on demand;
+  timing presets, and collection limits. Field help opens on demand;
   Advanced and Dev options retain their existing controls.
 - **Setup:** guided calibration or direct access to one calibration part.
   Advanced reveals older-UI and fallback controls. The programmed deploy
@@ -238,9 +238,10 @@ Settings remain editable while the bot runs. **Save & restart** validates change
 waits for the current donation/attack to finish, then restarts with the new settings.
 **Stop** cancels a pending restart. While stopped, **Save** applies settings without
 starting automation. Release manual control before saving.
-Theme changes preview immediately; **Save changes** persists appearance preferences
-without restarting automation. A save that also changes bot behavior still uses
-the safe restart path above.
+Use **Interface** in the page header to switch between **Watchtower** (graphite and
+amber), **Harbor** (pearl and blue), and the **Original** layout. The matching palette
+applies immediately and the choice stays in this browser, without a save or restart.
+Switching preserves unsaved settings. See [interface variants](docs/UI_INTERFACES.md).
 
 Automatic farming follows resource levels rather than a countdown. The bot does
 not schedule session breaks or close Clash because of elapsed runtime. Old break

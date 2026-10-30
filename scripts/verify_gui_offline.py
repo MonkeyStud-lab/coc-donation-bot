@@ -95,7 +95,9 @@ with isolated_data(), \
             with patch("coc_bot.gui.page_views.current_setting_values", return_value=values):
                 app._build_settings_page()
             app._show_page("settings")
-            app._settings_notebook.select(3)
+            advanced = next(tab for tab in app._settings_notebook.tabs()
+                            if app._settings_notebook.tab(tab, "text") == "Advanced")
+            app._settings_notebook.select(advanced)
             app.update_idletasks()
             check_controls(app._pages["settings"])
             assert set(app._setting_vars) == {field.key for field in SETTINGS}

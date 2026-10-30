@@ -75,10 +75,8 @@ need a different permitted network path. No external STUN/TURN service is config
 
 ## Pages and ownership
 
-The **Interface** selector in the header switches immediately between **Original**,
-**Watchtower**, and **Harbor** without restarting automation or discarding edits.
-This choice stays in the current browser and includes the matching color palette.
-See [web interface variants](UI_INTERFACES.md).
+Harbor is the default and only web interface, with a local scenic wallpaper, glass
+navigation, and optional page transitions. See [Harbor design and accessibility](UI_INTERFACES.md).
 
 - **Overview:** Start/Stop, Farm now, practice mode, resource readings,
   and one activity feed. Live view is available from every page.
@@ -95,8 +93,7 @@ See [web interface variants](UI_INTERFACES.md).
   use the same backend operations. Attacks contains opponent preparation, army
   review, map editing, saved routines, supervised execution, and camera restoration.
 
-Navigation adapts to the available width: Original collapses to icons, while the
-new interfaces keep scrollable labels. No fonts or icon services need an internet connection.
+Navigation keeps scrollable labels when space is limited. No fonts or icon services need an internet connection.
 The active account appears in navigation, rather than above every settings group.
 Save and Discard appear when settings have edits. **Save changes** persists
 debug-display defaults and developer options

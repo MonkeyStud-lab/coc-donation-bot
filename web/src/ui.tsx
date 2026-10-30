@@ -3,7 +3,7 @@ import React from 'react';
 const paths:Record<string,React.ReactNode>={
   overview:<><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
   accounts:<><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6m2 4a6 6 0 0 1 3 5"/></>,
-  swords:<><path d="m4 3 5 2 11 12-3 3L5 9 4 3Zm16 0-5 2-3 3M8 12l-4 5 3 3 5-4M15 21l6-6M3 15l6 6"/></>,
+  swords:<><path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6m-3 3 4 4m-1 1 2-2M14.5 6.5 18 3h3v3l-3.5 3.5M5 13l6 6m-3-3-4 4m-1-1 2 2"/></>,
   settings:<><path d="M4 7h7m5 0h4M4 17h3m5 0h8"/><circle cx="13.5" cy="7" r="2.5"/><circle cx="9.5" cy="17" r="2.5"/></>,
   setup:<><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/></>,
   library:<><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18m-11 5h4"/></>,
@@ -20,7 +20,7 @@ const paths:Record<string,React.ReactNode>={
   info:<><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.1"/></>,
   edit:<><path d="m15 5 4 4M4 20l5-1L21 7l-4-4L5 15l-1 5Z"/></>,
   image:<><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 3 4-6 5 7"/></>,
-  hammer:<><path d="m8 3 8 8 4-4-8-4H8Zm2 6L3 16l5 5 7-7"/></>,
+  hammer:<><path d="m13 3 8 8-4 4-8-8 4-4ZM11 9l-8 8a2.12 2.12 0 0 0 3 3l8-8"/></>,
   link:<><path d="m10 14 4-4m-5 7-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m0 8a4 4 0 0 0 6 0l4-4a4 4 0 0 0-6-6l-1 1"/></>,
   palette:<><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4c-2-1 1-3 3-3h2a2 2 0 0 0 2-2 9 9 0 0 0-9-9Z"/><path d="M7 9h.1M11 6h.1M16 8h.1M6 14h.1"/></>,
   heart:<path d="M20 5a5 5 0 0 0-8 1 5 5 0 0 0-8-1c-4 5 3 10 8 15 5-5 12-10 8-15Z"/>,
@@ -28,7 +28,7 @@ const paths:Record<string,React.ReactNode>={
 };
 
 export function Icon({name,size=20,...props}:{name:string;size?:number}&React.SVGProps<SVGSVGElement>){
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{paths[name]||paths.settings}</svg>;
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" {...props}>{paths[name]||paths.settings}</svg>;
 }
 
 export function EmptyState({icon='library',children}:{icon?:string;children:React.ReactNode}){

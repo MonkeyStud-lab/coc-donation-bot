@@ -3,12 +3,12 @@ import {AttackObservation} from './AttackObservation';
 import {AttackPlanner} from './AttackPlanner';
 import {Accounts} from './Accounts';
 import {SettingsPanel} from './SettingsPanel';
-import {InterfacePicker,useInterface} from './InterfacePicker';
-import {interfacePalette,paletteProperties} from './interfacePalettes';
+import {usePageTransition} from './pageTransition';
+import {harborPalette,paletteProperties} from './interfacePalettes';
 import {EmptyState,Icon,pageIcons,pageLabels,ResourceLevels,ResourceStatus} from './ui';
 import {createRoot} from 'react-dom/client';
 import './style.css';
-import './interfaces.css';
+import './harbor.css';
 
 type Status = {active:boolean; state:string; operation:string|null; activity:string|null; result:any; error:string|null;
   account?:{id:string;nickname:string;tag:string};account_pending?:boolean;
@@ -63,10 +63,11 @@ function useDialog(ref:React.RefObject<HTMLElement|null>,close:()=>void){
 }
 
 function App(){
-  const [interfaceId,chooseInterface]=useInterface(FIRST_LAUNCH);
+  const pageElement=useRef<HTMLElement|null>(null);
   const [signed,setSigned]=useState(false),[password,setPassword]=useState('');
   const [passwordRequired,setPasswordRequired]=useState(true),[checkingSession,setCheckingSession]=useState(true);
   const [page,setPage]=useState(FIRST_LAUNCH?'Setup':'Dashboard'),[notice,setNotice]=useState('');
+  usePageTransition(pageElement,page);
   const [online,setOnline]=useState(false),[status,setStatus]=useState<Status|null>(null);
   const [logs,setLogs]=useState<Entry[]>([]),[debug,setDebug]=useState(false),[scroll,setScroll]=useState(true);
   const [settings,setSettings]=useState<SettingsData|null>(null),[values,setValues]=useState<Record<string,any>>({});
@@ -162,18 +163,20 @@ function App(){
     else setNotice(status.error||'Screenshot could not be captured');
   },[status]);
   useLayoutEffect(()=>{
-    const palette=interfacePalette(interfaceId);
+    const palette=harborPalette;
+    document.documentElement.dataset.interface='harbor';
     document.documentElement.dataset.appearance=palette.appearance;
     document.documentElement.style.colorScheme=palette.appearance;
     for(const [key,value] of Object.entries(paletteProperties(palette)))
       document.documentElement.style.setProperty(key,value);
-  },[interfaceId]);
+  },[]);
   async function captureScreen(part:Part|null=null,pan=false){
     setCaptureIntent(part);pendingCapture.current=true;
     const result=await attempt(()=>api('capture'+(pan?'/pan':''),'POST'));
     if(!result)pendingCapture.current=false;
   }
   function navigate(next:string){
+    if(next===page)return;
     if(dirty&&!confirm('Leave these unsaved settings?'))return;
     if(dirty&&settings){draftVersion.current++;setValues(settings.values);setDirty(false);}
     setPage(next);
@@ -246,9 +249,8 @@ function App(){
     <div className="sidebar-bottom"><button className="account-shortcut" onClick={()=>navigate('Accounts')}><span className="avatar">{status?.account?.nickname?.slice(0,2).toUpperCase()||'CC'}</span><span><strong>{status?.account?.nickname||'No account selected'}</strong><small><i className={'status-dot '+(online?'connected':'')}/>{online?'Connected':'Reconnecting'}</small></span><Icon name="chevron" size={15}/></button>
     {FIRST_LAUNCH&&<button disabled={locked} onClick={()=>location.assign('/')}>Exit first-launch test</button>}
     {passwordRequired&&<button className="quiet" onClick={()=>attempt(async()=>{await api('logout','POST');expired();})}><Icon name="logout" size={17}/>Sign out</button>}</div></aside>
-    <main id="main-content" className={'page page-'+page.toLowerCase()}>{FIRST_LAUNCH&&<div className="notice">First-launch test · changes are kept separate from your saved setup.</div>}
+    <main ref={pageElement} id="main-content" className={'page page-'+page.toLowerCase()}>{FIRST_LAUNCH&&<div className="notice">First-launch test · changes are kept separate from your saved setup.</div>}
     <header className="page-header"><h1>{pageLabels[page]||page}</h1><div className="header-actions">
-      <InterfacePicker value={interfaceId} onChange={chooseInterface}/>
       {status?.account&&<button className="header-account quiet" title={status.account.nickname} onClick={()=>navigate('Accounts')}><span className="avatar">{status.account.nickname.slice(0,2).toUpperCase()}</span><span>{status.account.nickname}</span></button>}
       {!online&&<span className="connection"><i className="status-dot working"/>Reconnecting</span>}
       {page!=='Dashboard'&&canStop&&<button className="danger" disabled={!online} onClick={()=>command('stop')}><Icon name="stop" size={16}/>Stop</button>}
@@ -275,7 +277,7 @@ function App(){
           (status?.active&&(status.operation!=='bot'||status.state!=='running'))}
           onClick={()=>attempt(()=>api('farm','POST'))}><Icon name="swords" size={17}/>Farm now</button></div>
       {status?.error&&<div className="run-error" role="alert"><Icon name="info" size={17}/>{status.error}</div>}</section>
-      <div className="dashboard-grid">{interfaceId==='harbor'?[resourcePanel,activityPanel]:[activityPanel,resourcePanel]}</div>
+      <div className="dashboard-grid">{[resourcePanel,activityPanel]}</div>
     </>}
     {page==='Accounts'&&<Accounts api={api} locked={locked} result={status?.result} operation={status?.operation||null}
       working={!!status?.active} jobError={status?.error||null} live={()=>setLive(true)} onChanged={reload} stop={()=>command('stop')}/>}

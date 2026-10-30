@@ -1,46 +1,42 @@
-# Web interfaces
+# Harbor web interface
 
-Use **Interface** in the page header to choose **Original**, **Watchtower**, or
-**Harbor**. The choice applies immediately and stays in this browser, independently
-of the game account. Other browsers keep their own choice. Original remains the
-default layout.
+Harbor is the only web interface. Every browser opens it automatically, regardless of
+any previously saved Original or Watchtower preference. There is no interface or web
+theme selector. Legacy desktop theme settings remain separate.
 
-Switching retains the current page, open dialogs, calibration selections, and unsaved
-settings. It sends no command to the controller and requires no bot restart. If browser
-storage is unavailable, switching still works for the current session. The first-launch
-test has a separate preference, so experimenting there does not change the normal view.
+The sidebar and page toolbar use translucent fills, backdrop blur, and quiet edge
+highlights. Settings, activity logs, account cards, and other content stay opaque for
+readability. Browsers without backdrop-filter support receive solid navigation surfaces.
+Reduced-transparency and increased-contrast preferences remove the wallpaper and glass.
 
-Watchtower uses graphite surfaces with an amber accent, a horizontal navigation
-rail, and a compact activity ledger with tabular timestamps. Harbor uses a light
-pearl palette with a blue accent, a persistent sidebar, horizontal settings categories,
-larger grouped inputs, and a resource summary above the activity feed. Original keeps
-the previous layout with the graphite palette. Both new interfaces retain every
-operational page and control, keyboard focus indicators, and reduced-motion support.
-At narrow widths, navigation scrolls horizontally and settings fields stack below labels.
+Sidebar navigation animates the existing page element for 180 ms with a short fade and
+8 px rise. It does not remount the application, delay input, or restart the controller.
+Further navigation cancels the previous animation. Reduced motion disables it.
 
-The interface choice includes its palette. The old separate web Theme menu is removed.
-Legacy desktop theme preferences are retained for the desktop fallback and do not
-change the browser's appearance.
+The original mountain-and-lake wallpaper is served locally from
+`web/public/harbor-wallpaper.jpg`; it adds about 180 KiB, makes no third-party requests,
+and is fixed rather than animated. It was generated using the built-in image tool and
+JPEG-encoded without altering the scene. Prompt: “A peaceful alpine mountain lake,
+layered blue mountains, an evergreen peninsula, soft morning light, pearl-blue sky,
+spacious low-contrast center, muted blue/slate/sage, no text, logos, or UI.”
 
-The implementation shares the mounted React tree. `InterfacePicker.tsx` manages the
-validated browser preference; `interfaces.css` scopes layout rules to the root
-`data-interface` attribute. `interfacePalettes.ts` defines semantic colors and
-maps the interface to its palette. The root also gets `data-appearance` and a matching
-`color-scheme`, so native inputs and pop-up menus use the appropriate appearance.
-Do not key the application by interface: remounting would discard in-progress work.
+`harbor.css` controls layout and materials, `interfacePalettes.ts` defines the single
+semantic palette, and `pageTransition.ts` manages cancellable motion. Obsolete interface
+selection code, alternate layout CSS, and the dark palette are removed. Existing browser
+preferences are ignored; no storage migration or account-settings edit is required.
 
-Run `pnpm --dir web test` and `pnpm --dir web run build` after changes. For visual
-checks, use `scripts/preview_web_offline.py` with the compiled assets. Check all three
-interfaces at desktop and narrow widths, then edit a setting, switch interfaces, and
-verify the draft and selected category remain intact. Reload to check persistence.
-Palette checks enforce 4.5:1 for text and action labels, and 3:1 for resource meters.
-The preview uses temporary configuration and forbids live ADB calls.
+Run `pnpm --dir web test` and `pnpm --dir web run build`. Check sidebar navigation,
+unsaved settings, keyboard focus, narrow widths, and motion preferences in the isolated
+`scripts/preview_web_offline.py` preview before deployment. Color tests enforce 4.5:1
+text/action contrast and 3:1 field boundaries and resource meters.
 
-Design references: the [Unslop skill](https://heydamir.design/unslop) by Damir
-Sokolovsky (@heydamir), CC BY 4.0, informed Watchtower's spacing, quiet chrome,
-typographic hierarchy, and restrained use of color. Apple's Human Interface Guidelines
-for [layout](https://developer.apple.com/design/human-interface-guidelines/layout),
-[accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility),
-and [settings](https://developer.apple.com/design/human-interface-guidelines/settings)
-informed Harbor's adaptive grouping and controls. These are web interfaces, not
-imitations of native macOS windows.
+Design references: [Unslop](https://heydamir.design/unslop) by Damir Sokolovsky
+(@heydamir), CC BY 4.0, informed spacing, hierarchy, icon consistency, and restraint.
+Apple's [materials](https://developer.apple.com/design/human-interface-guidelines/materials)
+and [motion](https://developer.apple.com/design/human-interface-guidelines/motion) guidance
+informed navigation-only glass and brief, optional transitions.
+
+The suggested [liquid-glass-js](https://github.com/dashersw/liquid-glass-js) implementation
+was reviewed. It uses page snapshots and WebGL; this app uses native CSS backdrop filters
+instead, with no html2canvas dependency, custom WebGL contexts, or snapshot rendering.
+This is a web approximation of glass, not Apple's native Liquid Glass material.

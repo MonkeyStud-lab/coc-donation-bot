@@ -30,7 +30,7 @@ automation is stopped.
   reserves. Pet upgrades use a separate slot and prefer unassigned pets.
   Previewing and starting an upgrade are separate actions.
 - **Browser controls:** Start/Stop, resource refill status, activity logs,
-  responsive settings, switchable interfaces, guided calibration, and calibration backups.
+  responsive settings, the Harbor interface, guided calibration, and calibration backups.
 - **Builder Base (experimental):** account-visit checks for an equipped
   six-Night-Witch/Battle-Machine army, resource collection, supported Suggested
   building upgrades, and Night Witch research. Handles both battle stages,
@@ -238,10 +238,9 @@ Settings remain editable while the bot runs. **Save & restart** validates change
 waits for the current donation/attack to finish, then restarts with the new settings.
 **Stop** cancels a pending restart. While stopped, **Save** applies settings without
 starting automation. Release manual control before saving.
-Use **Interface** in the page header to switch between **Watchtower** (graphite and
-amber), **Harbor** (pearl and blue), and the **Original** layout. The matching palette
-applies immediately and the choice stays in this browser, without a save or restart.
-Switching preserves unsaved settings. See [interface variants](docs/UI_INTERFACES.md).
+The browser uses **Harbor**, a pearl-and-blue interface with a locally served scenic
+wallpaper, glass navigation, and brief page transitions. Reduced-motion and
+reduced-transparency preferences are respected. See [Harbor](docs/UI_INTERFACES.md).
 
 Automatic farming follows resource levels rather than a countdown. The bot does
 not schedule session breaks or close Clash because of elapsed runtime. Old break

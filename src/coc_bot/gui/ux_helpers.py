@@ -93,7 +93,6 @@ def live_status_label(
     practice: bool,
     oneshot_farm: bool,
     game_state: GameState | None,
-    on_break: bool,
     loop_state: str | None = None,
 ) -> tuple[str, str]:
     """
@@ -103,8 +102,6 @@ def live_status_label(
     """
     if oneshot_farm:
         return "Farming…", "accent"
-    if on_break:
-        return "On break", "accent"
     if not running:
         return "Stopped", "secondary"
     if practice:
@@ -112,8 +109,6 @@ def live_status_label(
     else:
         prefix = ""
 
-    if game_state == GameState.ON_BREAK:
-        return f"{prefix}On break".strip(), "accent"
     if game_state in (
         GameState.ATTACK_MENU,
         GameState.MATCHMAKING,
@@ -133,10 +128,6 @@ def live_status_label(
     if loop_state == "farm":
         return f"{prefix}Farming…".strip(), "accent"
     return f"{prefix}Running".strip(), "success"
-
-
-def break_timer_caption(*, on_break: bool) -> str:
-    return "BREAK LEFT" if on_break else "NEXT BREAK"
 
 
 FIXIT_RECIPES: tuple[FixItRecipe, ...] = (

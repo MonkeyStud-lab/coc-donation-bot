@@ -1,11 +1,11 @@
 """Runtime exports loaded lazily to avoid importing ADB during utility imports."""
 from importlib import import_module
 
-__all__ = ["BreakManager", "GameState", "GameStateMachine", "RuntimeTracker"]
+__all__ = ["GameState", "GameStateMachine", "RuntimeTracker"]
 
 
 def __getattr__(name):
-    modules = {"BreakManager": "breaks", "GameState": "game_state",
+    modules = {"GameState": "game_state",
                "GameStateMachine": "game_state", "RuntimeTracker": "tracker"}
     if name not in modules:
         raise AttributeError(name)

@@ -43,10 +43,6 @@ class BotConfig:
     action_delay_ms: tuple[int, int]
     scan_interval_ms: tuple[int, int]
     anti_idle_seconds: int
-    session_limit_seconds: int
-    session_limit_variance_seconds: int
-    break_min_seconds: int
-    break_max_seconds: int
     game_load_timeout_seconds: int
     state_watchdog_seconds: int
     frame_width: int = 0
@@ -87,20 +83,20 @@ class BotConfig:
     upgrade_pets_enabled: bool = False
     upgrade_pets_include_assigned: bool = False
     upgrade_interval_seconds: int = 900
-    upgrade_builders_reserved: int = 1
-    upgrade_gold_reserve: int = 1_000_000
-    upgrade_elixir_reserve: int = 2_000_000
-    upgrade_dark_elixir_reserve: int = 50_000
+    upgrade_builders_reserved: int = 0
+    upgrade_gold_reserve: int = 0
+    upgrade_elixir_reserve: int = 0
+    upgrade_dark_elixir_reserve: int = 0
     upgrade_excluded_names: str = ''
     builder_base_attacks_enabled: bool = False
     builder_base_upgrades_enabled: bool = False
     builder_base_collect_resources: bool = False
     builder_base_research_enabled: bool = False
     builder_base_progression_enabled: bool = False
-    builder_base_elixir_reserve: int = 100_000
+    builder_base_elixir_reserve: int = 0
     builder_base_interval_seconds: int = 3600
     builder_base_builders_reserved: int = 0
-    builder_base_gold_reserve: int = 100_000
+    builder_base_gold_reserve: int = 0
     farm_interval_seconds: int = 3600
     farm_interval_variance_seconds: int = 300
     farm_resource_start_percent: int = 75
@@ -320,12 +316,6 @@ def load_config(
         action_delay_ms=_ms_range(timing.get("action_delay_ms"), (120, 350)),
         scan_interval_ms=_ms_range(timing.get("scan_interval_ms"), (800, 1500)),
         anti_idle_seconds=int(timing.get("anti_idle_seconds", 60)),
-        session_limit_seconds=runtime.get("session_limit_seconds", 4 * 3600),
-        session_limit_variance_seconds=max(
-            0, int(runtime.get("session_limit_variance_seconds", 300))
-        ),
-        break_min_seconds=runtime.get("break_min_seconds", 600),
-        break_max_seconds=runtime.get("break_max_seconds", 900),
         game_load_timeout_seconds=runtime.get("game_load_timeout_seconds", 90),
         state_watchdog_seconds=runtime.get("state_watchdog_seconds", 45),
         frame_width=int(merged.get("frame_width") or 0),
@@ -360,20 +350,20 @@ def load_config(
         upgrade_pets_enabled=upgrades.get('pets_enabled') is True,
         upgrade_pets_include_assigned=upgrades.get('pets_include_assigned') is True,
         upgrade_interval_seconds=max(60,int(upgrades.get('interval_seconds',900))),
-        upgrade_builders_reserved=max(0,min(6,int(upgrades.get('builders_reserved',1)))),
-        upgrade_gold_reserve=max(0,int(upgrades.get('gold_reserve',1_000_000))),
-        upgrade_elixir_reserve=max(0,int(upgrades.get('elixir_reserve',2_000_000))),
-        upgrade_dark_elixir_reserve=max(0,int(upgrades.get('dark_elixir_reserve',50_000))),
+        upgrade_builders_reserved=max(0,min(6,int(upgrades.get('builders_reserved',0)))),
+        upgrade_gold_reserve=max(0,int(upgrades.get('gold_reserve',0))),
+        upgrade_elixir_reserve=max(0,int(upgrades.get('elixir_reserve',0))),
+        upgrade_dark_elixir_reserve=max(0,int(upgrades.get('dark_elixir_reserve',0))),
         upgrade_excluded_names=str(upgrades.get('excluded_names','')),
         builder_base_attacks_enabled=builder_base.get('attacks_enabled') is True,
         builder_base_upgrades_enabled=builder_base.get('upgrades_enabled') is True,
         builder_base_collect_resources=builder_base.get('collect_resources') is True,
         builder_base_research_enabled=builder_base.get('research_enabled') is True,
         builder_base_progression_enabled=builder_base.get('progression_enabled') is True,
-        builder_base_elixir_reserve=max(0,int(builder_base.get('elixir_reserve',100_000))),
+        builder_base_elixir_reserve=max(0,int(builder_base.get('elixir_reserve',0))),
         builder_base_interval_seconds=max(300,int(builder_base.get('interval_seconds',3600))),
         builder_base_builders_reserved=max(0,min(3,int(builder_base.get('builders_reserved',0)))),
-        builder_base_gold_reserve=max(0,int(builder_base.get('gold_reserve',100_000))),
+        builder_base_gold_reserve=max(0,int(builder_base.get('gold_reserve',0))),
         farm_interval_seconds=int(farm.get("interval_seconds", 3600)),
         farm_interval_variance_seconds=max(0, int(farm.get("interval_variance_seconds", 300))),
         farm_resource_start_percent=int(farm.get('resource_start_percent', 75)),

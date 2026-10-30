@@ -146,10 +146,16 @@ class ProgressionRunner(UpgradeRunner):
         chosen=self.reader.selected_filter(self.capture.screenshot())
         if chosen is None or max(abs(a-b) for a,b in zip(chosen,point))>5:
             raise ValueError('Construction resource filter did not select the intended currency')
+        settled=self.reader.selected_filter(self.capture.screenshot())
+        if settled!=chosen or self.stopped():
+            raise ValueError('Construction resource filter changed before returning to the list')
         self.input.tap(round(w*.27),round(h*.60),jitter=0)
         if self.wait():return None
         frame=self.capture.screenshot()
-        if self.reader.menu_kind(frame)!='buildings' or compact(self.reader.label(frame,(.79,.065,.97,.106)))!='filtered':
+        # The current UI does not always print "Filtered". Two settled native
+        # checkbox observations prove the currency selection; find_row still
+        # requires the exact fresh building/name/price/currency before any preview.
+        if self.reader.menu_kind(frame)!='buildings':
             raise ValueError('Filtered building list was not verified')
         return frame
 
@@ -193,6 +199,28 @@ class ProgressionRunner(UpgradeRunner):
                 'recommendations':choices,'section_complete':True}
 
     def run(self, kind, *, execute=False, expected=None):
+        result=self._run_once(kind,execute=execute,expected=expected)
+        target=getattr(self,'target',None)
+        if (execute and kind=='buildings' and isinstance(target,dict)
+            and result.get('status') in ('blocked','changed','no_room') and not self.stopped()
+            and not self.state().get('pending')):
+            # A failed unpaid preview must not idle every other builder forever.
+            # Keep the row in the full inventory so it still blocks Town Hall.
+            from coc_bot.accounts.store import read,write
+            path=self.path.with_name('candidate-retries.json')
+            retries=read(path,{})
+            retries[self.retry_key(target)]={'retry_at':time.time()+300,'reason':result.get('message')}
+            if target.get('new'):
+                retries['construction']={'retry_at':time.time()+300,'reason':result.get('message')}
+            write(path,retries)
+            return result|{'retry_other_candidates':True}
+        return result
+
+    @staticmethod
+    def retry_key(row):
+        return hashlib.sha256(json.dumps(row_key(row)).encode()).hexdigest()
+
+    def _run_once(self, kind, *, execute=False, expected=None):
         self.target = None
         if kind not in ('buildings','research'):
             return super().run(kind,execute=execute,expected=expected)
@@ -283,8 +311,12 @@ class ProgressionRunner(UpgradeRunner):
                 # existing upgrades retain construction-first ordering.
                 candidates = sorted(ordinary,key=priority)
             free = self.reader.availability(self.capture.screenshot(),kind)
+            from coc_bot.accounts.store import read
+            retries=read(self.path.with_name('candidate-retries.json'),{}) if kind=='buildings' else {}
             choices = []
             for row in candidates:
+                if time.time()<retries.get(self.retry_key(row),{}).get('retry_at',0):continue
+                if row.get('new') and time.time()<retries.get('construction',{}).get('retry_at',0):continue
                 if not row['cost'] or row['currency'] not in ('gold','elixir','dark_elixir'):
                     continue
                 candidate = Candidate(row['name'],row['cost'],row['currency'],row['point'])
@@ -293,7 +325,7 @@ class ProgressionRunner(UpgradeRunner):
                 return {'status':'waiting','message':'Build new structures first; waiting for resources or builders' if new
                         else 'No eligible research; waiting for resources or a free Laboratory' if kind=='research'
                         else 'No eligible building; Town Hall remains gated by the full inventory',
-                        'town_hall_blockers':town_hall_blockers(inventory) if kind=='buildings' else []}
+                        'availability':free,'town_hall_blockers':town_hall_blockers(inventory) if kind=='buildings' else []}
             self.target = choices[0]
             token = hashlib.sha256(json.dumps([kind,compact(self.target['name']),self.target['cost'],
                                               self.target['currency']]).encode()).hexdigest()

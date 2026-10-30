@@ -14,7 +14,12 @@ class Accounts:
         rotation=RotationStore(self.store).load()
         from coc_bot.accounts.clan import membership
         import time
-        accounts=[a|{'clan_tag':membership(self.store,a,time.time())} for a in state['accounts']]
+        from coc_bot.accounts.store import read
+        accounts=[]
+        for a in state['accounts']:
+            maintenance=read(self.store.profile(a)/'data/upgrades/maintenance.json',{})
+            accounts.append(a|{'clan_tag':membership(self.store,a,time.time()),
+                               'maintenance':maintenance if maintenance.get('account')==a['tag'] else {}})
         return {k: state[k] for k in ('active', 'pending')} | {'accounts':accounts,'rotation':rotation}
 
     def configure_rotation(self, **values):

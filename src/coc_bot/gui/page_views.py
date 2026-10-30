@@ -182,12 +182,11 @@ class PageViewsMixin:
         timers.pack(fill=tk.X, pady=(14, 0))
         self._home_timers_frame = timers
         timers.columnconfigure(0, weight=1, uniform="home_timer")
-        timers.columnconfigure(1, weight=1, uniform="home_timer")
         farm_cell = tk.Frame(timers, bg=theme.SURFACE_2)
         farm_cell.grid(row=0, column=0, sticky="w")
         tk.Label(
             farm_cell,
-            text="Next farm attack",
+            text="Resource refill",
             bg=theme.SURFACE_2,
             fg=theme.TEXT_SECONDARY,
             font=ui_font(9, "bold"),
@@ -202,27 +201,6 @@ class PageViewsMixin:
             anchor="w",
         )
         self._farm_timer_label.pack(anchor=tk.W)
-
-        break_cell = tk.Frame(timers, bg=theme.SURFACE_2)
-        break_cell.grid(row=0, column=1, sticky="w", padx=(16, 0))
-        self._break_caption_label = tk.Label(
-            break_cell,
-            textvariable=self._break_caption_var,
-            bg=theme.SURFACE_2,
-            fg=theme.TEXT_SECONDARY,
-            font=ui_font(9, "bold"),
-            anchor="w",
-        )
-        self._break_caption_label.pack(anchor=tk.W)
-        self._break_timer_label = tk.Label(
-            break_cell,
-            textvariable=self._break_timer_var,
-            bg=theme.SURFACE_2,
-            fg=theme.TEXT,
-            font=ui_font(20, "bold"),
-            anchor="w",
-        )
-        self._break_timer_label.pack(anchor=tk.W)
 
         log_card = self._card(page, fill=tk.BOTH, expand=True)
         log_pad = tk.Frame(log_card, bg=theme.SURFACE_2)
@@ -300,7 +278,7 @@ class PageViewsMixin:
         self._settings_notebook = notebook
         self._settings_canvases = []
         bodies = {}
-        for name in ("Routine", "Breaks", "Appearance", "Advanced"):
+        for name in ("Routine", "Appearance", "Advanced"):
             tab = ttk.Frame(notebook)
             notebook.add(tab, text=name)
             canvas, body = make_scrollable(tab)
@@ -310,12 +288,11 @@ class PageViewsMixin:
         values = current_setting_values()
         dev = bool(values.get("gui_dev_options", False))
         routine = {"donate_open_requests", "gui_timing_preset", "farm_enabled", "farm_interval_seconds"}
-        breaks = {"session_limit_seconds", "break_min_seconds", "break_max_seconds"}
         appearance = {"gui_theme", "gui_show_debug_activity", "gui_practice_mode", "gui_dev_options"}
         for field in SETTINGS:
             if is_raw_timing_field(field.key) and not dev:
                 continue
-            name = ("Routine" if field.key in routine else "Breaks" if field.key in breaks
+            name = ("Routine" if field.key in routine
                     else "Appearance" if field.key in appearance else "Advanced")
             self._add_setting_row_modern(bodies[name][1], field, values[field.key])
         sequence_card = self._card(bodies["Routine"][1], padx=8, pady=4)

@@ -69,6 +69,18 @@ class UpgradeImageTests(unittest.TestCase):
     """Only isolated game controls are stored, with no account or village data."""
     fixtures=Path(__file__).with_name('fixtures')/'upgrades'
 
+    def test_discount_reads_payable_price_not_crossed_out_price(self):
+        frame=cv2.imread(str(self.fixtures/'discounted-confirmation-controls.png'))
+        reader=UpgradeReader()
+        self.assertIsNotNone(reader.confirmation(frame,Candidate('Archer',1_500_000,'elixir',(1,1))))
+        for name,price,resource in [('Archer',3_000_000,'elixir'),('Archer',150_000,'elixir'),
+                                    ('Archer',1_500_000,'gold'),('Archer',1_500_000,'gems'),
+                                    ('Giant',1_500_000,'elixir')]:
+            self.assertIsNone(reader.confirmation(frame,Candidate(name,price,resource,(1,1))))
+        # Without the observed strike, green text cannot authorize an alternate read.
+        altered=frame.copy();altered[944:955,1160:1445]=0
+        self.assertIsNone(reader.confirmation(altered,Candidate('Archer',1_500_000,'elixir',(1,1))))
+
     def pet_frame(self):
         frame=np.zeros((1048,1853,3),np.uint8)
         frame[:,1350:]=cv2.imread(str(self.fixtures/'pet-menu-panel.png'))

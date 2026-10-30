@@ -13,7 +13,7 @@ class BetweenAttackChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             bot=DonationBot.__new__(DonationBot);bot.config=load_config();bot.config.data_dir=Path(root)
             bot._stop_requested=False;bot.should_stop=lambda:False;bot._state='scan_chat'
-            bot.client=Mock();bot.break_manager=Mock();bot.tracker=Mock();bot.navigator=Mock();bot.farmer=Mock()
+            bot.client=Mock();bot.tracker=Mock();bot.navigator=Mock();bot.farmer=Mock()
             bot.navigator.ensure_clan_chat.return_value=True;bot.game_state=Mock()
             bot.set_mode=Mock();bot._set_state=Mock();bot._has_donate_request=Mock()
             bot._settings_stop_ready=lambda:False;bot._recover=Mock();bot._loop_tick=Mock()

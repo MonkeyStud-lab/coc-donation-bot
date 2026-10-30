@@ -23,8 +23,9 @@ Settings Save & restart uses a safe action boundary, not an immediate mid-attack
 restart. Stop cancels that pending change/restart. Revision validation prevents
 one browser silently overwriting another's draft. Settings and setup load within
 one account scope; an account change preserves an unsaved draft but blocks applying
-it to the new account. The session clock preserves paused time; an already-started
-break uses its real-time end timestamp. Resource demand replaces farm timers.
+it to the new account. Active runtime is recorded for diagnostics and pauses on
+Stop; it never forces a session break. Legacy break deadlines are ignored without
+resetting attack history. Resource demand replaces farm timers.
 
 ## Capture and recognition
 

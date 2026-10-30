@@ -3,13 +3,12 @@ import {EmptyState,Icon} from './ui';
 
 type Field={key:string;label:string;description:string;kind:string;choices:string[];section:string;advanced:boolean};
 const categories=[['General','settings'],['Donations','heart'],['Attacks','swords'],['Upgrades','hammer'],
-  ['Builder Base','castle'],['Breaks','clock'],['Appearance','palette'],['Screenshots','image'],['Device','link']];
+  ['Builder Base','castle'],['Appearance','palette'],['Screenshots','image'],['Device','link']];
 function category(f:Field){
   if(f.key.startsWith('builder_base_'))return 'Builder Base';
   if(/^(upgrade_|progression_|layouts_)/.test(f.key))return 'Upgrades';
   if(f.key.startsWith('farm_'))return 'Attacks';
   if(f.key.startsWith('collection_'))return 'Screenshots';
-  if(/session_|break_|offline_/.test(f.key))return 'Breaks';
   if(['gui_theme','gui_show_debug_activity','gui_dev_options'].includes(f.key))return 'Appearance';
   if(f.section==='Donation')return 'Donations';
   if(/Device|Clan/.test(f.section))return 'Device';
@@ -28,10 +27,10 @@ function SettingRow({field:f,value,edit}:{field:Field;value:any;edit:(v:any)=>vo
   </div>;
 }
 
-export function SettingsPanel({fields,values,search,setSearch,advanced,setAdvanced,dirty,saving,restarting,saveDisabled,resetDisabled,save,reset,edit,account,updateMessage,stop}: {
+export function SettingsPanel({fields,values,search,setSearch,advanced,setAdvanced,dirty,saving,restarting,saveDisabled,resetDisabled,save,reset,edit,updateMessage}: {
   fields:Field[];values:Record<string,any>;search:string;setSearch:(s:string)=>void;advanced:boolean;setAdvanced:(v:boolean)=>void;
   dirty:boolean;saving:boolean;restarting:boolean;saveDisabled:boolean;resetDisabled:boolean;save:()=>void;reset:()=>void;
-  edit:(key:string,value:any)=>void;account?:string;updateMessage?:string|null;stop:()=>void;
+  edit:(key:string,value:any)=>void;updateMessage?:string|null;
 }){
   const [selected,setSelected]=useState('General');
   const available=categories.filter(([name])=>fields.some(f=>category(f)===name));
@@ -41,13 +40,13 @@ export function SettingsPanel({fields,values,search,setSearch,advanced,setAdvanc
     <div className="page-actions settings-actions"><label className="search-field"><Icon name="search" size={18}/><input aria-label="Search settings" placeholder="Find a setting…" value={search} onChange={e=>setSearch(e.target.value)}/>
       {search&&<button className="icon-button" aria-label="Clear search" onClick={()=>setSearch('')}><Icon name="close" size={15}/></button>}</label>
       <label className="toggle"><input type="checkbox" checked={advanced} onChange={e=>setAdvanced(e.target.checked)}/>Advanced</label>
-      <div className="action-spacer"/><button disabled={resetDisabled||!dirty} onClick={reset}>Discard</button>
+      <div className="action-spacer"/>{(dirty||saving)&&<><button disabled={resetDisabled||!dirty} onClick={reset}>Discard</button>
       <button disabled={saveDisabled} className="primary" onClick={save}><Icon name={saving?'refresh':'check'} size={17}/>{saving?'Applying…':restarting?'Save & restart':'Save changes'}</button>
-      {saving&&<button className="danger" onClick={stop}>Stop</button>}
+      </>}
     </div>
     <div className="settings-layout"><nav className="settings-nav" aria-label="Setting categories">{available.map(([name,icon])=><button key={name} aria-current={!search&&active===name?'page':undefined}
       className={!search&&active===name?'selected':''} onClick={()=>{setSelected(name);setSearch('');}}><Icon name={icon} size={18}/>{name}</button>)}</nav>
-      <div className="settings-content">{account&&<div className="account-context"><Icon name="accounts" size={17}/><span>{account}</span>{dirty&&<span className="unsaved"><i/>Unsaved changes</span>}</div>}
+      <div className="settings-content">
       {updateMessage&&<div className="notice" role="status">{updateMessage}</div>}
       <section className="settings panel">{shown.map(f=><SettingRow key={f.key} field={f} value={values[f.key]} edit={v=>edit(f.key,v)}/>)}
       {!shown.length&&<EmptyState icon="search">No matching settings</EmptyState>}</section></div>

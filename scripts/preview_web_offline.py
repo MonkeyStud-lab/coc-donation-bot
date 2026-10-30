@@ -20,7 +20,6 @@ class FakeBot:
     def __init__(self, options):
         self.cancel = threading.Event()
         self.config = load_config()
-        self.tracker = SimpleNamespace(peek_remaining_seconds=lambda:14400)
     def run(self):
         self.cancel.wait()
     def request_stop(self):

@@ -54,17 +54,14 @@ class ReviewRegressions(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,'invalid'):visit.order()
                 self.assertEqual(visit.path.read_bytes(),before)
 
-    def test_invalid_runtime_numbers_cannot_poison_break_or_status_timers(self):
+    def test_invalid_active_runtime_is_rejected(self):
         path=self.config.data_dir/'runtime_state.json'
         for field,value in [('active_seconds',float('nan')),('active_seconds',float('inf')),
-                            ('active_seconds',-1),('active_seconds',True),('cycle_count',float('inf')),
-                            ('last_break_seconds',-20)]:
+                            ('active_seconds',-1),('active_seconds',True)]:
             with self.subTest(field=field,value=value):
                 path.write_text(json.dumps({field:value}))
                 state=load_runtime_state(path)
                 self.assertEqual(state.active_seconds,0)
-                self.assertEqual(state.cycle_count,0)
-                self.assertEqual(state.last_break_seconds,0)
 
     def test_failed_attack_completion_save_restores_previous_durable_identity(self):
         tracker=RuntimeTracker(self.config)

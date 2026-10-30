@@ -17,7 +17,7 @@ and input travel through ADB. No official Clash API or game-memory access is use
 - `control/` provides shared lifecycle, status/events, settings, calibration,
   backup, diagnostics, upgrade jobs, and attack-planner services.
 - `bot.py` orchestrates normal donation operation, optional farming/upgrades,
-  breaks, and recovery. `runtime/` tracks clocks, device leases, persistence,
+  and recovery. `runtime/` tracks clocks, device leases, persistence,
   diagnostic retention, and high-level transition logging.
 - `donation/`, `attack/`, `upgrades/`, and `vision/` implement game-specific reading
   and actions. `adb/` owns command execution, capture, ordinary input, app launch,
@@ -114,8 +114,8 @@ replace screen-specific checks or prove a donation happened.
 ## Attack methods
 
 `attack/farmer.py` selects the configured engine. Scheduled farming defaults off;
-`sequence` remains the default method. Farm now follows the selected method;
-Attacks → Automatic attack explicitly invokes automatic mode without saving it.
+`sequence` remains the default method. Farm now on Overview follows the selected
+method. Tools → Attacks contains advanced mapping, inspection, and custom routines.
 
 All methods navigate home → Multiplayer unranked → My Army → verified battlefield.
 The current UI's final Attack button is a distinct step. The legacy second-search
@@ -201,9 +201,9 @@ spending targets. See [upgrades](UPGRADES.md).
 
 ## Scheduling and persisted state
 
-`runtime/tracker.py` tracks active session time and the session-limit variance.
-Stop pauses the active-session clock. An already-started break retains its real-time end. Break handling closes
-Clash, waits, relaunches, and reopens verified chat.
+`runtime/tracker.py` records active runtime and durable farm completion history.
+Stop pauses active-runtime accounting. There is no session-limit shutdown, break
+wait, or break countdown. Older settings and saved break deadlines are ignored.
 
 A completed attack records its actual completion time and durable attack identity.
 Automatic farming uses verified storage demand; old farm clocks do not reschedule

@@ -5,10 +5,14 @@ one village runs at a time. Switch manually while stopped, or enable
 **Automatic account visits** and choose a main account with the Donating role.
 
 Automatic visits return to the main donor between every secondary account.
-The donor normally has a 15-minute watch window between secondary visits.
-Secondary accounts are checked in oldest-visit order, no more often than every
-30 minutes. Visits have no three-minute cutoff: they finish their saved
-resource/upgrade checklist. Battles and payments finish before switching.
+The donor normally has a 15-minute watch window between completed secondary visits.
+Long secondary visits yield at a receipt-free action boundary after about two
+minutes, preserving their checklist and remaining upgrade categories. Their next
+donor window is twice the time spent away (at least one minute, capped by the
+configured watch window); unfinished work is due again after five minutes.
+Completed visits with deferred or blocked work are also due again after five
+minutes; other completed visits retain their configured interval. Oldest-serviced accounts
+get the next eligible turn. Battles and payments always finish before switching.
 Blocked checks are recorded with a retry delay; they do not certify completion.
 
 Each visit runs only that account's enabled features and roles. Stop freezes
@@ -24,7 +28,8 @@ inventory-conversion dialogs remain blocked. These navigation steps never prove
 which account loaded: the independent Profile and Settings tag checks still
 have to pass before automation resumes.
 
-Each visit refills Home resources, checks normal Clan Castle requests, checks
+Each new visit first checks Home builders/Laboratory/pets before a long refill.
+It then refills Home resources, checks normal Clan Castle requests, checks
 Home buildings/Laboratory/pets, then visits Builder Base if enabled. Optional
 layouts retain their existing opt-in/recovery rules. Home refill starts below
 75% and continues to 95% by default; both percentages are adjustable. Builder
@@ -93,7 +98,12 @@ village loads, it checks the player tag again. It stays stopped; press Start
 when you are ready to run that account's enabled tasks.
 
 An ordinary Start verifies identity from the Home Village account menu. During
-continuous rotation, the just-completed switch can hand its verification to the
+startup, a different independently verified tag can select an already-saved
+account and load that account's own settings/calibration. Unknown accounts,
+pending switches, changed registry state, and unresolved receipts are never
+silently adopted or cleared. This also works without automatic rotation and in
+practice mode. A manually loaded village does not need to be added again.
+During continuous rotation, the just-completed switch can hand its verification to the
 next worker once, within 30 seconds, on the same thread, device, profile and
 still-held device lease. A fresh Home/clan-chat screenshot is still required.
 Expired proofs, restarts, changed screens and interrupted layout recovery use

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import random
 import threading
 import time
 from datetime import datetime, timezone
@@ -12,52 +11,6 @@ from coc_bot.config import BotConfig
 from coc_bot.runtime.persistence import load_runtime_state, save_runtime_state
 
 
-def roll_session_limit_seconds(base: int, variance: int) -> int:
-    """Pick a session length in [base-variance, base+variance], never below 60s."""
-    base = max(60, int(base))
-    variance = max(0, int(variance))
-    if variance <= 0:
-        return base
-    lo = max(60, base - variance)
-    hi = base + variance
-    if hi < lo:
-        return lo
-    return random.randint(lo, hi)
-
-
-def format_duration_short(seconds: float) -> str:
-    """Compact countdown like 2h 15m / 12m 5s / 40s."""
-    total = max(0, int(seconds))
-    hours, rem = divmod(total, 3600)
-    minutes, secs = divmod(rem, 60)
-    if hours:
-        return f"{hours}h {minutes}m"
-    if minutes:
-        return f"{minutes}m {secs}s"
-    return f"{secs}s"
-
-
-def break_status_line(tracker: RuntimeTracker) -> str:
-    """Short Home-tab line for time until the next session break."""
-    state = tracker.state
-    if state.break_until:
-        try:
-            until = datetime.fromisoformat(state.break_until)
-        except ValueError:
-            until = None
-        if until is not None:
-            now = datetime.now(timezone.utc)
-            if until.tzinfo is None:
-                until = until.replace(tzinfo=timezone.utc)
-            left = (until - now).total_seconds()
-            if left > 0:
-                return f"Break: in progress — resumes in {format_duration_short(left)}"
-    remaining = tracker.peek_remaining_seconds()
-    if remaining <= 0:
-        return "Break: due on next check"
-    return f"Break: next in {format_duration_short(remaining)}"
-
-
 class RuntimeTracker:
     """Track active donation-loop runtime with persisted state."""
 
@@ -67,18 +20,13 @@ class RuntimeTracker:
         self.state = load_runtime_state(self.state_path)
         self._loop_start: float | None = None
         self._paused = False
-        # The bot loop ticks this tracker while the GUI thread polls it for
-        # countdown text; every read-modify-write on ``state`` goes through here.
+        # Runtime and attack receipts share this persisted state across threads.
         self._lock = threading.RLock()
 
     @property
     def active_seconds(self) -> float:
         return self.state.active_seconds
 
-    @property
-    def limit_reached(self) -> bool:
-        with self._lock:
-            return self.state.active_seconds >= self.effective_session_limit_seconds()
 
     def start_loop_timing(self) -> None:
         with self._lock:
@@ -108,83 +56,6 @@ class RuntimeTracker:
 
     def tick(self) -> None:
         self._flush()
-
-    def reset_after_break(self, break_seconds: int) -> None:
-        with self._lock:
-            self._flush()
-            self.state.active_seconds = 0.0
-            self.state.last_break_seconds = break_seconds
-            self.state.cycle_count += 1
-            self.state.break_until = None
-            rolled = self._roll_next_session_limit()
-            self.state.next_session_limit_seconds = rolled
-            save_runtime_state(self.state_path, self.state)
-            self._loop_start = time.monotonic()
-        base = max(60, int(self.config.session_limit_seconds))
-        variance = max(0, int(self.config.session_limit_variance_seconds))
-        logger.info(
-            "Runtime reset after break ({}s). Cycle count: {}. Next session limit {}s "
-            "(base {}s ± {}s)",
-            break_seconds,
-            self.state.cycle_count,
-            rolled,
-            base,
-            variance,
-        )
-
-    def set_break_until(self, iso_timestamp: str, break_seconds: int | None = None) -> None:
-        with self._lock:
-            self.state.break_until = iso_timestamp
-            if break_seconds is not None:
-                self.state.last_break_seconds = break_seconds
-            save_runtime_state(self.state_path, self.state)
-
-    def _roll_next_session_limit(self) -> int:
-        return roll_session_limit_seconds(
-            self.config.session_limit_seconds,
-            self.config.session_limit_variance_seconds,
-        )
-
-    def effective_session_limit_seconds(self) -> int:
-        """
-        Session length used for the current run before a forced break.
-
-        Persists a rolled value so status and limit checks stay aligned until
-        the next break re-rolls it.
-        """
-        with self._lock:
-            stored = self.state.next_session_limit_seconds
-            if stored is not None and int(stored) >= 60:
-                return int(stored)
-            rolled = self._roll_next_session_limit()
-            self.state.next_session_limit_seconds = rolled
-            save_runtime_state(self.state_path, self.state)
-            logger.debug(
-                "Rolled session limit target {}s (base {} ± {})",
-                rolled,
-                max(60, int(self.config.session_limit_seconds)),
-                max(0, int(self.config.session_limit_variance_seconds)),
-            )
-            return rolled
-
-    def remaining_seconds(self) -> float:
-        """Flush elapsed loop time to disk, then return seconds until the session limit."""
-        with self._lock:
-            self._flush()
-            return max(0.0, self.effective_session_limit_seconds() - self.state.active_seconds)
-
-    def peek_remaining_seconds(self) -> float:
-        """
-        Read-only variant for status displays (GUI thread).
-
-        Accounts for un-flushed loop time without mutating ``state`` or writing
-        the state file, so it is safe to call while the bot thread is ticking.
-        """
-        with self._lock:
-            active = self.state.active_seconds
-            if self._loop_start is not None and not self._paused:
-                active += time.monotonic() - self._loop_start
-            return max(0.0, self.effective_session_limit_seconds() - active)
 
 
     def mark_farm_success(self, *, attack_id=None) -> None:

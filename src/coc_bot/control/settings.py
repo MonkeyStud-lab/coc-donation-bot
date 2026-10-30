@@ -2,7 +2,7 @@
 from dataclasses import asdict
 import hashlib
 import math
-from coc_bot.config import user_settings_path
+from coc_bot.config import user_settings_path, load_user_settings, save_user_settings
 from coc_bot.control.settings_fields import (
     SETTINGS, current_setting_values, save_settings_from_gui, parse_int_pair,
     is_raw_timing_field,
@@ -11,6 +11,12 @@ from coc_bot.control.settings_fields import (
 )
 from coc_bot.control.themes import THEMES
 from coc_bot.calibration.transactions import calibration_locked
+
+# These preferences are consumed by interfaces, not the automation worker.
+LIVE_INTERFACE_FIELDS = frozenset({"gui_theme", "gui_show_debug_activity", "gui_dev_options"})
+OPTIONAL_RESERVES = frozenset({"upgrade_builders_reserved", "upgrade_gold_reserve",
+    "upgrade_elixir_reserve", "upgrade_dark_elixir_reserve", "builder_base_builders_reserved",
+    "builder_base_gold_reserve", "builder_base_elixir_reserve"})
 
 
 class RevisionConflict(ValueError):
@@ -28,7 +34,9 @@ def revision():
 def settings_snapshot():
     return {"revision": revision(), "values": current_setting_values(),
             "fields": [{k: v for k, v in asdict(f).items() if k != "getter"}
-                       | {"advanced": is_raw_timing_field(f.key)}
+                       | {"advanced": is_raw_timing_field(f.key),
+                          "restart_required": f.key not in LIVE_INTERFACE_FIELDS,
+                          "expert": f.key in OPTIONAL_RESERVES}
                        for f in SETTINGS],
             "themes": [asdict(t) for t in THEMES.values()]}
 
@@ -67,6 +75,40 @@ def validate_settings(values, expected_revision):
                 raise ValueError(f"Invalid {f.label}")
     build_user_settings_payload(complete)  # Include field-specific persistence rules before stopping.
     return complete
+
+
+def _field_value(payload, field):
+    for part in field.yaml_path:
+        payload = payload[part]
+    return payload
+
+
+def changed_settings(complete):
+    """Compare persisted values, including numeric text from browser inputs."""
+    before = build_user_settings_payload(current_setting_values())
+    after = build_user_settings_payload(complete)
+    return {f.key for f in SETTINGS if _field_value(before, f) != _field_value(after, f)}
+
+
+@calibration_locked
+def save_interface_settings(values, expected_revision):
+    complete = validate_settings(values, expected_revision)
+    changed = changed_settings(complete)
+    if not changed <= LIVE_INTERFACE_FIELDS:
+        raise ValueError("Bot settings require the normal settings save")
+    if changed:
+        # Avoid the operational save path: it also reapplies timing presets.
+        # Preserve every other setting, including unknown extension keys.
+        existing = load_user_settings()
+        incoming = build_user_settings_payload(complete)
+        for field in SETTINGS:
+            if field.key in changed:
+                cursor = existing
+                for part in field.yaml_path[:-1]:
+                    cursor = cursor.setdefault(part, {})
+                cursor[field.yaml_path[-1]] = _field_value(incoming, field)
+        save_user_settings(existing)
+    return settings_snapshot()
 
 
 @calibration_locked

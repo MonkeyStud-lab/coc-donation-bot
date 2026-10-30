@@ -62,14 +62,28 @@ class RotationStore:
         eligible=[a for a in self.accounts.load()['accounts'] if a['id']!=state['primary_id'] and
                   set(a['roles']) & {'farming','upgrading','builder_base'} and
                   state['visits'].get(a['id'],{}).get('next_visit_at',0)<=now]
-        return min(eligible,key=lambda a:state['visits'].get(a['id'],{}).get('last_finished_at',0),default=None)
+        return min(eligible,key=lambda a:state['visits'].get(a['id'],{}).get('last_checked_at',
+                   state['visits'].get(a['id'],{}).get('last_finished_at',0)),default=None)
 
-    def complete(self, ident, now, elapsed):
+    def complete(self, ident, now, elapsed, *, suspended=False):
         state=self.load();visit=state['visits'].setdefault(ident,{})
-        visit.update(last_finished_at=now,seconds=elapsed,next_visit_at=now+state['interval_seconds'])
+        visit.update(last_checked_at=now,seconds=elapsed,
+                     next_visit_at=now+(min(300,state['interval_seconds']) if suspended else state['interval_seconds']))
+        account=self.accounts.account(ident)
+        if account and ident!=state['primary_id'] and not suspended:
+            data=self.accounts.profile(account)/'data'
+            checklist=read(data/'visits/state.json',{})
+            maintenance=read(data/'upgrades/maintenance.json',{})
+            attention=any(v.get('status') in ('blocked','changed','no_room','waiting','needs_review')
+                          for v in maintenance.get('categories',{}).values())
+            if checklist.get('deferred') or attention:
+                visit['next_visit_at']=min(visit['next_visit_at'],now+300)
+        if not suspended:visit['last_finished_at']=now
         # Goal-based visits can legitimately include several battles. Do not
         # turn one long visit into hours of starvation for the remaining queue.
         if ident!=state['primary_id']:state['next_watch_seconds']=state['watch_seconds']
+        if suspended:
+            state['next_watch_seconds']=min(state['watch_seconds'],max(60,round(elapsed*2)))
         write(self.path,state)
 
     def work_order(self, ident):
@@ -194,6 +208,12 @@ class AccountFleet:
         if visit and visit.complete():
             self._next=state['primary_id']
             return True
+        if visit and now-started>=120:
+            # A receipt-free checkpoint after an action, never a mid-action timeout.
+            # Resume the same checklist later; do not call a partial visit complete.
+            self._visit_suspended=True
+            self._next=state['primary_id']
+            return True
         if not visit and now-started>=state['visit_seconds']:
             self._next=state['primary_id'];return True
         return False
@@ -247,7 +267,8 @@ class AccountFleet:
         self.rotation.resume(self.clock())
         try:
             with DeviceLease(session.config.adb_device) as lease:
-                verified_handoff=None
+                from coc_bot.accounts.startup import recognize_loaded
+                verified_handoff=recognize_loaded(self.store,session,lease,self.cancel.is_set)
                 while not self.cancel.is_set() and not self.finish_action:
                     account=self.store.account()
                     if account is None:raise ValueError('No saved account is selected')
@@ -260,7 +281,7 @@ class AccountFleet:
                         if self.cancel.is_set() or self.finish_action:
                             self.current.request_stop()
                             break
-                        started=self.clock();self._next=None;self._clan_checked=False;self._chat_due=True
+                        started=self.clock();self._next=None;self._clan_checked=False;self._chat_due=True;self._visit_suspended=False
                         self._initialize_schedule(account)
                         self.current._fleet_should_yield=lambda:self._checkpoint(account,started)
                         visit=getattr(self.current,'_visit',None)
@@ -274,7 +295,8 @@ class AccountFleet:
                                        else 'Visiting '+account['nickname'])
                         logger.info('Activity: {}',self.activity)
                         self.current.run_owned()
-                        self.rotation.complete(account['id'],self.clock(),self.clock()-started)
+                        self.rotation.complete(account['id'],self.clock(),self.clock()-started,
+                                               suspended=getattr(self,'_visit_suspended',False))
                         if self.cancel.is_set() or self.finish_action or self._next is None:break
                         # Never switch away while attack/upgrade/visit recovery
                         # is unresolved, even if its visit time has expired.

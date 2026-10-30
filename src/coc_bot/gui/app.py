@@ -54,7 +54,6 @@ from coc_bot.gui.theme import active_layout, apply_theme, normalize_theme_id, th
 from coc_bot.gui.ui_helpers import (
     GuiWindowState,
     adb_status_label,
-    format_countdown,
     humanize_setting_value,
     load_gui_window_state,
     save_gui_window_state,
@@ -64,7 +63,7 @@ from coc_bot.gui.calib_instructions import (
     format_step_instruction,
     part_instruction,
 )
-from coc_bot.gui.ux_helpers import FarmReadiness, FixItRecipe, MissingCalibration, break_timer_caption, farm_readiness, live_status_label, next_missing_calibration, settings_snapshot
+from coc_bot.gui.ux_helpers import FarmReadiness, FixItRecipe, MissingCalibration, farm_readiness, live_status_label, next_missing_calibration, settings_snapshot
 from coc_bot.gui.util import calibrate_script, open_in_terminal
 from coc_bot.gui.widgets import HelpTip, ToggleSwitch
 
@@ -172,10 +171,7 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         self._log_lines: list[str] = []
         self._run_chip_var = tk.StringVar(master=self, value="Stopped")
         self._farm_timer_var = tk.StringVar(master=self, value="—")
-        self._break_timer_var = tk.StringVar(master=self, value="—")
         self._farm_timer_label: tk.Label | None = None
-        self._break_timer_label: tk.Label | None = None
-        self._break_caption_label: tk.Label | None = None
         # Frozen farm countdown while the bot is stopped (wall clock still advances).
         self._farm_timer_frozen_text: str | None = None
         self._calib_progress = tk.StringVar(master=self, value="")
@@ -200,14 +196,12 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         self._practice_var.trace_add("write", lambda *_a: self._on_practice_toggle())
         self._settings_dirty = False
         self._settings_baseline: dict[str, str] | None = None
-        self._break_warn_sent_for: str | None = None
         self._adb_reconnect_attempts = 0
         self._adb_reconnecting = False
         self._farm_ready_var = tk.StringVar(master=self, value="")
         self._farm_ready_outer: tk.Frame | None = None
         self._farm_ready_label: tk.Label | None = None
         self._home_timers_frame: tk.Frame | None = None
-        self._break_caption_var = tk.StringVar(master=self, value="Next break")
 
         shell = ttk.Frame(self)
         shell.pack(fill=tk.BOTH, expand=True)
@@ -305,13 +299,9 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
             pass
         self._run_chip_var = self._str_var("Stopped")
         self._farm_timer_var = self._str_var("—")
-        self._break_timer_var = self._str_var("—")
-        self._break_caption_var = self._str_var("Next break")
         pairs = (
             ("_run_chip", self._run_chip_var),
             ("_farm_timer_label", self._farm_timer_var),
-            ("_break_timer_label", self._break_timer_var),
-            ("_break_caption_label", self._break_caption_var),
         )
         for attr, var in pairs:
             widget = getattr(self, attr, None)
@@ -324,7 +314,7 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
                 continue
 
     def _push_home_timers(self) -> None:
-        """Update farm/break timer StringVars once (no reschedule)."""
+        """Update resource-farming status once (no reschedule)."""
         try:
             self._farm_timer_var.set(self._farm_timer_text())
         except Exception:  # noqa: BLE001
@@ -332,19 +322,6 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
                 self._farm_timer_var.set("—")
             except tk.TclError:
                 pass
-        try:
-            on_break, remaining = self._break_status()
-            self._break_timer_var.set(
-                "due" if (not on_break and remaining <= 0) else format_countdown(remaining)
-            )
-            self._break_caption_var.set(break_timer_caption(on_break=on_break).capitalize())
-            self._maybe_warn_break_soon(on_break=on_break, remaining=remaining)
-        except Exception:  # noqa: BLE001
-            try:
-                self._break_timer_var.set("—")
-            except tk.TclError:
-                pass
-
     @staticmethod
     def _window_geometry_path() -> Path:
         return project_root() / "data" / "gui_window.json"
@@ -1788,59 +1765,6 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         if not config.farm_enabled:return "off"
         return f"refill below {config.farm_resource_start_percent}% → {config.farm_resource_target_percent}%"
 
-    def _break_status(self) -> tuple[bool, float]:
-        """Return ``(on_break, remaining_seconds)``.
-
-        When on a session break, ``remaining_seconds`` counts down to the break
-        ending; otherwise it counts down to the next break starting.
-        """
-        bot = self._bot
-        if self._bot_running() and bot is not None:
-            tracker = bot.tracker
-        else:
-            from coc_bot.runtime.tracker import RuntimeTracker
-
-            tracker = RuntimeTracker(load_config())
-
-        if tracker.state.break_until:
-            try:
-                from datetime import datetime, timezone
-
-                until = datetime.fromisoformat(tracker.state.break_until)
-                if until.tzinfo is None:
-                    until = until.replace(tzinfo=timezone.utc)
-                left = (until - datetime.now(timezone.utc)).total_seconds()
-                if left > 0:
-                    return True, left
-            except ValueError:
-                pass
-
-        # Read-only: never flush/save from the GUI thread while the bot thread ticks.
-        return False, tracker.peek_remaining_seconds()
-
-    def _break_timer_text(self) -> str:
-        on_break, remaining = self._break_status()
-        if not on_break and remaining <= 0:
-            return "due"
-        return format_countdown(remaining)
-
-    def _maybe_warn_break_soon(self, *, on_break: bool, remaining: float) -> None:
-        """Fire a one-time desktop notification a few minutes before a session break."""
-        if remaining > 600:
-            self._break_warn_sent_for = None
-            return
-        if not self._bot_running() or on_break:
-            return
-        if 1 <= remaining <= 300:
-            bucket = max(1, int(remaining // 60))
-            marker = f"soon:{bucket}"
-            if self._break_warn_sent_for == marker:
-                return
-            self._break_warn_sent_for = marker
-            notify(
-                "Break soon",
-                f"Clash will close for a session break in about {bucket} minute(s).",
-            )
 
     def _refresh_farm_status(self) -> None:
         try:
@@ -1860,9 +1784,7 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
         bot = self._bot
         running = self._bot_running() and bot is not None
         game_state = None
-        on_break = False
         try:
-            on_break, _remaining = self._break_status()
             if running:
                 game_state = bot.game_state.state
         except Exception:  # noqa: BLE001
@@ -1873,7 +1795,6 @@ class BotControlApp(DataToolsMixin, PageViewsMixin, tk.Tk):
             practice=self._practice_mode,
             oneshot_farm=oneshot,
             game_state=game_state,
-            on_break=on_break,
         )
         self._set_run_chip(label, role)
 

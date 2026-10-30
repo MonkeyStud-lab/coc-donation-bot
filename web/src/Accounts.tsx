@@ -2,7 +2,8 @@ import React, {useEffect, useRef, useState} from 'react';
 import {EmptyState,Icon} from './ui';
 
 const roles = {donating:'Donating', farming:'Farming', upgrading:'Upgrading', builder_base:'Builder Base'};
-type Account = {id:string;tag:string;nickname:string;roles:string[];clan_tag?:string|null};
+type Maintenance = {categories?:Record<string,{at:number;status:string;message?:string;availability?:number[]}>};
+type Account = {id:string;tag:string;nickname:string;roles:string[];clan_tag?:string|null;maintenance?:Maintenance};
 type Rotation = {enabled:boolean;primary_id:string|null;watch_seconds:number;visit_seconds:number;interval_seconds:number};
 type Registry = {accounts:Account[];active:string|null;pending:{kind:string;target?:string|null}|null;rotation?:Rotation};
 
@@ -17,6 +18,7 @@ export function Accounts({api,locked,result,operation,working,jobError,live,onCh
   // A failed background job has no result. Refresh when it unlocks too, so its
   // persisted Add/Switch state still exposes the right recovery action.
   useEffect(()=>{refresh();},[result,locked]);
+  useEffect(()=>{const timer=setInterval(refresh,15000);return()=>clearInterval(timer);},[api]);
   useEffect(()=>{
     if(data&&!initialized.current){
       setChosen(data.accounts.length?[]:Object.keys(roles));
@@ -74,6 +76,14 @@ export function Accounts({api,locked,result,operation,working,jobError,live,onCh
         <div className="toolbar"><button className="primary" disabled={disabled||!name.trim()} onClick={async()=>{setBusy(true);try{await api('accounts/'+account.id,'PUT',{nickname:name,roles:chosen});setEditing(null);await refresh();await onChanged();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>Save</button>
         <button onClick={()=>setEditing(null)}>Cancel</button></div>
       </>:<><div className="role-badges">{account.roles.length?account.roles.map(r=><span className={'role-badge role-'+r} key={r}><Icon name={{donating:'heart',farming:'swords',upgrading:'hammer',builder_base:'castle'}[r]||'settings'} size={13}/>{roles[r as keyof typeof roles]||r}</span>):<span className="muted">No automatic tasks</span>}</div>
+        {account.roles.includes('upgrading')&&<div className="maintenance-status">{Object.entries({buildings:'Builders',research:'Laboratory',pets:'Pets'}).map(([key,label])=>{
+          const check=account.maintenance?.categories?.[key];if(!check)return null;
+          const recent=Date.now()/1000-check.at>=0&&Date.now()/1000-check.at<3600;
+          const ok=recent&&['busy','started','built','recovered'].includes(check.status);
+          const caption=!recent?'Check due':check.status==='busy'?'Busy at last check':['started','built','recovered'].includes(check.status)?'Upgrade verified':'Needs another check';
+          return <details key={key}><summary><i className={'status-dot '+(ok?'connected':'working')}/><span>{label}</span><span>{caption}</span></summary>
+            <p>{check.message||check.status} · Checked {new Date(check.at*1000).toLocaleString()}</p></details>;
+        })}</div>}
         <div className="account-card-bottom"><span className="clan-tag">{account.clan_tag?<><Icon name="castle" size={14}/>{account.clan_tag}</>:'Clan not yet verified'}</span>
           {data.active!==account.id&&<button disabled={disabled||!!data.pending} onClick={()=>act('switch',account.id)}>Switch<Icon name="chevron" size={14}/></button>}</div></>}
     </section>)}</div>

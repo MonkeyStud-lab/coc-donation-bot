@@ -6,10 +6,10 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
-from coc_bot.config import project_root, load_config
+from coc_bot.config import project_root, load_config, load_user_settings, save_user_settings
 from coc_bot.control.lifecycle import BotController, RunOptions
 from coc_bot.control.service import ControlService, BusyError
-from coc_bot.control.settings import revision, save_settings, RevisionConflict
+from coc_bot.control.settings import revision, save_settings, RevisionConflict, settings_snapshot
 
 
 class ActionBot:
@@ -95,6 +95,67 @@ class SettingsRestartTests(TestCase):
         self.assertEqual(load_config().farm_resource_start_percent, 80)
         self.assertEqual(self.options, [self.options[0]] * 2)
         self.assertIsNone(self.service.settings_update)
+
+    def test_interface_save_preserves_running_action_and_operational_yaml(self):
+        # A named preset must not silently rewrite custom timings on a theme save.
+        original = {"gui": {"timing_preset": "balanced", "extension": "keep"},
+                    "timing": {"tap_jitter_px": 3, "action_delay_ms": [121, 199]},
+                    "extension": {"private": "untouched"}}
+        save_user_settings(original)
+        self.start()
+        state = self.service.controller.snapshot()
+        values = settings_snapshot()["values"]
+        values["gui_theme"] = "Ember"
+        values["gui_dev_options"] = True
+        values["gui_show_debug_activity"] = True
+        values["farm_resource_start_percent"] = str(values["farm_resource_start_percent"])
+        with patch("coc_bot.runtime.device_lease.DeviceLease") as leases:
+            result = self.service.apply_settings(values, revision())
+        # File-transaction locks remain required; no Android device lease is acquired.
+        self.assertTrue(all(call.args[0].startswith("calibration:") for call in leases.call_args_list))
+        self.assertFalse(result["restarted"])
+        self.assertEqual(self.service.controller.snapshot().generation, state.generation)
+        self.assertTrue(self.service.controller.snapshot().active)
+        self.assertEqual(len(self.bots), 1)
+        self.assertFalse(self.bots[0].finish_requested.is_set())
+        self.assertFalse(self.bots[0].hard_stopped)
+        saved = load_user_settings()
+        self.assertEqual(saved["timing"], original["timing"])
+        self.assertEqual(saved["extension"], original["extension"])
+        self.assertEqual(saved["gui"], original["gui"] | {
+            "theme": "ember", "dev_options": True, "show_debug_activity": True})
+
+    def test_interface_revision_and_validation_fail_without_stopping(self):
+        self.start()
+        stale = revision()
+        self.service.apply_settings({"gui_theme": "Ember"}, stale)
+        with self.assertRaises(RevisionConflict):
+            self.service.apply_settings({"gui_theme": "Classic"}, stale)
+        with self.assertRaises(ValueError):
+            self.service.apply_settings({"gui_theme": "missing"}, revision())
+        self.assertFalse(self.bots[0].finish_requested.is_set())
+
+    def test_only_interface_preferences_are_live(self):
+        fields = {f["key"]: f["restart_required"] for f in settings_snapshot()["fields"]}
+        self.assertEqual({key for key, required in fields.items() if not required},
+                         {"gui_theme", "gui_show_debug_activity", "gui_dev_options"})
+        self.assertTrue(fields["gui_timing_preset"])
+
+    def test_mixed_theme_and_behavior_changes_still_wait_for_safe_restart(self):
+        self.start()
+        results = []
+        thread = threading.Thread(target=lambda: results.append(self.service.apply_settings(
+            {"gui_theme": "Ember", "farm_resource_start_percent": 80}, revision())))
+        thread.start()
+        self.addCleanup(thread.join, 3)
+        self.assertTrue(self.bots[0].finish_requested.wait(2))
+        self.assertNotEqual(load_config().gui_theme, "ember")
+        with self.assertRaises(BusyError):
+            self.service.apply_settings({"gui_theme": "Classic"}, revision())
+        self.bots[0].release.set()
+        thread.join(3)
+        self.assertTrue(results[0]["restarted"])
+        self.assertEqual(load_config().gui_theme, "ember")
 
     def test_stop_cancels_save_and_restart(self):
         self.start()

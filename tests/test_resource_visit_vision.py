@@ -12,6 +12,22 @@ ROOT=Path(__file__).parent/'fixtures/resource_visits'
 
 
 class ResourceNativeTests(unittest.TestCase):
+    def test_full_gold_bar_reads_large_and_starter_balances(self):
+        nav=Mock();nav._stopping=lambda:False
+        reader=HomeResources(nav);reader.home=lambda _:True
+        for name,expected in (('full-gold-hud.png',30500000),('home-gold-capacity.png',19480884),
+                              ('starter-gold-capacity.png',2140)):
+            frame=cv2.imread(str(ROOT/name))
+            with self.subTest(name=name):self.assertEqual(reader.balances(frame)['gold'],expected)
+
+    def test_gold_bar_cannot_borrow_a_value_from_its_coin_or_elixir(self):
+        nav=Mock();nav._stopping=lambda:False
+        reader=HomeResources(nav);reader.home=lambda _:True
+        frame=cv2.imread(str(ROOT/'full-gold-hud.png'))
+        frame[34:76,1565:1770]=0  # Remove only the gold numerals, retaining its coin.
+        observed=reader.balances(frame)
+        self.assertIsNone(observed['gold']);self.assertEqual(observed['elixir'],18839463)
+
     def test_main_army_housing_retains_three_digits_and_excludes_red_alert(self):
         from coc_bot.progression.preparation import capacity
         self.assertEqual(capacity(cv2.imread(str(ROOT/'main-army-330-340.png'))),(330,340))

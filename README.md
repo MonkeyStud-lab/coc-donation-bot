@@ -29,7 +29,7 @@ automation is stopped.
   research, subject to availability, supported names, exclusions, and resource
   reserves. Pet upgrades use a separate slot and prefer unassigned pets.
   Previewing and starting an upgrade are separate actions.
-- **Browser controls:** Start/Stop, resource refill status, break countdown, activity logs,
+- **Browser controls:** Start/Stop, resource refill status, activity logs,
   responsive settings, themes, guided calibration, and calibration backups.
 - **Builder Base (experimental):** account-visit checks for an equipped
   six-Night-Witch/Battle-Machine army, resource collection, supported Suggested
@@ -214,13 +214,11 @@ recalibrate changed parts.
 
 ## Everyday controls
 
-- **Overview:** Start, Stop, Farm now, practice mode, resource readings, a break
-  countdown, and one activity log. Live view is available on every page.
+- **Overview:** Start, Stop, Farm now, practice mode, resource readings,
+  and one activity log. Live view is available on every page.
 - **Accounts:** save the current village, add another Supercell ID, switch saved
   accounts, and choose each account's roles. See [Accounts](docs/ACCOUNTS.md).
-- **Attacks:** run an automatic attack or prepare, review, and edit a custom
-  map-based routine.
-- **Settings:** categorized donations, resource refill targets, breaks, upgrades,
+- **Settings:** categorized donations, resource refill targets, upgrades,
   themes, timing presets, and collection limits. Field help opens on demand;
   Advanced and Dev options retain their existing controls.
 - **Setup:** guided calibration or direct access to one calibration part.
@@ -229,7 +227,8 @@ recalibrate changed parts.
 - **Library:** separate Calibrations and Screenshots tabs, with backups/profiles,
   ZIP import/export, rename/delete, and the screenshot collection gallery.
 - **Tools:** device/screen checks, current screenshot, navigation tests,
-  upgrade previews, reports, and game/session controls.
+  upgrade previews, reports, and game/session controls. **Tools → Attacks** holds
+  opponent mapping, army inspection, custom routines, and supervised execution.
 
 **Stop** interrupts normal operation, standalone attacks, and tools. It leaves
 Clash open and does not finish a battle for you. **Close Waydroid and Clash** is
@@ -239,11 +238,13 @@ Settings remain editable while the bot runs. **Save & restart** validates change
 waits for the current donation/attack to finish, then restarts with the new settings.
 **Stop** cancels a pending restart. While stopped, **Save** applies settings without
 starting automation. Release manual control before saving.
+Theme changes preview immediately; **Save changes** persists appearance preferences
+without restarting automation. A save that also changes bot behavior still uses
+the safe restart path above.
 
-Automatic farming follows resource levels rather than a countdown. Session-limit
-countdowns pause while stopped. A break that has already
-started expires by real time. Scheduling uses running time rather than promising
-execution at a particular wall-clock hour.
+Automatic farming follows resource levels rather than a countdown. The bot does
+not schedule session breaks or close Clash because of elapsed runtime. Old break
+settings and saved break deadlines are ignored. Stop and recovery controls remain available.
 
 **Practice mode is not a simulator.** It skips normal donation taps but still
 allows navigation, and tools or attack actions can affect the real game. Use
@@ -265,8 +266,8 @@ alternative. See [Live view setup](docs/WEB_UI.md#experimental-live-video).
 
 Automatic resource refill is **off by default**. The default attack method remains
 **Programmed tap sequence**; explicitly choose another method in Settings.
-**Farm now** uses that selection. **Attacks → Automatic attack** runs automatic
-mode directly without changing the saved method.
+**Farm now** on Overview uses that selection. Advanced mapping and custom-routine
+tools are available under **Tools → Attacks**.
 
 ### Automatic Electro Dragon attacks
 
@@ -339,6 +340,11 @@ Enable desired categories in **Settings → Upgrades** for automatic operation.
 The bot checks builder/laboratory/pet availability, supported recommendations, price,
 currency, and balance. Reserves are minimum balances to keep **after** paying.
 You can also reserve builders and exclude names.
+Builder and resource reserves default to zero; their optional overrides are in
+Advanced. Visits check builders before long refill runs and return to chat after
+each verified upgrade. Unfinished secondary visits resume later rather than
+keeping the main donor away from requests indefinitely. Accounts shows each
+category's last result, check time, and any reason for a deferred upgrade.
 
 Pet upgrades use their own free slot and the dark-elixir reserve. Only unassigned
 pets are eligible by default. **Allow upgrades of equipped pets** is a separate

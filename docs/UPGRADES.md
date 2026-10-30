@@ -40,15 +40,18 @@ Open **Settings → Upgrades**. Enable building upgrades, research, pet upgrades
 Save while stopped, or Save & restart during normal operation. The latter waits
 for the current action; Stop cancels the pending settings restart. Start the bot
 normally when stopped. It checks between donation rounds, after the farming
-priority check, and gives a visible donation request priority. Each check can start
-at most one upgrade per enabled category. Practice mode does not run automatic
+priority check, and gives a visible donation request priority. Saved visits check
+builders before refill and perform one transaction before the next verified chat
+checkpoint. Remaining research/pet/building checks survive donation detours.
+Practice mode does not run automatic
 upgrades; the manual Diagnostics action is a separate spending action.
 
 The initial settings are:
 
 - Check every 900 seconds while running.
-- Keep one builder free.
-- Keep at least 1,000,000 gold, 2,000,000 elixir, and 50,000 dark elixir.
+- Use every available builder.
+- Keep no additional gold/elixir/dark-elixir reserve by default. Optional reserve
+  overrides are under **Advanced**, separately from farming's start/target percentages.
 - Additional exclusions accept building, troop, spell or pet names separated by commas.
 
 The reserve is the minimum balance **after** paying for an upgrade. It is a floor,
@@ -57,6 +60,14 @@ have to pass before an upgrade starts. A busy laboratory is skipped. A building
 needs more free builders than the number reserved. The normal building method
 skips excluded or unaffordable Suggested entries. Village progression and
 its farming-priority research also inspect **Other upgrades**.
+
+An unpaid construction/confirmation failure gets a five-minute candidate retry
+delay, allowing other verified buildings to use free builders. The failed row
+still blocks Town Hall progression. A pending payment is never skipped this way.
+Discounted confirmations read the current green price separately from the
+red-struck original price; two fresh confirmations must still agree with the
+selected name, currency, and price. Account cards show the last check and its
+reason, rather than claiming that all builders are currently busy.
 
 Each resource reserve accepts values from 0 to 100,000,000 in both the browser
 and desktop settings. Builder reservations range from 0 to 6, and the check

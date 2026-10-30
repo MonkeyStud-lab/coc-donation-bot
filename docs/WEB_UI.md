@@ -75,11 +75,9 @@ need a different permitted network path. No external STUN/TURN service is config
 
 ## Pages and ownership
 
-- **Overview:** Start/Stop, Farm now, practice mode, resource readings, the break
-  countdown, and one activity feed. Live view is available from every page.
+- **Overview:** Start/Stop, Farm now, practice mode, resource readings,
+  and one activity feed. Live view is available from every page.
 - **Accounts:** saved villages, roles, verified clan groups, and automatic visits.
-- **Attacks:** Automatic attack, opponent preparation, army review, map editing,
-  saved routines, supervised execution, and camera restoration.
 - **Settings:** category navigation, search across visible settings, and help
   beside each field. Advanced controls and raw developer values retain their
   existing switches. Changing categories preserves unsaved edits.
@@ -89,10 +87,20 @@ need a different permitted network path. No external STUN/TURN service is config
   named profiles, ZIP sharing, and rename/delete remain available.
 - **Tools:** Upgrades, Device, Donations, Attacks, and System categories. Existing
   checks, navigation tests, screenshots, reports, and explicit close-game actions
-  use the same backend operations.
+  use the same backend operations. Attacks contains opponent preparation, army
+  review, map editing, saved routines, supervised execution, and camera restoration.
 
 The navigation collapses to icons at smaller widths. Existing theme choices
 still apply to all pages; no fonts or icon services need an internet connection.
+The active account appears in navigation, rather than above every settings group.
+Save and Discard appear when settings have edits. Themes preview immediately;
+**Save changes** persists theme, debug-display defaults, and developer options
+without stopping automation. Changes to bot behavior still use **Save & restart**
+while running and wait for the current action to finish. Mixing appearance and
+behavior changes in one save follows that same safe restart path.
+Reserve overrides are in Advanced. Account cards show recent builder, Laboratory,
+and pet-check outcomes with expandable reasons and timestamps. Status is the last
+observation; it does not imply continuous visibility into an inactive village.
 
 One device operation owns Android at a time. Calibration writes, tools, normal
 operation, standalone attacks, and manual input cannot compete. Other browser
@@ -119,9 +127,9 @@ reloading the draft; edits made while applying remain unsaved drafts.
 Farming follows verified resource levels, rather than an interval countdown.
 Configure its start/target percentages under Settings → Attacks. The Overview
 shows the last observed balances and capacities; hover Resources for its read
-time. The session-limit countdown freezes while stopped; an already-started
-break expires by real time. Farm now remains an explicit attack request using
-the selected attack method.
+time. Farm now remains an explicit attack request using the selected attack
+method. There are no scheduled session breaks. Legacy break settings and deadlines
+are ignored; stopping, recovery, and game reload tools still work.
 
 ## Calibration and backups
 

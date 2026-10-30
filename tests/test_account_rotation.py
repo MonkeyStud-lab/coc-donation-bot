@@ -76,7 +76,7 @@ class RotationTests(unittest.TestCase):
             bot.should_stop=lambda:False;bot._settings_stop_ready=lambda:False
             bot.config=SimpleNamespace(scan_interval_ms=(0,0),donation_enabled=False,data_dir=self.root)
             bot._check_watchdog=Mock();bot._maybe_anti_idle=Mock()
-            bot.break_manager=Mock();bot.break_manager.check_and_break_if_needed.return_value=False
+
             bot.tracker=Mock()
             bot.capture=Mock();bot.nav_input=Mock();bot.navigator=Mock()
             bot._fleet_work_order=lambda:self.rotation.work_order(self.other['id'])
@@ -116,7 +116,7 @@ class RotationTests(unittest.TestCase):
         bot.should_stop=lambda:False;bot._settings_stop_ready=lambda:False
         bot.config=SimpleNamespace(data_dir=self.root,account_town_hall=10,layouts_enabled=True)
         bot._check_watchdog=Mock();bot._maybe_anti_idle=Mock()
-        bot.break_manager=Mock();bot.break_manager.check_and_break_if_needed.return_value=False
+
         bot.tracker=Mock();bot.capture=Mock();bot.nav_input=Mock();bot.navigator=Mock()
         bot._fleet_work_order=lambda:('farm','builder_base','upgrades','layouts')
         bot._maybe_run_layouts=Mock(return_value=True)
@@ -135,7 +135,7 @@ class RotationTests(unittest.TestCase):
         bot.should_stop=lambda:False;bot._settings_stop_ready=lambda:False
         bot.config=SimpleNamespace(scan_interval_ms=(0,0),donation_enabled=False,data_dir=self.root)
         bot._check_watchdog=Mock();bot._maybe_anti_idle=Mock()
-        bot.break_manager=Mock();bot.break_manager.check_and_break_if_needed.return_value=False
+
         bot.tracker=Mock();bot.capture=Mock();bot.nav_input=Mock();bot.navigator=Mock()
         bot._fleet_work_order=lambda:self.rotation.work_order(self.other['id'])
         bot._maybe_run_upgrades=Mock(return_value=True)
@@ -156,7 +156,7 @@ class RotationTests(unittest.TestCase):
         bot.should_stop=lambda:False;bot._settings_stop_ready=lambda:False
         bot.config=SimpleNamespace(data_dir=self.root)
         bot._check_watchdog=Mock();bot._maybe_anti_idle=Mock()
-        bot.break_manager=Mock();bot.break_manager.check_and_break_if_needed.return_value=False
+
         bot.tracker=Mock();bot.capture=Mock();bot.nav_input=Mock();bot.navigator=Mock()
         bot._maybe_run_layouts=Mock(return_value=True)
         bot._maybe_run_upgrades=Mock(return_value=True);bot._maybe_run_farm=Mock(return_value=True)
@@ -189,6 +189,7 @@ class RotationTests(unittest.TestCase):
         fleet=AccountFleet(self.store,RunOptions(),factory=factory,clock=lambda:now[0])
         fleet._check_chat_before_switch=Mock()
         with patch('coc_bot.control.diagnostics.DebugSession',return_value=SimpleNamespace(config=SimpleNamespace(adb_device='test'))),\
+             patch('coc_bot.accounts.startup.recognize_loaded',return_value=None),\
              patch('coc_bot.runtime.device_lease.DeviceLease',side_effect=lambda _:nullcontext()) as lease,\
              patch('coc_bot.accounts.navigation.AccountNavigator') as nav:
             nav.return_value.switch.side_effect=switch
@@ -215,12 +216,28 @@ class RotationTests(unittest.TestCase):
         fleet=AccountFleet(self.store,RunOptions(),factory=factory,clock=lambda:1000)
         fleet._check_chat_before_switch=Mock(side_effect=ChatCheckUnverified('Unreadable chat'))
         with patch('coc_bot.control.diagnostics.DebugSession',return_value=SimpleNamespace(config=SimpleNamespace(adb_device='test'))),\
+             patch('coc_bot.accounts.startup.recognize_loaded',return_value=None),\
              patch('coc_bot.runtime.device_lease.DeviceLease',side_effect=lambda _:nullcontext()),\
              patch('coc_bot.stop.interrupted_sleep',return_value=False),\
              patch('coc_bot.accounts.navigation.AccountNavigator') as nav:
             with self.store.scope(self.main['id']):fleet.run()
         self.assertEqual(visited,[self.main['id'],self.main['id']])
         nav.return_value.switch.assert_not_called();self.assertIsNone(self.store.load()['pending'])
+
+    def test_suspended_visit_preserves_cursor_and_returns_donor_time(self):
+        self.configure()
+        self.rotation.complete(self.other['id'],1000,120,suspended=True)
+        state=self.rotation.load();visit=state['visits'][self.other['id']]
+        self.assertNotIn('last_finished_at',visit)
+        self.assertEqual(visit['next_visit_at'],1300)
+        self.assertEqual(state['next_watch_seconds'],240)
+
+    def test_deferred_builder_work_does_not_wait_another_full_half_hour(self):
+        self.configure(interval_seconds=1800)
+        write(self.store.profile(self.other)/'data/upgrades/maintenance.json',{
+            'categories':{'buildings':{'status':'blocked','message':'Unreadable unpaid preview'}}})
+        self.rotation.complete(self.other['id'],1000,90)
+        self.assertEqual(self.rotation.load()['visits'][self.other['id']]['next_visit_at'],1300)
 
     def test_non_donor_request_routes_to_donor_and_persists_resume(self):
         self.configure();fleet=AccountFleet(self.store,RunOptions(),clock=lambda:1000)

@@ -124,9 +124,12 @@ class GoalFleetTests(ClanRoutingTests):
         fleet._clan_checked=True;fleet._chat_due=False
         return fleet
 
-    def test_secondary_must_finish_checklist_even_after_three_minutes(self):
+    def test_secondary_yields_to_donor_without_losing_unfinished_checklist(self):
         fleet=self.fleet(self.source)
-        self.assertFalse(fleet._checkpoint(self.source,0))
+        self.assertTrue(fleet._checkpoint(self.source,0))
+        self.assertFalse(fleet.current._visit.complete())
+        self.assertTrue(fleet._visit_suspended)
+        self.assertEqual(fleet.current._visit.order(),('farm',))
         for step in STEPS:fleet.current._visit.finish_step(step)
         self.assertTrue(fleet._checkpoint(self.source,0))
         self.assertEqual(fleet._next,self.same['id'])

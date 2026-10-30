@@ -41,10 +41,21 @@ class Visit:
                      'started_at': self.clock(), 'outcomes': {}, 'deferred': state.get('deferred', {})}
             write(self.path, state)
         index = state['step']
+        # Put idle builders/lab/pets to work before a potentially long refill.
+        # Keep v1 step indexes intact, including already saved visits.
+        if index == 0 and not state.get('maintenance_checked') and any(
+            getattr(self.config, key, False) for key in
+            ('upgrade_buildings_enabled','upgrade_research_enabled','upgrade_pets_enabled')):
+            return ('upgrades',)
         return STEPS[index:index+1]
 
     def finish_step(self, name, *, repeat=False, reason=None, retry_at=None):
         state = self.load()
+        if name == 'upgrades' and state['step'] == 0:
+            state['outcomes']['maintenance'] = {'at':self.clock(), 'status':'working' if repeat else 'checked', 'reason':reason}
+            if not repeat:state['maintenance_checked'] = True
+            write(self.path,state)
+            return
         if state['step'] >= len(STEPS) or STEPS[state['step']] != name:return
         state['outcomes'][name] = {'at': self.clock(), 'status': 'working' if repeat else 'checked', 'reason': reason}
         if repeat:

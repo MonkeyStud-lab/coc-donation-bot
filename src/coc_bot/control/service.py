@@ -37,9 +37,7 @@ class ControlService:
         self.manual_owner = None
         self.manual_cancel = None
         self.session_factory = session_factory
-        self._timer_snapshot = {"farm_seconds": None, "break_seconds": None}
         self._finished_generation = -1
-        self._break_active = False
         self.peers = []
         self.settings_update = None
         self._settings_cancel = None
@@ -48,29 +46,6 @@ class ControlService:
         from coc_bot.control.capture_recovery import CaptureRecovery
         self.capture_recovery = CaptureRecovery(self)
 
-    def saved_timers(self):
-        """Read frozen persisted clocks without rerolling or rewriting anything."""
-        from datetime import datetime, timezone
-        from coc_bot.config import load_config
-        from coc_bot.runtime.persistence import load_runtime_state
-        config = load_config()
-        state = load_runtime_state(config.data_dir / "runtime_state.json")
-        farm = None
-        self._timer_snapshot = {"farm_seconds": farm,
-            "break_seconds": max(0, (state.next_session_limit_seconds or config.session_limit_seconds)
-                                 - state.active_seconds)}
-        self._break_active = False
-        if state.break_until:
-            try:
-                until = datetime.fromisoformat(state.break_until)
-                if until.tzinfo is None:
-                    until = until.replace(tzinfo=timezone.utc)
-                remaining = max(0, (until-datetime.now(timezone.utc)).total_seconds())
-                if remaining:
-                    self._timer_snapshot["break_seconds"] = remaining
-                    self._break_active = True
-            except ValueError:
-                pass
 
     def idle(self):
         if any(s.controller.snapshot().active or s.manual_owner or s.settings_update
@@ -102,6 +77,9 @@ class ControlService:
             from coc_bot.accounts.rotation import RotationStore,AccountFleet
             if RotationStore(self.accounts.store).load()['enabled'] and not options.dry_run:
                 return self.controller.start(options,factory=lambda o:AccountFleet(self.accounts.store,o))
+            if self.accounts.store.account():
+                from coc_bot.accounts.startup import ManagedAccountRun
+                return self.controller.start(options,factory=lambda o:ManagedAccountRun(self.accounts.store,o))
         return self.controller.start(options)
 
     def stop(self):
@@ -123,23 +101,28 @@ class ControlService:
         and status remain available throughout a battle or donation.
         """
         from copy import deepcopy
-        from coc_bot.control.settings import validate_settings, save_settings
+        from coc_bot.control.settings import (
+            validate_settings, save_settings, changed_settings,
+            save_interface_settings, LIVE_INTERFACE_FIELDS,
+        )
         values = deepcopy(values)
         with self.lock:
             if self.accounts:self.accounts.store.require_ready()
-            validate_settings(values, expected_revision)
+            complete = validate_settings(values, expected_revision)
             if self.settings_update or self.manual_owner or any(
                 p.controller.snapshot().active or p.manual_owner or p.settings_update for p in self.peers
             ):
                 raise BusyError("Release manual control and finish the current tool before saving.")
             state = self.controller.snapshot()
+            if state.active and (self.operation != "bot" or state.stop_requested or state.closing):
+                raise BusyError("Finish the current tool or wait for the bot to stop before saving.")
+            if changed_settings(complete) <= LIVE_INTERFACE_FIELDS:
+                return save_interface_settings(values, expected_revision) | {"restarted": False}
             if not state.active:
                 with self.mutation():
                     result = save_settings(values, expected_revision)
                     self._finished_generation = -1
                     return result | {"restarted": False}
-            if self.operation != "bot" or state.stop_requested or state.closing:
-                raise BusyError("Finish the current tool or wait for the bot to stop before saving.")
             cancel = self._settings_cancel = threading.Event()
             state_generation = state.generation
             options = self.controller.options
@@ -255,7 +238,7 @@ class ControlService:
             "open_donation": "open_donation_panel", "close_donation": "close_donation_panel",
             "scroll_chat": "scroll_chat_step", "anti_idle": "anti_idle_nudge",
             "save_screenshot": "save_screenshot", "force_stop": "force_stop_coc",
-            "relaunch": "relaunch_coc", "break_cycle": "break_cycle_short",
+            "relaunch": "relaunch_coc",
             "farm_open_attack": "farm_open_attack_menu", "farm_start_search": "farm_start_unranked_search",
             "farm_classify": "farm_classify_battle", "farm_deploy_dry": "farm_deploy_dry_taps",
             "farm_clear_deploy": "farm_clear_deploy_sequence",
@@ -302,12 +285,9 @@ class ControlService:
             state.pop("error_traceback", None)
             if not state["active"]:
                 if self._finished_generation != state["generation"]:
-                    self.saved_timers()
                     self._finished_generation = state["generation"]
                     if state["error"]:
                         self.events.append("ERROR", state["error"])
-                elif self._break_active:
-                    self.saved_timers()
             bot = self.controller.bot
             if self.operation == "bot" and bot is not None and state["active"]:
                 phase = getattr(getattr(getattr(bot, "game_state", None), "state", None), "value", None)
@@ -315,31 +295,11 @@ class ControlService:
                     "scrolling_chat": "Checking requests", "opening_donation": "Opening donation",
                     "donating": "Donating", "attack_menu": "Opening attack", "matchmaking": "Finding opponent",
                     "in_battle": "In battle", "battle_results": "Leaving battle", "returning_home": "Returning home",
-                    "recovering": "Recovering", "on_break": "On break", "layouts":"Arranging layout",
+                    "recovering": "Recovering", "layouts":"Arranging layout",
                     "upgrading":"Checking upgrades","builder_base":"Visiting Builder Base"}.get(phase)
-                tracker = getattr(bot, "tracker", None)
-                if tracker is not None:
-                    self._timer_snapshot = {
-                        "farm_seconds": None,
-                        "break_seconds": max(0, tracker.peek_remaining_seconds()),
-                    }
-                    self._break_active = False
-                    from coc_bot.accounts.rotation import AccountFleet
-                    if isinstance(bot,AccountFleet):
-                        if bot.activity.startswith('Switching to '):activity=bot.activity
-                    until_text = getattr(getattr(tracker, "state", None), "break_until", None)
-                    if until_text:
-                        from datetime import datetime, timezone
-                        try:
-                            until = datetime.fromisoformat(until_text)
-                            if until.tzinfo is None:
-                                until = until.replace(tzinfo=timezone.utc)
-                            remaining = (until-datetime.now(timezone.utc)).total_seconds()
-                            if remaining > 0:
-                                self._break_active = True
-                                self._timer_snapshot["break_seconds"] = remaining
-                        except ValueError:
-                            pass
+                from coc_bot.accounts.rotation import AccountFleet
+                if isinstance(bot,AccountFleet) and bot.activity.startswith('Switching to '):
+                    activity=bot.activity
             from coc_bot.config import load_config
             from coc_bot.control.resource_status import resource_status
             config=(getattr(bot,'config',None) if bot is not None and state['active'] else None) or load_config()
@@ -347,13 +307,14 @@ class ControlService:
             return state | {"operation": self.operation, "result": self.result,
                             "account": self.accounts.store.account() if self.accounts else None,
                             "account_pending": bool(self.accounts and self.accounts.store.load().get('pending')),
-                            "timers": dict(self._timer_snapshot),
+                            # Inert compatibility fields for already-open older clients.
+                            "timers": {"farm_seconds": None, "break_seconds": None},
                             "resource_farming": farming,
                             "manual_control": self.manual_owner is not None,
                             "settings_update": self.settings_update,
                             "platform": self.platform.snapshot() if self.platform is not None else None,
                             "activity": activity,
-                            "on_break": self._break_active}
+                            "on_break": False}
 
     def close(self):
         self.stop()

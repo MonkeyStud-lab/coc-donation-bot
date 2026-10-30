@@ -1,7 +1,7 @@
 # Attack planner and verified executor
 
-The browser's Attacks page offers automatic mass Electro Dragon farming and
-custom map-based routines for unranked battles. These use measured opponent
+Overview's Farm now uses the selected attack method. **Tools → Attacks** offers
+advanced mapping and custom routines for unranked battles. These use measured opponent
 maps and per-deployment verification. The original programmed pixel sequence
 remains available; the app does not invent strategies or score opponents.
 
@@ -11,12 +11,11 @@ attack with that exact routine on the same device. Editing it removes that appro
 
 ## Automatic attacks without a saved routine
 
-Stop the bot and release Live view control, then choose **Attacks → Automatic
-attack**. This starts a real unranked attack immediately. No drawn points, saved
+Choose **automatic** under **Settings → Attacks → Attack method**, then use
+**Farm now** on Overview. This starts a real unranked attack. No drawn points, saved
 routine, army review, or supervised-run approval are required. For scheduled use,
 select **automatic** under **Settings → Attack method**, enable scheduled farming,
-and start the bot. **Farm now** also uses that setting. The Automatic attack button
-does not change your saved settings or overwrite a custom routine.
+and start the bot. **Farm now** uses that setting and does not overwrite a custom routine.
 
 The built-in pattern deploys Electro Dragons along one mapped edge, spreads Rage
 spells inside that edge, then deploys the siege machine and heroes. Each hero's
@@ -40,7 +39,7 @@ tap. Stop interrupts immediately and leaves any required camera recovery pending
 
 ## Use the planner
 
-1. Stop the regular bot and release Live view control. Open **Attacks**.
+1. Stop the regular bot and release Live view control. Open **Tools → Attacks**.
 2. Choose **Prepare opponent**. The app opens unranked Battle, passes the My Army
    confirmation, positively checks the opponent screen, zooms out, and surveys
    overlapping views. This enters a real match: the game's timer keeps running
@@ -73,7 +72,7 @@ tap. Stop interrupts immediately and leaves any required camera recovery pending
 sends no cleanup inputs afterward and retains unfinished attack/camera state.
 On the next Start, recovery inspects that state before normal operation; it does
 not replay the plan. You can also finish/wait for the battle manually and return
-home before starting recovery. **Attacks → Restore camera** is the explicit idle
+home before starting recovery. **Tools → Attacks → Restore camera** is the explicit idle
 tool for restoring the saved reference, including a preserved legacy reference.
 Unresolved recovery blocks ordinary automation; an automatic-only zoom-limit
 exception can still leave the old pixel sequence blocked. See
@@ -320,7 +319,7 @@ owner checks this marker and the existing camera recovery marker. Recovery:
   old reference is preserved as `camera-legacy-before.png` and
   `camera-legacy-blocked.json` prevents running fixed pixel sequences. Automatic
   attacks must still rebuild and verify their opponent map from fresh images.
-  Attacks → Restore camera can attempt the preserved legacy reference. The regular
+  Tools → Attacks → Restore camera can attempt the preserved legacy reference. The regular
   3% camera-restoration tolerance and opponent geometry thresholds are unchanged.
 - If the old reference cannot be matched or restoration cannot converge,
   automatic mode can instead accept two fresh, stable home observations. Both

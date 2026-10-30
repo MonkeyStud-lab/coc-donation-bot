@@ -30,7 +30,6 @@ class GameState(str, Enum):
     BATTLE_RESULTS = "battle_results"
     RETURNING_HOME = "returning_home"
     RECOVERING = "recovering"
-    ON_BREAK = "on_break"
 
 
 # DonationBot._state string → GameState (coarse "farm" is handled inside AttackFarmer).
@@ -60,7 +59,6 @@ _VALID_TRANSITIONS: dict[GameState, frozenset[GameState]] = {
         {
             GameState.CLAN_CHAT,
             GameState.HOME,
-            GameState.ON_BREAK,
             GameState.RECOVERING,
             GameState.UNKNOWN,
             GameState.BOOT,
@@ -73,7 +71,6 @@ _VALID_TRANSITIONS: dict[GameState, frozenset[GameState]] = {
             GameState.UPGRADING,
             GameState.ATTACK_MENU,
             GameState.RECOVERING,
-            GameState.ON_BREAK,
             GameState.UNKNOWN,
             GameState.RETURNING_HOME,
         }
@@ -85,7 +82,6 @@ _VALID_TRANSITIONS: dict[GameState, frozenset[GameState]] = {
             GameState.HOME,
             GameState.ATTACK_MENU,
             GameState.RECOVERING,
-            GameState.ON_BREAK,
             GameState.UNKNOWN,
             GameState.CLAN_CHAT,
         }
@@ -165,15 +161,7 @@ _VALID_TRANSITIONS: dict[GameState, frozenset[GameState]] = {
         }
     ),
     GameState.RECOVERING: _ALL,
-    GameState.ON_BREAK: frozenset(
-        {
-            GameState.CLAN_CHAT,
-            GameState.HOME,
-            GameState.BOOT,
-            GameState.RECOVERING,
-            GameState.UNKNOWN,
-        }
-    ),
+
 }
 
 
@@ -190,7 +178,6 @@ _ACTIVITY_BY_STATE: dict[GameState, str] = {
     GameState.IN_BATTLE: "Farm battle in progress",
     GameState.BATTLE_RESULTS: "Farm battle finished — returning home",
     GameState.RETURNING_HOME: "Returning home after farm",
-    GameState.ON_BREAK: "Session break — Clash closed until the break ends",
     GameState.RECOVERING: "Recovering (reopening chat)",
     GameState.HOME: "On home village",
 }

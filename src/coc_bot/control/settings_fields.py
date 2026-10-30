@@ -313,51 +313,12 @@ SETTINGS: list[SettingField] = [
         ("adb", "device"),
     ),
     SettingField(
-        "session_limit_seconds",
-        "Session limit before break (seconds)",
-        "Base how long the bot runs before a forced break (default 14400 = 4 hours) to reduce "
-        "Clash “take a break” / anti-bot risk.",
-        "int",
-        lambda c: c.session_limit_seconds,
-        "Breaks",
-        ("runtime", "session_limit_seconds"),
-    ),
-    SettingField(
-        "session_limit_variance_seconds",
-        "Session limit variance (± seconds)",
-        "Random ± this many seconds around the session limit so breaks are not metronomic "
-        "(300 ≈ ±5 minutes). Set 0 for an exact limit. The rolled length is saved until "
-        "the next break.",
-        "int",
-        lambda c: c.session_limit_variance_seconds,
-        "Breaks",
-        ("runtime", "session_limit_variance_seconds"),
-    ),
-    SettingField(
-        "break_min_seconds",
-        "Break length min (seconds)",
-        "Shortest random break after the session limit (game is force-stopped during the break).",
-        "int",
-        lambda c: c.break_min_seconds,
-        "Breaks",
-        ("runtime", "break_min_seconds"),
-    ),
-    SettingField(
-        "break_max_seconds",
-        "Break length max (seconds)",
-        "Longest random break after the session limit.",
-        "int",
-        lambda c: c.break_max_seconds,
-        "Breaks",
-        ("runtime", "break_max_seconds"),
-    ),
-    SettingField(
         "game_load_timeout_seconds",
         "Game load timeout (seconds)",
         "Max time to wait for Clash to finish loading after a relaunch.",
         "int",
         lambda c: c.game_load_timeout_seconds,
-        "Breaks",
+        "Device",
         ("runtime", "game_load_timeout_seconds"),
     ),
     SettingField(
@@ -366,7 +327,7 @@ SETTINGS: list[SettingField] = [
         "If the bot stays in one state longer than this, it runs recovery (BACK + reopen chat).",
         "int",
         lambda c: c.state_watchdog_seconds,
-        "Breaks",
+        "Device",
         ("runtime", "state_watchdog_seconds"),
     ),
     SettingField(
@@ -389,9 +350,9 @@ SETTINGS: list[SettingField] = [
     ),
     SettingField(
         "gui_show_debug_activity",
-        "Show DEBUG messages in activity log",
-        "When enabled, Dashboard activity also shows DEBUG lines (ADB commands, screen "
-        "classifications, etc.). Leave off for a quieter log of INFO and above.",
+        "Show DEBUG messages by default",
+        "Default for the activity log's Debug filter when opening the app. "
+        "The filter in Overview can change it temporarily.",
         "bool",
         lambda c: c.gui_show_debug_activity,
         "Interface",
@@ -421,7 +382,7 @@ SETTINGS: list[SettingField] = [
         "gui_theme",
         "Theme",
         "Color palette for the entire app. All themes use the same compact layout. "
-        "Applies to the whole window after Save.",
+        "Previews immediately. Save changes keeps it without restarting the bot.",
         "choice",
         lambda c: theme_label(c.gui_theme),
         "Interface",
@@ -455,14 +416,6 @@ def build_user_settings_payload(values: dict[str, str | bool]) -> dict[str, Any]
                 lower,upper=UPGRADE_INTEGER_LIMITS[field.key]
                 if not lower <= parsed <= upper:
                     raise ValueError(f'{field.label} must be between {lower} and {upper}')
-            if field.key in (
-                "session_limit_variance_seconds",
-            ) and parsed < 0:
-                raise ValueError(f"{field.label} cannot be negative")
-            if field.key in (
-                "session_limit_variance_seconds",
-            ) and parsed > 24 * 3600:
-                raise ValueError(f"{field.label} must be at most 86400 seconds")
         elif field.kind == "float":
             parsed = float(str(raw).strip())
             if not math.isfinite(parsed):
@@ -544,35 +497,3 @@ def save_settings_from_gui(values: dict[str, str | bool]) -> None:
         else:
             existing[section] = data
     save_user_settings(existing)
-
-    # Re-roll the next session limit when limit / variance changes.
-    runtime_in = incoming.get("runtime") or {}
-    if isinstance(runtime_in, dict) and (
-        "session_limit_seconds" in runtime_in
-        or "session_limit_variance_seconds" in runtime_in
-    ):
-        new_limit = int(
-            runtime_in.get("session_limit_seconds", previous.session_limit_seconds)
-        )
-        new_limit_var = int(
-            runtime_in.get(
-                "session_limit_variance_seconds",
-                previous.session_limit_variance_seconds,
-            )
-        )
-        if (
-            new_limit != previous.session_limit_seconds
-            or new_limit_var != previous.session_limit_variance_seconds
-        ):
-            _reroll_next_session_limit(new_limit, new_limit_var)
-
-
-def _reroll_next_session_limit(base: int, variance: int) -> None:
-    from coc_bot.runtime.persistence import load_runtime_state, save_runtime_state
-    from coc_bot.runtime.tracker import roll_session_limit_seconds
-
-    config = load_config()
-    path = config.data_dir / "runtime_state.json"
-    state = load_runtime_state(path)
-    state.next_session_limit_seconds = roll_session_limit_seconds(base, variance)
-    save_runtime_state(path, state)

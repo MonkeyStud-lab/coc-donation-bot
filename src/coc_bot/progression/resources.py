@@ -8,7 +8,9 @@ from coc_bot.upgrades.vision import crop, currency
 from coc_bot.vision.battle_menu import home_build_control_visible
 
 
-HUD = {'gold': (.855, .034, .958, .071), 'elixir': (.855, .102, .958, .140),
+# Search the whole gold-bar interior: wide balances extend left of the old
+# text-only crop. Keep the coin icon and adjacent resource rows outside it.
+HUD = {'gold': (.775, .028, .958, .083), 'elixir': (.855, .102, .958, .140),
        'dark_elixir': (.865, .171, .958, .209)}
 Y = {'gold': .055, 'elixir': .12, 'dark_elixir': .19}
 

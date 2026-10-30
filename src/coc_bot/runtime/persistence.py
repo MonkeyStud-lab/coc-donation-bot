@@ -19,21 +19,16 @@ _SAVE_LOCK = threading.Lock()
 class RuntimeState:
     session_started_at: str
     active_seconds: float
-    last_break_seconds: int
-    cycle_count: int
-    break_until: str | None = None
     last_farm_at: str | None = None  # UTC ISO timestamp of last successful farm
     # Read-only legacy fields retained for old saved-state compatibility.
     farm_paused_at: str | None = None
     next_farm_interval_seconds: int | None = None
-    # Rolled session length before break (base limit ± variance); None = roll on read.
-    next_session_limit_seconds: int | None = None
     last_completed_attack_id: str | None = None
 
     @classmethod
     def fresh(cls) -> RuntimeState:
         now = datetime.now(timezone.utc).isoformat()
-        return cls(session_started_at=now, active_seconds=0.0, last_break_seconds=0, cycle_count=0)
+        return cls(session_started_at=now, active_seconds=0.0)
 
     @classmethod
     def from_dict(cls, data: dict) -> RuntimeState:
@@ -46,33 +41,17 @@ class RuntimeState:
         if next_interval is not None and next_interval < 60:
             next_interval = None
 
-        raw_limit = data.get("next_session_limit_seconds")
-        next_limit: int | None
-        try:
-            next_limit = int(raw_limit) if raw_limit is not None else None
-        except (TypeError, ValueError,OverflowError):
-            next_limit = None
-        if next_limit is not None and next_limit < 60:
-            next_limit = None
-
         active=float(data.get('active_seconds',0))
         if isinstance(data.get('active_seconds'),bool) or not math.isfinite(active) or active<0:
             raise ValueError('Invalid active runtime')
-        for name in ('last_break_seconds','cycle_count'):
-            value=data.get(name,0)
-            if isinstance(value,bool) or int(value)<0:raise ValueError('Invalid runtime counter')
-        for name in ('session_started_at','break_until','last_farm_at','farm_paused_at','last_completed_attack_id'):
+        for name in ('session_started_at','last_farm_at','farm_paused_at','last_completed_attack_id'):
             if data.get(name) is not None and not isinstance(data[name],str):raise ValueError('Invalid runtime text field')
         return cls(
             session_started_at=data.get("session_started_at", datetime.now(timezone.utc).isoformat()),
             active_seconds=active,
-            last_break_seconds=int(data.get("last_break_seconds", 0)),
-            cycle_count=int(data.get("cycle_count", 0)),
-            break_until=data.get("break_until"),
             last_farm_at=data.get("last_farm_at"),
             farm_paused_at=data.get("farm_paused_at"),
             next_farm_interval_seconds=next_interval,
-            next_session_limit_seconds=next_limit,
             last_completed_attack_id=data.get('last_completed_attack_id'),
         )
 

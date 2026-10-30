@@ -191,7 +191,7 @@ remain blocked for inspection.
   the existing attack diagnostic retention budget. Pending visits preserve evidence.
 
 Stop interrupts the current action. On restart, a pending visit is recovered
-before donation, Home Village farming, anti-idle inputs or breaks can run.
+before donation, Home Village farming or anti-idle inputs can run.
 Recovery waits out an existing battle without starting new deployments, closes
 only verified controls, and returns to clan chat. Practice mode starts no visits.
 Saving settings while running finishes the visit before restarting the worker;

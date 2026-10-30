@@ -19,7 +19,6 @@ from coc_bot.donation.chat_monitor import ChatMonitor, DonateRequest
 from coc_bot.donation.executor import DonationExecutor
 from coc_bot.donation.navigator import Navigator
 from coc_bot.donation.request_parser import RequestKind
-from coc_bot.runtime.breaks import BreakManager
 from coc_bot.runtime.game_state import GameState, GameStateMachine
 from coc_bot.runtime.tracker import RuntimeTracker
 from coc_bot.stop import interrupted_sleep
@@ -80,9 +79,6 @@ class DonationBot:
         self.executor = DonationExecutor(self.config, self.capture, self.donation_input, self.matcher)
         self.tracker = RuntimeTracker(self.config)
         self.game_state = GameStateMachine(GameState.BOOT)
-        self.break_manager = BreakManager(
-            self.config, self.tracker, self.app, self.navigator, self.game_state
-        )
         self.farmer = AttackFarmer(
             self.config,
             self.capture,
@@ -112,7 +108,7 @@ class DonationBot:
         self._visit_chat_pending=True
         self._farm_chat_check_due=False
 
-        # Stop button interrupts long waits (chat nav, farm, donation panel, breaks).
+        # Stop button interrupts long waits (chat navigation, farming, and donations).
         stop = self.should_stop
         self.client.stop_check = stop
         self.app.stop_check = stop
@@ -121,7 +117,6 @@ class DonationBot:
         self.farmer.attack_nav.stop_check = stop
         self.farmer.deployer.stop_check = stop
         self.executor.stop_check = stop
-        self.break_manager.stop_check = stop
 
     def set_mode(self, mode: BotMode) -> None:
         """Switch flow context so classify() only considers relevant screens."""
@@ -187,11 +182,6 @@ class DonationBot:
         return (f'Farm: refill below {self.config.farm_resource_start_percent}% '
                 f'to {self.config.farm_resource_target_percent}%')
 
-    def break_status_line(self) -> str:
-        """Short status for the GUI (time until next session break)."""
-        from coc_bot.runtime.tracker import break_status_line as _break_status_line
-
-        return _break_status_line(self.tracker)
 
     def screen_status_line(self) -> str:
         """Short screen label for the GUI."""
@@ -288,7 +278,6 @@ class DonationBot:
             self.game_state.transition(GameState.RECOVERING, reason='resume interrupted attack')
         recover_attack(context(self.farmer), tracker=self.tracker)
         prune_attack_diagnostics(self.config.data_dir)
-        self.break_manager.resume_pending_break()
         self.tracker.start_loop_timing()
 
         self.set_mode(BotMode.DONATE)
@@ -342,7 +331,7 @@ class DonationBot:
             self.tracker.tick()
             logger.info('Account visit complete — handing off' if handed_off else 'Bot stopped')
         finally:
-            # Only active session time advances the mandatory-break countdown.
+            # Keep active runtime frozen while the controller is stopped.
             self.tracker.pause()
 
     def _loop_tick(self) -> None:
@@ -368,11 +357,6 @@ class DonationBot:
         if self._stop_requested:
             return
 
-        if self.break_manager.check_and_break_if_needed():
-            self._set_state("scan_chat")
-            # A break legitimately takes minutes — restart the watchdog clock.
-            self._state_entered = time.monotonic()
-            return
 
         # Farm between donation states only — never mid open_donation / donate.
         if self._settings_stop_ready():
@@ -596,9 +580,18 @@ class DonationBot:
             # Give each single-slot category a turn before filling remaining
             # builders. Each successful payment is independently verified by
             # the runner; an uncertain outcome stops the entire pass.
-            queue=list(kinds)
+            from coc_bot.accounts.store import read, write
+            visit=getattr(self,'_visit',None)
+            maintenance_path=self.config.data_dir/'upgrades/maintenance.json'
+            maintenance=read(maintenance_path,{})
+            visit_id=visit.load()['started_at'] if visit else None
+            saved=maintenance.get('remaining')
+            queue=(list(saved) if visit and maintenance.get('visit')==visit_id
+                   and isinstance(saved,list) and saved and all(k in kinds for k in saved) else list(kinds))
             attempts=0
-            while queue and attempts<10:
+            # Each paid transaction is followed by the ordinary chat checkpoint.
+            # Persist the remaining categories so a donor detour cannot starve lab/pets.
+            while queue and attempts<(1 if visit else 10):
                 kind=queue.pop(0)
                 if self._stop_requested: break
                 result=runner.run(kind,execute=True)
@@ -607,16 +600,24 @@ class DonationBot:
                 attempts+=1
                 logger.info('Upgrade check ({}): {} — {}',kind,result.get('status'),
                             result.get('message','No resource spending requested'))
-                if result.get('status') in ('needs_review','stopped','blocked','changed'):
-                    self._visit_retry_at=time.time()+300
-                    self._visit_reason=result.get('message',result['status'])
+                maintenance.setdefault('categories',{})[kind]={
+                    'at':time.time(),'status':result.get('status'),'message':result.get('message'),
+                    'availability':result.get('availability')}
+                if result.get('status') in ('needs_review','stopped','blocked','changed','no_room'):
+                    if not result.get('retry_other_candidates'):
+                        self._visit_retry_at=time.time()+300
+                        self._visit_reason=result.get('message',result['status'])
                     if result.get('status') in ('needs_review','stopped') or runner.state().get('pending'):break
+                    if result.get('retry_other_candidates') and kind=='buildings':queue.append(kind)
                     continue  # A pre-payment building issue must not starve lab/pets.
                 if kind=='buildings' and result.get('status') in ('started','built','recovered'):
                     # Rescan after construction/upgrade; never reuse the old
                     # balance, builder count, price, or selected row.
                     queue.append(kind)
                     if self._has_donate_request(self.capture.screenshot()): break
+            maintenance.update(account=getattr(self.config,'account_tag',None),visit=visit_id,
+                               remaining=queue,checked_at=time.time(),next_check_at=time.time()+300)
+            write(maintenance_path,maintenance)
             self._visit_repeat=bool(queue) and not getattr(self,'_visit_retry_at',None)
             if self._visit_repeat:self._next_upgrade_check=0
         finally:

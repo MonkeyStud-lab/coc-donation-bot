@@ -244,23 +244,6 @@ class DebugSession:
             "then retry. Also check: waydroid app list | grep -i clash"
         )
 
-    def break_cycle_short(self, wait_seconds: int = 8) -> str:
-        """Simulate take-a-break: force-stop, wait, relaunch, reopen chat."""
-        logger.info("Debug break cycle — force-stop, wait {}s, relaunch", wait_seconds)
-        self.app.force_stop()
-        self._sleep(max(3, wait_seconds))
-        loading = self.navigator.load_template("loading")
-        self.app.launch()
-        self.app.wait_until_ready(loading_template=loading)
-        ok = self.navigator.ensure_clan_chat(
-            has_donate_request=lambda f: self.chat_monitor.find_donate_request(f) is not None
-        )
-        from coc_bot.vision.screens import ScreenClassifier
-
-        ScreenClassifier.disarm_live_replay_watch()
-        if ok:
-            return f"Break cycle done (waited {wait_seconds}s) — clan chat open."
-        return f"Break cycle finished (waited {wait_seconds}s) but clan chat reopen failed."
 
     def farm_open_attack_menu(self) -> str:
         frame = self.capture.screenshot()
@@ -496,12 +479,6 @@ DEBUG_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
                 "Relaunch Clash of Clans",
                 "Start CoC again and wait until it looks loaded.",
             ),
-            (
-                "break_cycle",
-                "Test break / take-a-break cycle",
-                "Force-stop CoC, wait ~8s, relaunch, reopen clan chat — simulates the "
-                "session-limit break used to avoid long continuous play.",
-            ),
         ],
     ),
     (
@@ -615,7 +592,6 @@ def run_debug_action(action_id: str) -> str:
         "save_screenshot": session.save_screenshot,
         "force_stop": session.force_stop_coc,
         "relaunch": session.relaunch_coc,
-        "break_cycle": session.break_cycle_short,
         "farm_open_attack": session.farm_open_attack_menu,
         "farm_start_search": session.farm_start_unranked_search,
         "farm_classify": session.farm_classify_battle,

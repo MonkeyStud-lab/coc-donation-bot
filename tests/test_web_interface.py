@@ -590,7 +590,7 @@ class WebTests(TestCase):
         self.assertEqual(observed, [selected])
         self.assertEqual(project_root(), self.home)
 
-    def test_stopped_timers_remain_frozen_without_writing(self):
+    def test_removed_timers_stay_inert_without_writing_runtime_state(self):
         from datetime import datetime, timedelta, timezone
         from coc_bot.runtime.persistence import RuntimeState, save_runtime_state
         save_settings({"farm_enabled": True, "farm_resource_start_percent": 80}, revision())
@@ -600,13 +600,13 @@ class WebTests(TestCase):
         state.farm_paused_at = (now-timedelta(seconds=900)).isoformat()
         state.next_farm_interval_seconds = 7200
         state.active_seconds = 500
-        state.next_session_limit_seconds = 14400
         path = self.home / "data/runtime_state.json"
         save_runtime_state(path, state)
         original = path.read_bytes()
         for _ in range(2):
             snapshot = self.service.snapshot()
-            self.assertEqual(snapshot["timers"], {"farm_seconds": None, "break_seconds": 13900})
+            self.assertEqual(snapshot["timers"], {"farm_seconds": None, "break_seconds": None})
+            self.assertFalse(snapshot['on_break'])
             self.assertFalse(snapshot["active"])
         self.assertEqual(path.read_bytes(), original)
 

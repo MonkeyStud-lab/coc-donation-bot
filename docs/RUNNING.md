@@ -95,8 +95,9 @@ not stop automation. Closing the game/Waydroid is an explicit Diagnostics action
 Browser settings are always editable. Save while stopped applies without starting;
 Save & restart while running validates, waits for the current action, and restarts.
 Stop cancels the queued save/restart. Conflicting browser revisions require Reload.
-Farm/session countdowns pause while stopped; an already-started break expires in
-real time. Saving settings is not a way to reset an uncertain attack or purchase.
+Theme and interface-display preferences save without restarting automation.
+Farming follows resource readings; there are no scheduled session breaks.
+Saving settings is not a way to reset an uncertain attack or purchase.
 
 After a crash or interrupted attack, Start reconciles pending work before normal
 operation. It never replays deployments or purchases just because the process

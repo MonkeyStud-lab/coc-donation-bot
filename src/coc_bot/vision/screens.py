@@ -90,7 +90,7 @@ class ScreenClassifier:
         """
         Allow Live Replay detection for a short window after opening Clash.
 
-        Defenses show up right after relaunch (e.g. post mandatory break). Mid-session
+        Defenses can show up right after a game relaunch. Mid-session
         farm/donate must never misread a screen as Live Replay.
         """
         cls._live_replay_armed_until = time.monotonic() + max(0.0, duration_seconds)
@@ -387,7 +387,7 @@ class ScreenClassifier:
         """
         Spectator view while someone attacks *our* village (Live Replay).
 
-        Only considered after Clash was just opened (mandatory-break relaunch).
+        Only considered after Clash was just opened or relaunched.
         """
         if not self.live_replay_watch_armed():
             return False

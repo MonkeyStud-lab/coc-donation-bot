@@ -110,6 +110,25 @@ def currency(image):
     return best if scores[best] > .07 else None
 
 
+def confirmation_price(cell, stop=None):
+    """Discounts show a green payable line above a red-struck original price."""
+    h,w=cell.shape[:2]
+    hsv=cv2.cvtColor(cell,cv2.COLOR_BGR2HSV)
+    lower=hsv[round(h*.65):round(h*.92),round(w*.03):round(w*.80)]
+    red=cv2.inRange(lower,(0,110,110),(10,255,255))|cv2.inRange(lower,(170,110,110),(180,255,255))
+    strike=(red>0).mean(axis=1)>.55 if red.size else np.array([],dtype=bool)
+    if strike.any():
+        # Only an observed narrow horizontal strike enables the separate line.
+        if strike.sum()>max(3,round(h*.08)):return None
+        prices=[]
+        for saturation in (180,200):
+            mask=cv2.inRange(hsv,(35,saturation,100),(90,255,255))
+            line=mask[round(h*.32):round(h*.64),round(w*.03):round(w*.80)]
+            prices.append(resource_amount(cv2.cvtColor(line,cv2.COLOR_GRAY2BGR),stop))
+        return prices[0] if prices[0] is not None and prices[0]==prices[1] else None
+    return resource_amount(cell[round(h*.48):round(h*.91),round(w*.03):round(w*.80)],stop)
+
+
 @dataclass(frozen=True)
 class Candidate:
     name: str
@@ -312,7 +331,7 @@ class UpgradeReader:
             # The green button shades its white text differently from the list.
             # Use the same strict contrast-isolated read as resource balances;
             # conflicting raw/isolated prices still block spending.
-            price=resource_amount(cell[round(bh*.48):round(bh*.91),round(bw*.03):round(bw*.80)],self.stop)
+            price=confirmation_price(cell,self.stop)
             resource=currency(cell[round(bh*.35):round(bh*.95),round(bw*.79):round(bw*.99)])
             normalized=compact(label).replace('contirm','confirm')
             if not re.fullmatch(r'(?:ge)?(?:confirm|upgrade)',normalized):

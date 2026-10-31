@@ -1,3 +1,4 @@
+import {RefractiveLayer} from './RefractiveLayer';
 import React from 'react';
 
 const paths:Record<string,React.ReactNode>={
@@ -44,7 +45,7 @@ const number=new Intl.NumberFormat(undefined,{notation:'compact',maximumFraction
 export function ResourceLevels({data}:{data?:ResourceStatus}){
   const labels:Record<string,string>={gold:'Gold',elixir:'Elixir',dark_elixir:'Dark elixir'};
   const observation=data?.observation;
-  return <section className="resource-card panel">
+  return <section className="resource-card panel refractive-glass"><RefractiveLayer radius={16}/>
     <div className="panel-label"><span title={data?.observed_at?'Last checked '+new Date(data.observed_at*1000).toLocaleString():undefined}>Resources</span><span className="badge">{data?.enabled?`${data.start_percent}% → ${data.target_percent}%`:'Refill off'}</span></div>
     {observation?.resources?.length?<div className="resource-levels">{observation.resources.map(resource=>{
       const balance=observation.balances[resource],capacity=observation.capacities[resource];

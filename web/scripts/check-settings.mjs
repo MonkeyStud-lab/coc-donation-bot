@@ -19,6 +19,12 @@ try {
   const {coverRectangle}=await server.ssrLoadModule('/src/RefractiveLayer.tsx');
   assert.deepEqual(coverRectangle(100,100,200,100),{x:0,y:-50,width:200,height:200});
   assert.deepEqual(coverRectangle(400,200,100,100),{x:-50,y:0,width:200,height:100});
+  const {clipRegion}=await server.ssrLoadModule('/src/vendor/liquid-glass/Container.js');
+  assert.deepEqual(clipRegion({left:20,top:30,width:200,height:100},800,600),{left:20,top:30,right:220,bottom:130});
+  assert.deepEqual(clipRegion({left:-10,top:-10000,width:400,height:20000},800,600),{left:0,top:0,right:390,bottom:600});
+  assert.deepEqual(clipRegion({left:799.5,top:599.5,width:200,height:100},800,600),{left:799,top:599,right:800,bottom:600});
+  assert.equal(clipRegion({left:801,top:0,width:200,height:100},800,600),null);
+  assert.equal(clipRegion({left:0,top:0,width:0,height:100},800,600),null);
   function luminance(hex){
     const rgb=hex.match(/[0-9a-f]{2}/gi).map(x=>parseInt(x,16)/255)
       .map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4);
@@ -47,5 +53,6 @@ try {
   }
   console.log('Settings component checks passed');
   console.log('Fixed wallpaper cover geometry passed');
+  console.log('Shared viewport clipping: tall, partial, fractional, and offscreen surfaces passed');
   console.log('Harbor palette: readable text, actions, fields, and resource meters passed');
 } finally {await server.close();}

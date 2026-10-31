@@ -1,3 +1,4 @@
+import {RefractiveLayer} from './RefractiveLayer';
 import React, {useEffect, useRef, useState} from 'react';
 import {EmptyState,Icon} from './ui';
 
@@ -51,7 +52,7 @@ export function Accounts({api,locked,result,operation,working,jobError,live,onCh
         <Icon name="refresh" size={17}/>{switching?'Finish switch':'Verify account'}</button>}
       <button className="primary" disabled={disabled||!data?.active||!!data?.pending} onClick={()=>act('add')}><Icon name="plus" size={17}/>Add account</button>
     </div>
-    {adding&&<section className="panel account-onboarding">
+    {adding&&<section className="panel account-onboarding refractive-glass"><RefractiveLayer radius={16}/>
       <ol>
         <li>{data?.accounts.length?'In Live view, choose Log in to Supercell ID and sign in to the new account.':'Open your own home village in Live view.'}</li>
         <li>Return to the home village, close any game menus, then release Live view control.</li>
@@ -66,7 +67,7 @@ export function Accounts({api,locked,result,operation,working,jobError,live,onCh
         <p>Choose that account in the game's Supercell ID menu, return to its home village, and release Live view control.</p>
         <button disabled={disabled} onClick={()=>act('verify')}>Confirm saved account</button></details>}
     </section>}
-    <div className="accounts-grid">{data?.accounts.map(account=><section className={'panel account-card '+(data.active===account.id?'current-account':'')} key={account.id}>
+    <div className="accounts-grid">{data?.accounts.map(account=><section className={'panel account-card refractive-glass '+(data.active===account.id?'current-account':'')} key={account.id}><RefractiveLayer radius={16}/>
       <div className="account-card-heading"><span className="avatar">{account.nickname.slice(0,2).toUpperCase()}</span><div className="account-identity"><strong>{account.nickname}</strong><span>{account.tag}</span></div>
         {data.active===account.id&&<span className="badge current-badge"><i className="status-dot connected"/>{data.pending?'Previous':'Current'}</span>}
         <button className="icon-button" aria-label={'Edit '+account.nickname} title="Edit account" disabled={disabled||!!data.pending} onClick={()=>{setEditing(account.id);setName(account.nickname);setChosen(account.roles);}}><Icon name="edit" size={17}/></button></div>
@@ -88,7 +89,7 @@ export function Accounts({api,locked,result,operation,working,jobError,live,onCh
           {data.active!==account.id&&<button disabled={disabled||!!data.pending} onClick={()=>act('switch',account.id)}>Switch<Icon name="chevron" size={14}/></button>}</div></>}
     </section>)}</div>
     {!data&&!error&&<EmptyState icon="accounts">Loading accounts…</EmptyState>}
-    {data&&data.accounts.length>1&&<section className="panel rotation-card">
+    {data&&data.accounts.length>1&&<section className="panel rotation-card refractive-glass"><RefractiveLayer radius={16}/>
       <label className="toggle"><input type="checkbox" disabled={disabled||!!data.pending}
         checked={!!data.rotation?.enabled} onChange={async e=>{
           const primary=data.rotation?.primary_id||data.accounts.find(a=>a.roles.includes('donating'))?.id;

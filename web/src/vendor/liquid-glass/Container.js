@@ -5,6 +5,14 @@
  * Upstream GLSL refraction and geometry are retained. This adapter replaces
  * page snapshots/nested buttons with a supplied wallpaper and owned lifecycle.
  */
+// Clip in CSS pixels before allocating a GL viewport, including very tall panels.
+export function clipRegion(rect, width, height) {
+  if (rect.width <= 0 || rect.height <= 0) return null
+  const left = Math.max(0, Math.floor(rect.left)), top = Math.max(0, Math.floor(rect.top))
+  const right = Math.min(width, Math.ceil(rect.left + rect.width))
+  const bottom = Math.min(height, Math.ceil(rect.top + rect.height))
+  return right > left && bottom > top ? {left, top, right, bottom} : null
+}
 export class Container {
   constructor(host, image, options = {}) {
     this.element = document.createElement('div')
@@ -15,6 +23,7 @@ export class Container {
     this.host = host
     this.image = image
     this.borderRadius = options.borderRadius ?? 24
+    this.manualDraw = options.manualDraw ?? false
     this.tintOpacity = 0
     this.warp = false
     this.controls = {blurRadius: 2.5, edgeIntensity: .035, rimIntensity: .06,
@@ -30,7 +39,7 @@ export class Container {
       this.resizeCanvas()
       this.setupShader(image)
       if (!this.gl_refs.program) throw new Error('Glass program unavailable')
-      this.render()
+      if (!this.manualDraw) this.render()
       if (this.gl.getError() !== this.gl.NO_ERROR) throw new Error('Glass texture or draw failed')
     } catch (error) { this.destroy(); throw error }
   }
@@ -50,21 +59,36 @@ export class Container {
   }
 
   // The source is a fixed viewport-size wallpaper, not a document snapshot.
-  startRenderLoop() { this.render() }
+  startRenderLoop() { if (!this.manualDraw) this.render() }
 
   render() {
+    const rect = this.host.getBoundingClientRect()
+    this.renderRegions([{left: 0, top: 0, width: this.canvas.width, height: this.canvas.height,
+      sourceLeft: rect.left, sourceTop: rect.top, radius: this.borderRadius}])
+  }
+
+  // One shared canvas/context, one clear, only the visible portion of each surface.
+  renderRegions(regions) {
     const refs = this.gl_refs
     if (!refs.program || this.gl.isContextLost()) return
     const gl = this.gl
     gl.useProgram(refs.program)
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height)
-    gl.uniform2f(refs.resolutionLoc, this.canvas.width, this.canvas.height)
-    gl.uniform1f(refs.borderRadiusLoc, this.borderRadius)
     gl.uniform1f(refs.scrollYLoc, 0)
-    const position = this.getPosition()
-    gl.uniform2f(refs.containerPositionLoc, position.x, position.y)
     gl.clear(gl.COLOR_BUFFER_BIT)
-    gl.drawArrays(gl.TRIANGLES, 0, 6)
+    for (const rect of regions) {
+      const clip = clipRegion(rect, this.canvas.width, this.canvas.height)
+      if (!clip) continue
+      const u0 = (clip.left - rect.left) / rect.width, u1 = (clip.right - rect.left) / rect.width
+      const v0 = (clip.top - rect.top) / rect.height, v1 = (clip.bottom - rect.top) / rect.height
+      gl.bindBuffer(gl.ARRAY_BUFFER, refs.texcoordBuffer)
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([u0,v1,u1,v1,u0,v0,u0,v0,u1,v1,u1,v0]), gl.DYNAMIC_DRAW)
+      gl.viewport(clip.left, this.canvas.height - clip.bottom, clip.right - clip.left, clip.bottom - clip.top)
+      gl.uniform2f(refs.resolutionLoc, rect.width, rect.height)
+      gl.uniform1f(refs.borderRadiusLoc, rect.radius)
+      gl.uniform2f(refs.containerPositionLoc, (rect.sourceLeft ?? rect.left) + rect.width / 2,
+        (rect.sourceTop ?? rect.top) + rect.height / 2)
+      gl.drawArrays(gl.TRIANGLES, 0, 6)
+    }
   }
 
   refresh(image) {
@@ -75,7 +99,7 @@ export class Container {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image)
     gl.uniform2f(refs.textureSizeLoc, image.width, image.height)
     if (gl.getError() !== gl.NO_ERROR) throw new Error('Glass texture update failed')
-    this.render()
+    if (!this.manualDraw) this.render()
   }
 
   destroy() {
@@ -272,11 +296,14 @@ export class Container {
         vec2 textureRefraction = perpendicular * rippleEffect;
         
         vec2 totalRefraction = baseRefraction + cornerRefraction + textureRefraction;
-        textureCoord += totalRefraction;
+        // Keep displacement in CSS pixels, independent of viewport dimensions.
+        textureCoord += totalRefraction * (vec2(220.0) / u_textureSize);
         
         // Gaussian blur
-        vec4 color = vec4(0.0);
         vec2 texelSize = 1.0 / u_textureSize;
+        vec4 color = texture2D(u_image, textureCoord);
+        if (u_blurRadius > 0.01) {
+        color = vec4(0.0);
         float sigma = u_blurRadius / 2.0;
         vec2 blurStep = texelSize * sigma;
         
@@ -296,6 +323,7 @@ export class Container {
         }
         
         color /= totalWeight;
+        }
         
         // Simple vertical gradient
         float gradientPosition = coord.y;

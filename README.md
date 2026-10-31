@@ -239,7 +239,7 @@ waits for the current donation/attack to finish, then restarts with the new sett
 **Stop** cancels a pending restart. While stopped, **Save** applies settings without
 starting automation. Release manual control before saving.
 The browser uses **Harbor**, a black, cobalt, and brass interface with a local
-abstract wallpaper and WebGL refraction on its navigation surfaces. Page switching
+abstract wallpaper and WebGL refraction on its navigation and main panels. Page switching
 is immediate, with no page animation. Reduced transparency and GPU limitations
 receive an opaque fallback. See [Harbor](docs/UI_INTERFACES.md).
 

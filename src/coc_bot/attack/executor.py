@@ -1,4 +1,4 @@
-"""One measured action at a time. An uncertain map tap is never replayed."""
+"""Verified deployments, including bounded spam bursts. Never replay uncertain taps."""
 from dataclasses import dataclass
 import json
 import os
@@ -80,7 +80,7 @@ def hero_health_visible(frame, card, *, allow_low=False):
 
 
 class VerifiedExecutor:
-    def __init__(self, session, plan, projection, reference, catalog, *, journal_dir=None):
+    def __init__(self, session, plan, projection, reference, catalog, *, journal_dir=None, spam=False):
         validate_geometry(plan,projection)
         self.session,self.plan,self.projection=session,plan,projection
         self.reference,self.catalog=reference,catalog
@@ -91,6 +91,8 @@ class VerifiedExecutor:
             lambda frame, **evidence: active_battle_ready(frame,stop_check=self.stop,**evidence))
         self.result=ExecutionResult(False,'not started')
         self.deployed_heroes=set();self.abilities=set();self.skipped_abilities=set()
+        self._deployment_observation=None
+        self.spam=spam
         self.path=Path(journal_dir or session.config.data_dir/'debug'/'attack-executions')/(uuid.uuid4().hex+'.jsonl')
         self.path.parent.mkdir(parents=True,exist_ok=True)
 
@@ -105,7 +107,9 @@ class VerifiedExecutor:
             logger.info('Attack step {}/{}: {} {}',fields['number']+1,len(self.plan.steps),
                         fields['action'].replace('_',' '),fields.get('unit_id','').replace('_',' '))
         elif event=='deployment_verified':
-            logger.info('Deployment confirmed: {} (remaining {})',fields['unit_id'],fields['quantity_after'])
+            logger.info('Deployment confirmed: {} ×{} (remaining {})',fields['unit_id'],fields.get('batch_size',1),fields['quantity_after'])
+        elif event=='map_batch_intent':
+            logger.info('Deploying {} ×{} as a rapid group',fields['unit_id'],len(fields['targets']))
         elif event=='waiting_for_battle_controls':
             logger.info('Attack paused — waiting for clear battle controls')
         elif event=='battle_controls_restored':
@@ -116,6 +120,7 @@ class VerifiedExecutor:
             logger.info('Hero ability skipped: {} — no usable health bar; continuing remaining steps',fields['unit_id'])
 
     def frame(self):
+        self._deployment_observation=None
         check_stop(self.stop)
         frame=self.session.capture.screenshot()
         self.last_frame=frame
@@ -168,8 +173,15 @@ class VerifiedExecutor:
 
     def position(self, point):
         """Re-measure every pan; there are no remembered swipe counts."""
+        observed=self._deployment_observation if self.spam else None
+        self._deployment_observation=None
         for attempt in range(5):
-            frame=self.frame();h,w=frame.shape[:2]
+            # Reuse the just-verified deployment frame for the next selection.
+            # select() still captures/validates the new selection before any
+            # map tap, and a pan always requires a newly measured frame.
+            check_stop(self.stop)
+            frame=(observed[1] if attempt==0 and observed and time.monotonic()-observed[3]<=1.
+                   else self.frame());h,w=frame.shape[:2]
             x,y=self.target(point)
             if input_area(x,y,w,h): return frame,(round(x),round(y))
             dx=float(np.clip(w*.48-x,-w*.22,w*.22))
@@ -180,6 +192,7 @@ class VerifiedExecutor:
         raise ValueError('Deployment point could not be brought clear of the controls')
 
     def select(self, frame, unit_id):
+        self._deployment_observation=None
         frame,card=self.find(frame,unit_id)
         # Cards rise/reflow after selection and deployment. Observe twice before
         # deciding the click missed, then permit one fresh, identified CARD tap.
@@ -253,15 +266,24 @@ class VerifiedExecutor:
                 self.result.uncertain_tap=False
                 self.result.verified_taps+=1
                 self.result.first_deploy_at=self.result.first_deploy_at or sent_at
-                if card.kind=='hero': self.deployed_heroes.add(unit_id)
+                if card.kind=='hero':
+                    self.deployed_heroes.add(unit_id)
+                self._deployment_observation=(unit_id,after_frame,after,time.monotonic())
                 self.note('deployment_verified',unit_id=unit_id,quantity_after=after.quantity)
                 return
         raise ValueError('No verified deployment change for '+unit_id+'; remaining taps stopped')
 
     def ability(self, unit_id):
+        check_stop(self.stop)
         if unit_id not in self.deployed_heroes or unit_id in self.abilities or unit_id in self.skipped_abilities:
             raise ValueError('Hero ability has no verified deployment')
-        frame,card=self.find(self.frame(),unit_id)
+        observed=self._deployment_observation
+        if self.spam and observed and observed[0]==unit_id and time.monotonic()-observed[3]<=1.:
+            # The immediately preceding deployment already proved this card's
+            # health bar in a current battle frame. No intervening input.
+            _,frame,card,_=observed
+        else:
+            frame,card=self.find(self.frame(),unit_id)
         if not hero_health_visible(frame,card,allow_low=True):
             # Already deployed and freshly identified, but dead/auto-triggered
             # or too uncertain to tap. Other heroes can still have abilities.
@@ -274,19 +296,33 @@ class VerifiedExecutor:
         self.abilities.add(unit_id)
         self.note('ability_sent',unit_id=unit_id)
 
-    def deploy_batch(self, unit_id, points):
-        """A fresh troop selection, <=5 clear targets, one exact count delta."""
-        if unit_id not in ('barbarian','archer','giant','wall_breaker','wizard'):
+    def deploy_batch(self, unit_id, points, *, spam=False):
+        """One selected card, clear targets, and one exact count delta.
+
+        Spam air/Rage groups can contain <=20 taps, sent in interruptible chunks
+        of at most five. A partial/uncertain burst is never retried.
+        """
+        supported=('electro_dragon','dragon','balloon','barbarian','archer','rage','rage_spell') if spam else (
+            'barbarian','archer','giant','wall_breaker','wizard')
+        if unit_id not in supported:
             raise ValueError('Only supported ground troops can use deployment batches')
-        if not 1<=len(points)<=5:raise ValueError('Invalid ground deployment batch')
+        if not 1<=len(points)<=(20 if spam else 5):raise ValueError('Invalid deployment batch')
         if len(points)==1:return self.deploy(unit_id,points[0])
         check_stop(self.stop)
         frame,_=self.position(points[0]);frame,card=self.select(frame,unit_id)
-        if card.kind!='troop' or card.quantity is None or card.quantity<len(points):
-            raise ValueError('Ground batch troop availability is unverified')
+        expected_kind='spell' if spam and unit_id in ('rage','rage_spell') else 'troop'
+        if card.kind!=expected_kind or card.quantity is None or card.quantity<len(points):
+            raise ValueError('Batch unit availability is unverified')
         h,w=frame.shape[:2]
         targets=[tuple(round(v) for v in self.target(point)) for point in points]
-        if not all(input_area(*target,w,h) for target in targets):
+        remainder=[]
+        if spam:
+            # Keep the visible prefix fast; remeasure the camera before any
+            # remaining offscreen target. Never tap through army/HUD controls.
+            count=next((i for i,target in enumerate(targets) if not input_area(*target,w,h)),len(targets))
+            if not count:raise ValueError('Spam target moved under game controls')
+            remainder=points[count:];points=points[:count];targets=targets[:count]
+        elif not all(input_area(*target,w,h) for target in targets):
             # Nothing has been sent. Reposition and verify individual targets
             # when this camera cannot safely show a whole batch.
             for point in points:self.deploy(unit_id,point)
@@ -301,7 +337,12 @@ class VerifiedExecutor:
         self.result.first_attempt_at=self.result.first_attempt_at or sent_at
         self.result.uncertain_tap=True
         cv2.imwrite(str(self.path.with_suffix('.before.png')),frame)
-        self.session.input.tap_many(targets)
+        if spam:
+            for start in range(0,len(targets),5):
+                check_stop(self.stop)
+                self.session.input.tap_many(targets[start:start+5],settle_ms=0)
+        else:self.session.input.tap_many(targets)
+        self.note('map_batch_sent',unit_id=unit_id,count=len(targets),spam=spam)
         for attempt in range(2):
             self.session._sleep(.2);after_frame=self.frame()
             cv2.imwrite(str(self.path.with_suffix('.after.png')),after_frame)
@@ -317,8 +358,10 @@ class VerifiedExecutor:
                 self.result.uncertain_tap=False;self.result.verified_taps+=len(points)
                 self.result.first_deploy_at=self.result.first_deploy_at or sent_at
                 self.note('deployment_verified',unit_id=unit_id,quantity_after=after.quantity,batch_size=len(points))
+                self._deployment_observation=(unit_id,after_frame,after,time.monotonic())
+                if remainder:self.deploy_batch(unit_id,remainder,spam=True)
                 return
-        raise ValueError('Ground batch count change was not confirmed; no taps will be replayed')
+        raise ValueError('Batch count change was not confirmed; no taps will be replayed')
 
     def run(self):
         self.note('started',plan=self.plan.to_dict())
@@ -335,11 +378,15 @@ class VerifiedExecutor:
                         raise ValueError('Unit is already deployed: '+entry.unit_id)
             for number,step in enumerate(self.plan.steps):
                 check_stop(self.stop);self.note('step',number=number,action=step.action,unit_id=step.unit_id)
-                if step.action=='wait': self.session._sleep(step.seconds)
+                if step.action=='wait':
+                    self._deployment_observation=None;self.session._sleep(step.seconds)
                 elif step.action=='ability': self.ability(step.unit_id)
                 else:
                     points=step_points(step)
-                    if (getattr(self.session.config,'progression_enabled',False) is True and
+                    if (self.spam and self.plan.strategy in ('mass_electro_dragons','mass_dragons') and
+                            step.unit_id in ('electro_dragon','dragon','balloon','barbarian','archer','rage','rage_spell')):
+                        for start in range(0,len(points),20):self.deploy_batch(step.unit_id,points[start:start+20],spam=True)
+                    elif (getattr(self.session.config,'progression_enabled',False) is True and
                             self.plan.strategy=='farming_ground' and step.action=='deploy_line'):
                         for start in range(0,len(points),5):self.deploy_batch(step.unit_id,points[start:start+5])
                     else:

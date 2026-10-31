@@ -512,6 +512,25 @@ class ProgressionPolicyTests(TestCase):
         self.assertEqual(plan.steps[-1].action,'cast_points')
         self.assertEqual(plan.steps[-1].quantity,5)
 
+    def test_spam_air_army_is_one_group_and_spells_precede_heroes_regardless_of_bar_order(self):
+        def card(u,n,kind='troop'):return ArmyCard(u,(0,0,100,140),u,kind,n,stable=True)
+        plan=farming_plan([card('electro_dragon',8),card('king',1,'hero'),card('rage',5,'spell')])
+        self.assertEqual([(s.unit_id,s.action) for s in plan.steps],
+                         [('electro_dragon','deploy_line'),('rage','cast_points'),('king','deploy_point'),('king','ability')])
+        self.assertEqual(plan.steps[0].quantity,8)
+
+    def test_spam_settle_override_does_not_change_normal_input_delays(self):
+        from coc_bot.adb.input import InputController
+        client=Mock();client.stop_check=lambda:False;client.wm_size.return_value=(1000,600)
+        control=InputController(client);control._sleep=Mock()
+        control.tap_many([(200,300)],settle_ms=0)
+        control._sleep.assert_not_called()
+        control.tap_many([(200,300)]);control._sleep.assert_called_once()
+        client.run_shell.reset_mock()
+        for value in (-1,True,1001,'0'):
+            with self.assertRaises(ValueError):control.tap_many([(200,300)],settle_ms=value)
+        client.run_shell.assert_not_called()
+
     def test_no_donation_home_does_not_open_locked_chat(self):
         from coc_bot.progression.home import ensure_home
         nav=Mock();nav._stopping.return_value=False

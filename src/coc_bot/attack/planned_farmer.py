@@ -196,7 +196,7 @@ def run_planned_attack(farmer, *, automatic=False):
             logger.info('Automatic attack: built {} steps from {} army cards',len(plan.steps),len(plan.army))
         else:
             catalog=learned_catalog(farmer.config)
-        executor=VerifiedExecutor(session,plan,observed['projection'],observed['reference'],catalog)
+        executor=VerifiedExecutor(session,plan,observed['projection'],observed['reference'],catalog,spam=automatic)
         result=executor.run()
         AttackCheckpoint(farmer.config).update('deployment_finished')
     except ValueError as exc:

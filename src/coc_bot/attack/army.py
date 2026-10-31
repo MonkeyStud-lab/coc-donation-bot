@@ -470,7 +470,7 @@ def resolve_just_depleted(frame, catalog, before, *, stop_check=None, spent=1):
     Current artwork must still identify the unit, be visibly depleted, and show
     x0 for stacked units. It never authorizes selecting a remembered position.
     """
-    if type(spent) is not int or not 1<=spent<=5 or before.quantity!=spent or before.kind=='hero':
+    if type(spent) is not int or not 1<=spent<=20 or before.quantity!=spent or before.kind=='hero':
         raise ValueError('No verified empty card: '+before.unit_id)
     x,y,w,h=before.box;cell=frame[y:y+h,x:x+w]
     identity=catalog.identify_reference(cell,stop_check=stop_check)

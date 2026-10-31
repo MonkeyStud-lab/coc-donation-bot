@@ -240,6 +240,15 @@ class BattleEvidenceTests(TestCase):
                 patch('coc_bot.attack.army.read_badge',return_value=None):
             with self.assertRaises(ValueError):resolve_just_depleted(frame,catalog,card)
 
+    def test_full_spam_burst_depletion_requires_matching_artwork_zero_and_exact_spent_count(self):
+        frame=np.zeros((600,1000,3),np.uint8)
+        before=ArmyCard('card-0',(100,500,70,95),'electro_dragon','troop',11)
+        catalog=Mock();catalog.identify_reference.return_value=('electro_dragon','troop',1.,1.)
+        with patch('coc_bot.attack.army.depleted_card',return_value=True),patch('coc_bot.attack.army.read_badge',return_value=0):
+            self.assertEqual(resolve_just_depleted(frame,catalog,before,spent=11).quantity,0)
+            for spent in (5,21,True):
+                with self.assertRaises(ValueError):resolve_just_depleted(frame,catalog,before,spent=spent)
+
 
 class ExecutorTests(TestCase):
     def test_ground_batch_requires_exact_count_delta_and_never_replays_partial_inputs(self):
@@ -271,6 +280,90 @@ class ExecutorTests(TestCase):
             exe,session,_=self.executor(root)
             with self.assertRaises(ValueError):exe.deploy_batch('electro_dragon',[MapPoint(.055,.5)]*2)
             session.input.tap_many.assert_not_called()
+
+    def test_spam_dragon_and_spell_groups_verify_once_after_all_chunks(self):
+        for unit,kind,quantity,after in [('electro_dragon','troop',11,0),('rage_spell','spell',5,0)]:
+            with self.subTest(unit=unit),TemporaryDirectory() as root:
+                exe,session,frame=self.executor(root,quantity=quantity)
+                before=ArmyCard('0',(100,500,70,95),unit,kind,quantity)
+                exe.select=Mock(return_value=(frame,before));exe.resolve=Mock(return_value=replace(before,quantity=after))
+                exe.deploy_batch(unit,[MapPoint(.055,.5)]*quantity,spam=True)
+                self.assertEqual([len(c.args[0]) for c in session.input.tap_many.call_args_list],
+                                 [5,5,1] if quantity==11 else [5])
+                self.assertTrue(all(c.kwargs=={'settle_ms':0} for c in session.input.tap_many.call_args_list))
+                self.assertEqual(exe.frame.call_count,1)
+                self.assertEqual(exe.result.verified_taps,quantity)
+                self.assertFalse(exe.result.uncertain_tap)
+
+    def test_spam_partial_count_is_not_replayed(self):
+        with TemporaryDirectory() as root:
+            exe,session,frame=self.executor(root,quantity=11)
+            exe.select=Mock(return_value=(frame,self.card(11)));exe.resolve=Mock(return_value=self.card(4))
+            with self.assertRaisesRegex(ValueError,'no taps will be replayed'):
+                exe.deploy_batch('electro_dragon',[MapPoint(.055,.5)]*11,spam=True)
+            self.assertEqual(session.input.tap_many.call_count,3)
+            session.input.tap.assert_not_called();self.assertTrue(exe.result.uncertain_tap)
+
+    def test_stop_between_spam_chunks_leaves_recoverable_intent(self):
+        with TemporaryDirectory() as root:
+            exe,session,frame=self.executor(root,quantity=11)
+            exe.select=Mock(return_value=(frame,self.card(11)))
+            session.input.tap_many.side_effect=lambda *a,**k:setattr(exe,'stop',lambda:True)
+            with self.assertRaises(AdbStopped):exe.deploy_batch('electro_dragon',[MapPoint(.055,.5)]*11,spam=True)
+            session.input.tap_many.assert_called_once();exe.resolve=Mock()
+            self.assertTrue(exe.result.uncertain_tap)
+            checkpoint=json.loads((Path(root)/'attack-planner/attack-pending.json').read_text())
+            self.assertTrue(checkpoint['deployment_possible'])
+
+    def test_spam_out_of_view_targets_are_repositioned_before_the_next_group(self):
+        with TemporaryDirectory() as root:
+            exe,session,frame=self.executor(root,quantity=3)
+            exe.select=Mock(side_effect=[(frame,self.card(3)),(frame,self.card(1))])
+            exe.resolve=Mock(side_effect=[self.card(1),self.card(0)])
+            exe.target=Mock(side_effect=[(250,300),(260,300),(250,570),(250,300)])
+            exe.deploy_batch('electro_dragon',[MapPoint(.055,.5)]*3,spam=True)
+            self.assertEqual(exe.position.call_count,2)
+            self.assertEqual([len(c.args[0]) for c in session.input.tap_many.call_args_list],[2])
+            # The final single tap follows the normal individually verified path.
+            session.input.tap.assert_called_once_with(250,300,jitter=0)
+
+    def test_immediate_hero_ability_uses_its_deployment_observation_only_once(self):
+        with TemporaryDirectory() as root:
+            exe,session,frame=self.executor(root)
+            hero=ArmyCard('h',(100,500,70,95),'king','hero',1)
+            exe.spam=True;exe.deployed_heroes.add('king');exe._deployment_observation=('king',frame,hero,time.monotonic())
+            with patch('coc_bot.attack.executor.hero_health_visible',return_value=True):exe.ability('king')
+            exe.frame.assert_not_called();session.input.tap.assert_called_once_with(135,547,jitter=0)
+            with self.assertRaises(ValueError):exe.ability('king')
+
+    def test_expired_hero_observation_requires_a_new_frame(self):
+        with TemporaryDirectory() as root:
+            exe,session,frame=self.executor(root)
+            hero=ArmyCard('h',(100,500,70,95),'king','hero',1)
+            exe.spam=True;exe.deployed_heroes.add('king');exe._deployment_observation=('king',frame,hero,time.monotonic()-2)
+            exe.find=Mock(return_value=(frame,hero))
+            with patch('coc_bot.attack.executor.hero_health_visible',return_value=True):exe.ability('king')
+            exe.frame.assert_called_once()
+
+    def test_automatic_spam_run_batches_a_full_unit_instead_of_individual_taps(self):
+        with TemporaryDirectory() as root:
+            exe,session,frame=self.executor(root,quantity=11);exe.spam=True
+            exe.find=Mock(return_value=(frame,self.card(11)))
+            exe.select=Mock(return_value=(frame,self.card(11)));exe.resolve=Mock(return_value=self.card(0))
+            result=exe.run()
+            self.assertTrue(result.success);self.assertEqual(result.verified_taps,11)
+            self.assertEqual(session.input.tap_many.call_count,3)
+            session.input.tap.assert_not_called()
+
+    def test_next_spam_selection_reuses_only_a_just_verified_visible_deployment_frame(self):
+        with TemporaryDirectory() as root:
+            exe,session,frame=self.executor(root);exe.spam=True;del exe.position
+            for age,reads in ((0,0),(2,1)):
+                with self.subTest(age=age):
+                    exe.frame.reset_mock()
+                    exe._deployment_observation=('king',frame,self.card(1),time.monotonic()-age)
+                    exe.position(MapPoint(.055,.5))
+                    self.assertEqual(exe.frame.call_count,reads)
 
     def executor(self, root, quantity=2):
         session=Mock();session.config.data_dir=Path(root);session.client.stop_check=lambda:False

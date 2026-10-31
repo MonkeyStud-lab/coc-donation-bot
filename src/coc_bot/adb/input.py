@@ -109,7 +109,7 @@ class InputController:
             self.client.run_shell(f"input swipe {x1} {y1} {x2} {y2} {duration_ms}")
         self._sleep()
 
-    def tap_many(self, points) -> None:
+    def tap_many(self, points, *, settle_ms: int | None = None) -> None:
         """A bounded troop batch; caller must verify its total count change.
 
         Coordinates are integers only, never browser-provided shell text.
@@ -120,6 +120,8 @@ class InputController:
         if any(not isinstance(p,(list,tuple)) or len(p)!=2 or
                any(type(v) is not int or not 0<=v<=100000 for v in p) for p in points):
             raise ValueError('Troop batch coordinates must be nonnegative integers')
+        if settle_ms is not None and (type(settle_ms) is not int or not 0<=settle_ms<=1000):
+            raise ValueError('Batch settle must be an integer between zero and 1000 ms')
         if self.client.stop_check and self.client.stop_check():raise AdbStopped('Stopped before troop batch')
         targets=[self._to_touch(x,y) for x,y in points]
         recorder.note_action('tap_batch',points=targets,dry_run=self.dry_run)
@@ -127,7 +129,10 @@ class InputController:
             logger.info('[DRY-RUN] troop batch ({} taps)',len(targets))
         else:
             self.client.run_shell(' && '.join(f'input tap {x} {y}' for x,y in targets))
-        self._sleep()
+        if settle_ms is None:
+            self._sleep()
+        elif interrupted_sleep(settle_ms/1000.,self.client.stop_check):
+            raise AdbStopped('Stopped after troop batch')
 
     def back(self) -> None:
         recorder.note_action("back", dry_run=self.dry_run)

@@ -34,8 +34,18 @@ recognition uses the installed icon pack and any existing reviewed card referenc
 but never needs `routine.json`. Unfamiliar hero skins may be unreadable and cause a
 skip if an identified card cannot be read consistently. Unrecognized skins are
 left unused. This is a supported-army automatic mode, not universal army recognition.
-The executor still verifies individual deployments and never repeats an uncertain
-tap. Stop interrupts immediately and leaves any required camera recovery pending.
+Automatic Dragon/Electro Dragon attacks select each troop or Rage card once and
+send rapid groups of up to 20 mapped drops, followed by an exact total-count check.
+Each ADB command contains at most five taps; Stop is checked between commands.
+There are no screenshots or random settle delays between those taps. Targets
+outside the visible play area require fresh camera positioning before continuing.
+Progression armies cast Rage before siege/heroes regardless of army-bar order.
+An immediately verified deployment frame can guide the next card selection for
+up to one second; selecting a different card still requires a fresh confirmation
+before its map drops. A hero's verified health bar can also authorize its immediate
+ability without another screenshot. Saved custom plans retain individual
+deployment verification. Uncertain or partial bursts are never replayed, and
+Stop leaves any required attack/camera recovery pending.
 
 ## Use the planner
 

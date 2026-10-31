@@ -74,12 +74,7 @@ def farming_plan(cards, *, deploy_line=None):
         if unit not in by_id:
             continue
         count = by_id[unit].quantity
-        if air and unit in ('dragon', 'electro_dragon') and count > 2:
-            steps.extend((PlanStep('deploy_point', unit, 1, (line[0],)),
-                          PlanStep('deploy_point', unit, 1, (line[1],)),
-                          PlanStep('deploy_line', unit, count - 2, line)))
-        else:
-            steps.append(PlanStep('deploy_line', unit, count, line))
+        steps.append(PlanStep('deploy_line', unit, count, line))
         if unit == 'giant':
             steps.append(PlanStep('wait', seconds=1))
     extra = []
@@ -95,7 +90,9 @@ def farming_plan(cards, *, deploy_line=None):
         extra.append(ArmyEntry(card.unit_id,card.kind,card.quantity,True))
     if sum(e.kind=='hero' for e in extra)>4 or sum(e.kind=='siege' for e in extra)>1 or sum(e.kind=='spell' for e in extra)>1:
         raise ValueError('Ambiguous farming support inventory')
-    for entry in extra:
+    # Inventory order follows army-bar pages; it must not delay Rage until after
+    # slow hero selection/verification. Always cast support immediately after troops.
+    for entry in sorted(extra,key=lambda e:{'spell':0,'siege':1,'hero':2}[e.kind]):
         if entry.kind=='spell':
             targets=tuple(MapPoint(.27,.5 if entry.quantity==1 else .22+i*.56/(entry.quantity-1)) for i in range(entry.quantity))
             steps.append(PlanStep('cast_points',entry.unit_id,entry.quantity,targets))

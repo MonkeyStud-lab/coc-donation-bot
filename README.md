@@ -238,9 +238,10 @@ Settings remain editable while the bot runs. **Save & restart** validates change
 waits for the current donation/attack to finish, then restarts with the new settings.
 **Stop** cancels a pending restart. While stopped, **Save** applies settings without
 starting automation. Release manual control before saving.
-The browser uses **Harbor**, a pearl-and-blue interface with a locally served scenic
-wallpaper, glass navigation, and brief page transitions. Reduced-motion and
-reduced-transparency preferences are respected. See [Harbor](docs/UI_INTERFACES.md).
+The browser uses **Harbor**, a black, cobalt, and brass interface with a local
+abstract wallpaper and WebGL refraction on its navigation surfaces. Page switching
+is immediate, with no page animation. Reduced transparency and GPU limitations
+receive an opaque fallback. See [Harbor](docs/UI_INTERFACES.md).
 
 Automatic farming follows resource levels rather than a countdown. The bot does
 not schedule session breaks or close Clash because of elapsed runtime. Old break

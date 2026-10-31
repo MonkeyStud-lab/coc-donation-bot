@@ -75,8 +75,8 @@ need a different permitted network path. No external STUN/TURN service is config
 
 ## Pages and ownership
 
-Harbor is the default and only web interface, with a local scenic wallpaper, glass
-navigation, and optional page transitions. See [Harbor design and accessibility](UI_INTERFACES.md).
+Harbor is the only web interface, with black/cobalt/brass colors, a local abstract
+wallpaper, and WebGL refraction in navigation. Page switching has no animation. See [Harbor design and accessibility](UI_INTERFACES.md).
 
 - **Overview:** Start/Stop, Farm now, practice mode, resource readings,
   and one activity feed. Live view is available from every page.

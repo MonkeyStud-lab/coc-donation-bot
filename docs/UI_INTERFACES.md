@@ -1,42 +1,52 @@
 # Harbor web interface
 
-Harbor is the only web interface. Every browser opens it automatically, regardless of
-any previously saved Original or Watchtower preference. There is no interface or web
-theme selector. Legacy desktop theme settings remain separate.
+Harbor is the only web interface, with black content surfaces, cobalt actions,
+brass highlights, and a local abstract wallpaper. There is no interface or theme
+selector. Legacy desktop theme preferences stay separate.
 
-The sidebar and page toolbar use translucent fills, backdrop blur, and quiet edge
-highlights. Settings, activity logs, account cards, and other content stay opaque for
-readability. Browsers without backdrop-filter support receive solid navigation surfaces.
-Reduced-transparency and increased-contrast preferences remove the wallpaper and glass.
+The sidebar and page header use the actual WebGL refraction shader adapted from
+[dashersw/liquid-glass-js](https://github.com/dashersw/liquid-glass-js), pinned to
+`78cb6ccb0b9987bb60a88b14ccbd13a9e6e8ab2a`. The shader bends the wallpaper at
+rounded edges and corners. This is not a CSS backdrop-blur substitution. Settings,
+logs, account cards, labels, and buttons remain sharp DOM content above it.
 
-Sidebar navigation animates the existing page element for 180 ms with a short fade and
-8 px rise. It does not remount the application, delay input, or restart the controller.
-Further navigation cancels the previous animation. Reduced motion disables it.
+The upstream MIT license is retained in `web/src/vendor/liquid-glass/LICENSE`,
+in the renderer's bundle notice, and in the distributed `liquid-glass-LICENSE.txt`.
+The adapter replaces page screenshots and nested demo buttons with a cached
+viewport-sized wallpaper texture. It draws on load, scroll, resize, and visibility
+changes rather than running a continuous animation loop. Hidden tabs do not render.
+Each surface releases its GPU resources and listeners when removed.
 
-The original mountain-and-lake wallpaper is served locally from
-`web/public/harbor-wallpaper.jpg`; it adds about 180 KiB, makes no third-party requests,
-and is fixed rather than animated. It was generated using the built-in image tool and
-JPEG-encoded without altering the scene. Prompt: “A peaceful alpine mountain lake,
-layered blue mountains, an evergreen peninsula, soft morning light, pearl-blue sky,
-spacious low-contrast center, muted blue/slate/sage, no text, logos, or UI.”
+Reduced transparency, increased contrast, forced colors, unavailable WebGL, image
+errors, and context loss fall back to opaque navigation. A dark readability veil
+keeps text legible over bright portions of the image. The controller and game do
+not depend on WebGL. GPU rendering happens in the viewing browser.
 
-`harbor.css` controls layout and materials, `interfacePalettes.ts` defines the single
-semantic palette, and `pageTransition.ts` manages cancellable motion. Obsolete interface
-selection code, alternate layout CSS, and the dark palette are removed. Existing browser
-preferences are ignored; no storage migration or account-settings edit is required.
+Page-switch animations have been removed. Sidebar navigation changes pages
+immediately, and clicking the current page preserves its unsaved settings.
 
-Run `pnpm --dir web test` and `pnpm --dir web run build`. Check sidebar navigation,
-unsaved settings, keyboard focus, narrow widths, and motion preferences in the isolated
-`scripts/preview_web_offline.py` preview before deployment. Color tests enforce 4.5:1
-text/action contrast and 3:1 field boundaries and resource meters.
+The generated wallpaper is `web/public/harbor-abstract.jpg`, served locally; it
+makes no external image requests. The previous landscape asset was removed.
+Built-in image-generation prompt:
 
-Design references: [Unslop](https://heydamir.design/unslop) by Damir Sokolovsky
-(@heydamir), CC BY 4.0, informed spacing, hierarchy, icon consistency, and restraint.
-Apple's [materials](https://developer.apple.com/design/human-interface-guidelines/materials)
-and [motion](https://developer.apple.com/design/human-interface-guidelines/motion) guidance
-informed navigation-only glass and brief, optional transitions.
+> Create an original abstract 16:9 desktop wallpaper for a dark self-hosted dashboard.
+> Main colors: deep near-black, saturated cobalt blue, and warm brushed brass.
+> Sculptural, broad flowing bands of cobalt glass and thin brass metallic ribbons
+> curving across a black field, with restrained realistic edge lighting and deep
+> negative space. The brightest curved details live toward the left and top/right
+> edges so they can be visibly bent through refractive glass navigation panels;
+> keep the center mostly black and calm for opaque UI content cards. Elegant
+> material study, photographic 3D abstraction rather than illustration, no neon glow,
+> no purple, no pink, no text, no symbols, no logo, no UI. Crisp large forms, not busy
+> fine textures or particles. Wide wallpaper, dark and understated, cobalt is the
+> dominant chromatic color and brass is a limited accent.
 
-The suggested [liquid-glass-js](https://github.com/dashersw/liquid-glass-js) implementation
-was reviewed. It uses page snapshots and WebGL; this app uses native CSS backdrop filters
-instead, with no html2canvas dependency, custom WebGL contexts, or snapshot rendering.
-This is a web approximation of glass, not Apple's native Liquid Glass material.
+Run `pnpm --dir web test` and `pnpm --dir web run build`. The optional
+`node scripts/build-refraction-probe.mjs` command, run from `web/`, builds a
+separate GPU fixture under `data/debug/refraction-probe`; it is never included
+in the distributed app. Its checkerboard comparison verifies that turning on
+refraction changes rendered pixels while preserving zero WebGL errors and clean
+resource disposal. Use the isolated web preview for responsive and live-state checks.
+
+Design craft also follows [Unslop](https://heydamir.design/unslop), by Damir
+Sokolovsky (@heydamir), CC BY 4.0, and Apple's material-layer accessibility guidance.

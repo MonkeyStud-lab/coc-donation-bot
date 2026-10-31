@@ -3,7 +3,7 @@ import {AttackObservation} from './AttackObservation';
 import {AttackPlanner} from './AttackPlanner';
 import {Accounts} from './Accounts';
 import {SettingsPanel} from './SettingsPanel';
-import {usePageTransition} from './pageTransition';
+import {RefractiveLayer} from './RefractiveLayer';
 import {harborPalette,paletteProperties} from './interfacePalettes';
 import {EmptyState,Icon,pageIcons,pageLabels,ResourceLevels,ResourceStatus} from './ui';
 import {createRoot} from 'react-dom/client';
@@ -63,11 +63,9 @@ function useDialog(ref:React.RefObject<HTMLElement|null>,close:()=>void){
 }
 
 function App(){
-  const pageElement=useRef<HTMLElement|null>(null);
   const [signed,setSigned]=useState(false),[password,setPassword]=useState('');
   const [passwordRequired,setPasswordRequired]=useState(true),[checkingSession,setCheckingSession]=useState(true);
   const [page,setPage]=useState(FIRST_LAUNCH?'Setup':'Dashboard'),[notice,setNotice]=useState('');
-  usePageTransition(pageElement,page);
   const [online,setOnline]=useState(false),[status,setStatus]=useState<Status|null>(null);
   const [logs,setLogs]=useState<Entry[]>([]),[debug,setDebug]=useState(false),[scroll,setScroll]=useState(true);
   const [settings,setSettings]=useState<SettingsData|null>(null),[values,setValues]=useState<Record<string,any>>({});
@@ -243,18 +241,18 @@ function App(){
     (advanced||!f.expert)&&
     (advanced||BASIC_SETTINGS.has(f.key)||f.key.startsWith('upgrade_')||f.key.startsWith('progression_')||f.key.startsWith('builder_base_')||f.key.startsWith('layouts_')||f.key.startsWith('collection_'))&&
     (f.label+' '+f.description).toLowerCase().includes(search.toLowerCase()))||[];
-  return <div className="app"><a className="skip-link" href="#main-content">Skip to content</a><aside className="sidebar"><a className="brand" href="#" onClick={e=>{e.preventDefault();navigate('Dashboard');}}><span className="brand-icon"><Icon name="castle" size={23}/></span><span>CoC Bot</span></a>
+  return <div className="app"><a className="skip-link" href="#main-content">Skip to content</a><aside className="sidebar refractive-glass"><RefractiveLayer radius={24}/><a className="brand" href="#" onClick={e=>{e.preventDefault();navigate('Dashboard');}}><span className="brand-icon"><Icon name="castle" size={23}/></span><span>CoC Bot</span></a>
     <nav className="primary-nav" aria-label="Main navigation">{['Dashboard','Accounts','Settings','Setup','Library','Diagnostics'].map(p=><button key={p}
       aria-label={pageLabels[p]} title={pageLabels[p]} aria-current={page===p?'page':undefined} className={page===p?'selected':''} onClick={()=>navigate(p)}><Icon name={pageIcons[p]}/><span>{pageLabels[p]}</span>{page===p&&<i/>}</button>)}</nav>
     <div className="sidebar-bottom"><button className="account-shortcut" onClick={()=>navigate('Accounts')}><span className="avatar">{status?.account?.nickname?.slice(0,2).toUpperCase()||'CC'}</span><span><strong>{status?.account?.nickname||'No account selected'}</strong><small><i className={'status-dot '+(online?'connected':'')}/>{online?'Connected':'Reconnecting'}</small></span><Icon name="chevron" size={15}/></button>
     {FIRST_LAUNCH&&<button disabled={locked} onClick={()=>location.assign('/')}>Exit first-launch test</button>}
     {passwordRequired&&<button className="quiet" onClick={()=>attempt(async()=>{await api('logout','POST');expired();})}><Icon name="logout" size={17}/>Sign out</button>}</div></aside>
-    <main ref={pageElement} id="main-content" className={'page page-'+page.toLowerCase()}>{FIRST_LAUNCH&&<div className="notice">First-launch test · changes are kept separate from your saved setup.</div>}
-    <header className="page-header"><h1>{pageLabels[page]||page}</h1><div className="header-actions">
+    <main id="main-content" className={'page page-'+page.toLowerCase()}>{FIRST_LAUNCH&&<div className="notice">First-launch test · changes are kept separate from your saved setup.</div>}
+    <header className="page-header refractive-glass"><RefractiveLayer radius={20}/><h1>{pageLabels[page]||page}</h1><div className="header-actions">
       {status?.account&&<button className="header-account quiet" title={status.account.nickname} onClick={()=>navigate('Accounts')}><span className="avatar">{status.account.nickname.slice(0,2).toUpperCase()}</span><span>{status.account.nickname}</span></button>}
       {!online&&<span className="connection"><i className="status-dot working"/>Reconnecting</span>}
       {page!=='Dashboard'&&canStop&&<button className="danger" disabled={!online} onClick={()=>command('stop')}><Icon name="stop" size={16}/>Stop</button>}
-      <button className="live-button" disabled={!online} onClick={()=>setLive(true)}><Icon name="video" size={18}/><span>Live view</span></button>
+      <button className="live-button" aria-label="Live view" disabled={!online} onClick={()=>setLive(true)}><Icon name="video" size={18}/><span>Live view</span></button>
     </div></header>
     {notice&&<div className="notice" role="status"><span>{notice}</span><button className="icon-button" aria-label="Dismiss message" onClick={()=>setNotice('')}><Icon name="close" size={17}/></button></div>}
     {status?.account_pending&&page!=='Accounts'&&<div className="notice">Finish account setup before starting automation.<button onClick={()=>navigate('Accounts')}>Accounts</button></div>}

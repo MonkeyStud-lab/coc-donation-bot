@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Refraction GPU check</title></head>
+<body style="background:#07090d;color:#f1f2f5;font:16px system-ui;padding:24px">
+<h1>Refraction GPU check</h1>
+<div id="glass" style="width:360px;height:180px;position:relative;overflow:hidden"></div>
+<pre id="result" role="status">Compiling the actual renderer…</pre>
+<script type="module">
+import {Container} from '../src/vendor/liquid-glass/Container.js';
+const host=document.querySelector('#glass'),result=document.querySelector('#result');
+try{
+  const image=document.createElement('canvas');image.width=2048;image.height=2048;
+  const ctx=image.getContext('2d');
+  for(let y=0;y<2048;y+=16)for(let x=0;x<2048;x+=16){
+    ctx.fillStyle=((x+y)/16)%2?'#2448c7':'#d4b27a';ctx.fillRect(x,y,16,16);
+  }
+  const renderer=new Container(host,image,{borderRadius:24,controls:{
+    edgeIntensity:0,rimIntensity:0,cornerBoost:0,rippleEffect:0,
+  }});
+  const gl=renderer.gl,refs=renderer.gl_refs;
+  function pixels(){const out=new Uint8Array(renderer.canvas.width*renderer.canvas.height*4);
+    gl.readPixels(0,0,renderer.canvas.width,renderer.canvas.height,gl.RGBA,gl.UNSIGNED_BYTE,out);return out;}
+  const flat=pixels();
+  gl.uniform1f(refs.edgeIntensityLoc,.035);gl.uniform1f(refs.rimIntensityLoc,.06);gl.uniform1f(refs.cornerBoostLoc,.025);
+  renderer.render();const refracted=pixels();let changed=0,painted=0;
+  for(let i=0;i<flat.length;i+=4){
+    if(flat[i+3]>0)painted++;
+    if(Math.abs(flat[i]-refracted[i])+Math.abs(flat[i+1]-refracted[i+1])+Math.abs(flat[i+2]-refracted[i+2])>30)changed++;
+  }
+  const error=gl.getError();renderer.destroy();
+  const report={passed:painted>1000&&changed>100&&error===0&&host.childElementCount===0,
+    painted_pixels:painted,refracted_pixels:changed,gl_error:error,cleanup:host.childElementCount===0};
+  result.textContent=JSON.stringify(report,null,2);
+}catch(error){result.textContent=JSON.stringify({passed:false,error:String(error)},null,2);}
+</script></body></html>

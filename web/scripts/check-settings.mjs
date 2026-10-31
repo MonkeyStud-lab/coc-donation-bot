@@ -16,14 +16,9 @@ try {
   assert.ok(render({dirty:true,restarting:true}).includes('Save &amp; restart'));
   assert.ok(render({dirty:true,saving:true}).includes('Applying…'));
   const {harborPalette,paletteProperties}=await server.ssrLoadModule('/src/interfacePalettes.ts');
-  const {animatePage}=await server.ssrLoadModule('/src/pageTransition.ts');
-  let calls=0;
-  const element={animate(){calls++;return {cancel(){}};}};
-  assert.equal(animatePage(null,false),undefined);
-  assert.equal(animatePage(element,true),undefined);
-  assert.equal(calls,0,'Reduced motion must skip page animation');
-  assert.ok(animatePage(element,false));
-  assert.equal(calls,1);
+  const {coverRectangle}=await server.ssrLoadModule('/src/RefractiveLayer.tsx');
+  assert.deepEqual(coverRectangle(100,100,200,100),{x:0,y:-50,width:200,height:200});
+  assert.deepEqual(coverRectangle(400,200,100,100),{x:-50,y:0,width:200,height:100});
   function luminance(hex){
     const rgb=hex.match(/[0-9a-f]{2}/gi).map(x=>parseInt(x,16)/255)
       .map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4);
@@ -37,6 +32,7 @@ try {
     }
     assert.ok(contrast(palette.accent_fg,palette.accent)>=4.5);
     assert.ok(contrast('#ffffff',palette.danger)>=4.5);
+    assert.ok(contrast('#ffffff',palette.cobalt)>=4.5);
     assert.ok(contrast(palette.border,palette.field_bg)>=3,'Input boundaries need 3:1 contrast');
     for(const meter of [palette.gold,palette.elixir,palette.dark_elixir])
       assert.ok(contrast(meter,palette.surface)>=3);
@@ -44,12 +40,12 @@ try {
     const blend=(hex,base,alpha)=>'#'+hex.match(/[0-9a-f]{2}/gi)
       .map((part,i)=>Math.round(parseInt(part,16)*alpha+parseInt(base.slice(1+i*2,3+i*2),16)*(1-alpha)).toString(16).padStart(2,'0')).join('');
     for(const backdrop of ['#000000','#ffffff']){
-      const glass=blend('#fafcff',backdrop,.9);
-      for(const ink of [palette.text,palette.text_secondary,palette.accent])
+      const glass=blend('#05080e',backdrop,.74);
+      for(const ink of [palette.text,palette.text_secondary,palette.accent,palette.brass])
         assert.ok(contrast(ink,glass)>=4.5,'Glass must stay readable over any wallpaper luminance');
     }
   }
   console.log('Settings component checks passed');
-  console.log('Page animation and reduced-motion behavior passed');
+  console.log('Fixed wallpaper cover geometry passed');
   console.log('Harbor palette: readable text, actions, fields, and resource meters passed');
 } finally {await server.close();}

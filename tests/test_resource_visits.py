@@ -296,7 +296,7 @@ class ArmyHallHintTests(unittest.TestCase):
         from coc_bot.progression.army import composition
         self.assertEqual(composition(18,340,{'electro_dragon':4}),{'electro_dragon':11})
         self.assertEqual(composition(18,340,{'electro_dragon':4,'barbarian':4}),
-                         {'electro_dragon':11,'barbarian':10})
+                         {'electro_dragon':11})
         self.assertEqual(composition(8,185,{'dragon':2}),{'dragon':9})
         with self.assertRaises(ValueError):composition(10,240,{'electro_dragon':4})
 
@@ -317,3 +317,14 @@ class ArmyHallHintTests(unittest.TestCase):
             prep.hall.side_effect=ValueError('Current Town Hall level badge could not be verified')
             with self.assertRaises(ValueError):prep.army_hall()
         finally:selected_account.reset(token)
+
+    def test_electro_dragons_override_every_mixed_preset_when_unlocked(self):
+        from coc_bot.progression.army import composition
+        from coc_bot.progression.profiles import HOUSING
+        for hall in range(11,19):
+            for capacity in (260,280,300,320,340,352):
+                with self.subTest(hall=hall,capacity=capacity):
+                    self.assertEqual(composition(hall,capacity,{u:1 for u in HOUSING}),
+                                     {'electro_dragon':capacity//30})
+        self.assertNotIn('electro_dragon',composition(11,260,{'electro_dragon':0,'dragon':1}))
+        self.assertNotIn('electro_dragon',composition(10,240,{'dragon':1}))

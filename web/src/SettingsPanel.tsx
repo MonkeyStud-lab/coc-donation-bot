@@ -1,4 +1,3 @@
-import {RefractiveLayer} from './RefractiveLayer';
 import React,{useState} from 'react';
 import {EmptyState,Icon} from './ui';
 
@@ -49,7 +48,7 @@ export function SettingsPanel({fields,values,search,setSearch,advanced,setAdvanc
       className={!search&&active===name?'selected':''} onClick={()=>{setSelected(name);setSearch('');}}><Icon name={icon} size={18}/>{name}</button>)}</nav>
       <div className="settings-content">
       {updateMessage&&<div className="notice" role="status">{updateMessage}</div>}
-      <section className="settings panel refractive-glass"><RefractiveLayer radius={16}/>{shown.map(f=><SettingRow key={f.key} field={f} value={values[f.key]} edit={v=>edit(f.key,v)}/>)}
+      <section className="settings panel">{shown.map(f=><SettingRow key={f.key} field={f} value={values[f.key]} edit={v=>edit(f.key,v)}/>)}
       {!shown.length&&<EmptyState icon="search">No matching settings</EmptyState>}</section></div>
     </div>
   </div>;

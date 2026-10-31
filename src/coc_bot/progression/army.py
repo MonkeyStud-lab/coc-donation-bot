@@ -11,6 +11,10 @@ def composition(hall, capacity, unlocked):
     if type(hall) is not int or not 2 <= hall <= 18 or type(capacity) is not int or not 1 <= capacity <= 352:
         raise ValueError('Verify Town Hall and army capacity first')
     available = {unit for unit, level in unlocked.items() if type(level) is int and level > 0}
+    if hall>=11 and 'electro_dragon' in available and capacity>=HOUSING['electro_dragon']:
+        # One farming family after its real unlock; do not mix in other troops
+        # merely to fill a few spare housing spaces or match an older preset.
+        return {'electro_dragon':capacity//HOUSING['electro_dragon']}
     eligible = [p for p in HOME_PROFILES if 2 <= p.hall <= hall and all(u in available for u, _ in p.troops)]
     # A missing filler identity must not reject a verified mass-air army or
     # downgrade it to a starter composition. Spare camp space may remain empty;

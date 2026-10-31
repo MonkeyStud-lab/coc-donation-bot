@@ -3,7 +3,6 @@ import {AttackObservation} from './AttackObservation';
 import {AttackPlanner} from './AttackPlanner';
 import {Accounts} from './Accounts';
 import {SettingsPanel} from './SettingsPanel';
-import {RefractiveLayer} from './RefractiveLayer';
 import {harborPalette,paletteProperties} from './interfacePalettes';
 import {EmptyState,Icon,pageIcons,pageLabels,ResourceLevels,ResourceStatus} from './ui';
 import {createRoot} from 'react-dom/client';
@@ -223,7 +222,7 @@ function App(){
       setStatus(await response.json());setNotice('Game archive imported. Preparing Clash…');
     });
   }
-  const activityPanel=(<section key="activity" className="activity panel refractive-glass"><RefractiveLayer radius={16}/><div className="panel-label activity-controls"><span>Activity <span className="live-indicator"><i className={'status-dot '+(online?'connected':'')}/></span></span><div className="activity-options">
+  const activityPanel=(<section key="activity" className="activity panel"><div className="panel-label activity-controls"><span>Activity <span className="live-indicator"><i className={'status-dot '+(online?'connected':'')}/></span></span><div className="activity-options">
         <label className="toggle"><input type="checkbox" checked={debug} onChange={e=>setDebug(e.target.checked)}/>Debug</label>
         <label className="toggle"><input type="checkbox" checked={scroll} onChange={e=>setScroll(e.target.checked)}/>Auto-scroll</label>
         <button className="icon-button" aria-label="Copy activity" title="Copy activity" onClick={()=>navigator.clipboard.writeText(logs.map(x=>x.at+' '+x.level+' '+x.text).join('\n')).catch(()=>setNotice('Clipboard unavailable. Use Export in Tools.'))}><Icon name="copy" size={17}/></button></div></div>
@@ -241,14 +240,14 @@ function App(){
     (advanced||!f.expert)&&
     (advanced||BASIC_SETTINGS.has(f.key)||f.key.startsWith('upgrade_')||f.key.startsWith('progression_')||f.key.startsWith('builder_base_')||f.key.startsWith('layouts_')||f.key.startsWith('collection_'))&&
     (f.label+' '+f.description).toLowerCase().includes(search.toLowerCase()))||[];
-  return <div className="app"><a className="skip-link" href="#main-content">Skip to content</a><aside className="sidebar refractive-glass"><RefractiveLayer radius={24}/><a className="brand" href="#" onClick={e=>{e.preventDefault();navigate('Dashboard');}}><span className="brand-icon"><Icon name="castle" size={23}/></span><span>CoC Bot</span></a>
+  return <div className="app"><a className="skip-link" href="#main-content">Skip to content</a><aside className="sidebar"><a className="brand" href="#" onClick={e=>{e.preventDefault();navigate('Dashboard');}}><span className="brand-icon"><Icon name="castle" size={23}/></span><span>CoC Bot</span></a>
     <nav className="primary-nav" aria-label="Main navigation">{['Dashboard','Accounts','Settings','Setup','Library','Diagnostics'].map(p=><button key={p}
       aria-label={pageLabels[p]} title={pageLabels[p]} aria-current={page===p?'page':undefined} className={page===p?'selected':''} onClick={()=>navigate(p)}><Icon name={pageIcons[p]}/><span>{pageLabels[p]}</span>{page===p&&<i/>}</button>)}</nav>
     <div className="sidebar-bottom"><button className="account-shortcut" onClick={()=>navigate('Accounts')}><span className="avatar">{status?.account?.nickname?.slice(0,2).toUpperCase()||'CC'}</span><span><strong>{status?.account?.nickname||'No account selected'}</strong><small><i className={'status-dot '+(online?'connected':'')}/>{online?'Connected':'Reconnecting'}</small></span><Icon name="chevron" size={15}/></button>
     {FIRST_LAUNCH&&<button disabled={locked} onClick={()=>location.assign('/')}>Exit first-launch test</button>}
     {passwordRequired&&<button className="quiet" onClick={()=>attempt(async()=>{await api('logout','POST');expired();})}><Icon name="logout" size={17}/>Sign out</button>}</div></aside>
     <main id="main-content" className={'page page-'+page.toLowerCase()}>{FIRST_LAUNCH&&<div className="notice">First-launch test · changes are kept separate from your saved setup.</div>}
-    <header className="page-header refractive-glass"><RefractiveLayer radius={20}/><h1>{pageLabels[page]||page}</h1><div className="header-actions">
+    <header className="page-header"><h1>{pageLabels[page]||page}</h1><div className="header-actions">
       {status?.account&&<button className="header-account quiet" title={status.account.nickname} onClick={()=>navigate('Accounts')}><span className="avatar">{status.account.nickname.slice(0,2).toUpperCase()}</span><span>{status.account.nickname}</span></button>}
       {!online&&<span className="connection"><i className="status-dot working"/>Reconnecting</span>}
       {page!=='Dashboard'&&canStop&&<button className="danger" disabled={!online} onClick={()=>command('stop')}><Icon name="stop" size={16}/>Stop</button>}
@@ -264,7 +263,7 @@ function App(){
         }}/></label>}
     </div>}
     {page==='Dashboard'&&<>
-      <section className={'play panel refractive-glass '+(status?.active?'is-running':'')}><RefractiveLayer radius={16}/>
+      <section className={'play panel '+(status?.active?'is-running':'')}>
       <div className="run-state"><span className={'run-indicator '+(status?.active?'running':status?.error?'failed':'')}><Icon name={status?.active?'refresh':status?.error?'info':'castle'} size={23}/></span>
         <div><div className="run-status"><span className={'status-dot '+(status?.active?'connected':status?.error?'failed':'')}/>{status?.manual_control?'Manual control':status?.active?(status.state==='running'?'Running':status.state.replaceAll('_',' ')):status?.state==='failed'?'Needs attention':'Stopped'}{practice&&<span className="badge">Practice</span>}</div>
         <strong className="run-activity">{status?.manual_control?'You have control':status?.active?(status.state==='stopping'?'Stopping safely…':status.activity||'Preparing automation'):status?.error?'Automation paused':status?.platform?.busy?'Preparing the game':'Ready when you are'}</strong></div>
@@ -292,11 +291,11 @@ function App(){
       <button disabled={locked||!setup} onClick={()=>beginSetup(false)}>Recalibrate all</button>
       <button className="primary" disabled={locked||!setup} onClick={()=>beginSetup(true)}><Icon name="setup" size={17}/>Set up missing</button>
       {!!queue.length&&<button onClick={()=>setQueue([])}>Exit guided setup</button>}</div>
-      <div className="setup"><section className="checklist panel refractive-glass" aria-label="Calibration steps"><RefractiveLayer radius={16}/>
+      <div className="setup"><section className="checklist panel" aria-label="Calibration steps">
       {setupSteps.map(s=><details open key={s.id}><summary><span>{s.label}</span><small>{s.parts.filter(p=>p.configured).length}/{s.parts.length}</small></summary>{s.parts.map(p=><button key={p.key}
       aria-current={part?.key===p.key?'step':undefined} className={part?.key===p.key?'selected':''} onClick={()=>{setSelected(p.key);setQueue([]);}}>
         <span className={p.configured?'complete':'missing'}>{p.configured?<Icon name="check" size={14}/>:<i/>}</span><span>{p.label}</span></button>)}</details>)}
-      </section><section className="guide panel refractive-glass"><RefractiveLayer radius={16}/>{part?<>
+      </section><section className="guide panel">{part?<>
         <div className="guide-state"><span className={'badge '+(part.configured?'configured':'')}>{part.configured?'Configured':'Not configured'}</span>{part.optional&&<span className="badge">Optional</span>}</div>
         <h2>{part.label}</h2><p className="instructions">{part.instructions}</p>
         <div className="toolbar"><button className="primary" disabled={locked} onClick={()=>captureScreen(part)}>Capture screen</button>
@@ -315,7 +314,7 @@ function App(){
             if(!response.ok)throw new Error(await response.text());await reload();});e.target.value='';
         }}/></label>
         </div>
-      <section className="backup-list panel refractive-glass"><RefractiveLayer radius={16}/>{backups.map(b=><div className="setting backup-row" key={b.id}><span><Icon name="library" size={18}/>{b.label}</span><div className="toolbar">
+      <section className="backup-list panel">{backups.map(b=><div className="setting backup-row" key={b.id}><span><Icon name="library" size={18}/>{b.label}</span><div className="toolbar">
         <button disabled={locked} onClick={()=>confirm('Restore this calibration? A safety backup will be saved.')&&attempt(async()=>{await api('backups/'+b.id+'/restore','POST');await reload();})}>Restore</button>
         <a href={BASE+'/api/backups/'+b.id+'/export'} download>Export</a>
         <button disabled={locked} onClick={()=>{const name=prompt('Calibration name',b.label);if(name)attempt(async()=>{await api('backups/'+b.id,'PATCH',{name});await reload();});}}>Rename</button>
@@ -336,7 +335,7 @@ function App(){
       {toolGroup==='Attacks'&&<AttackPlanner api={api} base={BASE} result={status?.result} locked={locked}/>}
       {toolGroup==='Upgrades'&&<div className="upgrade-grid">{(['buildings','research','pets'] as const).map(kind=>{
         const report=status?.result?.upgrade_report&&status.result.kind===kind?status.result:null;
-        return <section key={kind} className="panel upgrade-card refractive-glass"><RefractiveLayer radius={16}/>
+        return <section key={kind} className="panel upgrade-card">
           <div className="upgrade-card-label"><span className="tool-icon"><Icon name={{buildings:'hammer',research:'swords',pets:'heart'}[kind]} size={23}/></span><span>{{buildings:'Building upgrades',research:'Army research',pets:'Pet upgrades'}[kind]}</span></div><div className="upgrade-actions">
             <button disabled={locked} onClick={()=>command('upgrades/preview',{kind})}>Check upgrades</button>
             <button disabled={locked||report?.status!=='ready'||!report?.token} onClick={()=>{

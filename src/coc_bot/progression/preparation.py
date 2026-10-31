@@ -15,6 +15,7 @@ from coc_bot.progression.reader import same_row_observation
 from coc_bot.progression.troop_info import read_info,info_point,load_references,remember_reference
 from coc_bot.upgrades.vision import text, compact, crop
 from coc_bot.upgrades.runner import write_json
+from coc_bot.upgrades.scroll import menu_list_unchanged
 from coc_bot.vision.battle_menu import _white_label, direct_match_button
 
 
@@ -307,9 +308,13 @@ class ArmyPreparation:
                         self.s._sleep(.25)
                     raise ValueError('Current Town Hall level badge could not be verified')
                 h,w=frame.shape[:2]
+                previous=frame
                 self.s.input.swipe(round(w*.87),round(h*.82),round(w*.87),round(h*.40),350)
                 self.s._sleep(.3);frame=self.frame()
                 if r.reader.menu_kind(frame)!='buildings':break
+                if menu_list_unchanged(previous,frame):
+                    logger.info('Town Hall lookup reached the end of the building list')
+                    break
             raise ValueError('Town Hall entry was not found')
         finally:
             f=self.frame();close=r.reader.detail_close(f)
@@ -396,6 +401,18 @@ class ArmyPreparation:
             self.tap(point)
         frame=self.frame()
         if not picker_editor_visible(frame,self.stop):raise ValueError('Troop picker lost My Army')
+        preferred=getattr(self,'preferred_unit',None)
+        if preferred:
+            # Cached artwork still needs two fresh agreeing unlock readings,
+            # but known Electro Dragons do not require opening any Info panel.
+            first=picker_unlocks(frame,self.catalog,self.stop)
+            fresh=self.frame()
+            if not picker_editor_visible(fresh,self.stop):raise ValueError('Troop picker changed during unlock verification')
+            second=picker_unlocks(fresh,self.catalog,self.stop)
+            if (preferred in first and preferred in second and first[preferred]['level']==second[preferred]['level']
+                    and max(abs(a-b) for a,b in zip(first[preferred]['point'],second[preferred]['point']))<=frame.shape[0]*.01):
+                return {preferred:second[preferred]}
+            frame=fresh
         frame=self.learn_unlocks(frame)
         first=picker_unlocks(frame,self.catalog,self.stop)
         fresh=self.frame()
@@ -411,12 +428,16 @@ class ArmyPreparation:
     def learn_unlocks(self,frame):
         # Positions locate a fresh card, never decide its identity. Only a
         # readable unlocked level plus its blue Info control permits inspection.
+        preferred=getattr(self,'preferred_unit',None)
         for box in picker_boxes(frame)[:20]:
             x,y,w,h=box;cell=frame[y:y+h,x:x+w]
             level=picker_level(cell)
             if level is None:continue
             reference=self.catalog.identify_reference(cell,kind='troop',stop_check=self.stop)
             unit,kind,score,margin=reference or self.catalog.identify(cell,kind='troop',stop_check=self.stop)
+            if preferred and kind=='troop' and unit is not None and (reference is not None or score>=.94 and margin>=.025):
+                if unit==preferred:return frame
+                continue
             if unit in HOUSING and (reference is not None or score>=.94 and margin>=.025):continue
             point=info_point(cell)
             if point is None:continue
@@ -434,6 +455,7 @@ class ArmyPreparation:
                 remember_reference(self.references,self.catalog,first['unit_id'],cell)
                 logger.info('Verified unlocked {} level {} from two Info frames',first['unit_id'],level)
             frame=fresh
+            if preferred and first['unit_id']==preferred:return frame
         return frame
 
     def close(self):
@@ -490,9 +512,23 @@ class ArmyPreparation:
 
     def _prepare(self):
         logger.info('Preparing farming army from current unlocks and camp space')
-        hall=self.army_hall()
+        from coc_bot.accounts.store import selected_account
+        account=selected_account.get();known=getattr(self.s.config,'account_town_hall',None)
+        # A matching verified account's TH11+ is an eligibility floor for this
+        # one army family. Fresh owned troops/picker unlocks and camp capacity
+        # still decide what can be trained. This never authorizes upgrade spending.
+        hint=(account is not None and account.get('tag')==getattr(self.s.config,'account_tag',None)
+              and type(known) is int and 11<=known<=18 and account.get('town_hall')==known)
+        hall=known if hint else self.army_hall()
+        self.preferred_unit='electro_dragon' if hall>=11 else None
         self.open();frame,cards,space=self.observe()
-        unlocked=self.unlocked(frame,cards)
+        if self.preferred_unit and any(c.unit_id==self.preferred_unit and c.quantity>0 for c in cards):
+            # Two matching owned-army observations already prove availability
+            # (at least level one). Exact troop levels are not needed to choose
+            # mass Electro Dragons, and existing quantities need no picker scan.
+            unlocked={self.preferred_unit:{'level':1,'point':None}}
+            logger.info('Using verified Electro Dragon army and current camp capacity; skipping troop descriptions')
+        else:unlocked=self.unlocked(frame,cards)
         desired=composition(hall,space[1],{u:v['level'] for u,v in unlocked.items()})
         counts={c.unit_id:c.quantity for c in cards}
         if counts!=desired:

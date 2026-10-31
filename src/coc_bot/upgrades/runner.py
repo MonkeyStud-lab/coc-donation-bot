@@ -177,23 +177,25 @@ class UpgradeRunner:
                 if frame is None: return {'status':'stopped'}
             report=self.inspect(kind,frame)
             # Bounded list exploration. Only a verified Suggested section qualifies.
-            seen=set();all_choices=[]
+            from coc_bot.upgrades.scroll import menu_list_unchanged
+            seen=set();all_choices=[];at_end=False
             for page in range(5):
                 for item in report['recommendations']:
                     identity=(compact(item['name']),item['cost'],item['currency'])
                     if identity not in seen:
                         seen.add(identity);all_choices.append(item)
                 eligible=next((item for item in report['recommendations'] if not item['skip']),None)
-                if eligible or report['section_complete']: break
+                if eligible or report['section_complete'] or at_end: break
                 # No builders/research slot: never scroll the whole menu needlessly.
                 a=report['availability']
                 if a is None or a[0] <= (self.config.upgrade_builders_reserved if kind=='buildings' else 0): break
                 if self.stopped(): return {'status':'stopped'}
-                h,w=frame.shape[:2]
+                previous=frame;h,w=frame.shape[:2]
                 self.input.swipe(round(w*.87),round(h*.82),round(w*.87),round(h*.34),duration_ms=300)
                 if self.wait(): return {'status':'stopped'}
                 frame=self.capture.screenshot()
                 if self.reader.menu_kind(frame)!=kind: raise ValueError('Build menu changed while scrolling')
+                at_end=menu_list_unchanged(previous,frame)
                 report=self.inspect(kind,frame)
             report['recommendations']=all_choices
             report['selected']=eligible

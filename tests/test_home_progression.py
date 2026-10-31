@@ -122,6 +122,67 @@ class ProgressionPolicyTests(TestCase):
         self.assertIsNone(queue_count([],row,2))
         self.assertEqual(queue_count([],row,2,complete=True),0)
 
+    def test_preferred_picker_unlock_needs_two_matching_frames_but_no_descriptions(self):
+        from coc_bot.progression.preparation import ArmyPreparation
+        prep=ArmyPreparation.__new__(ArmyPreparation);prep.preferred_unit='electro_dragon';prep.stop=None
+        prep.catalog=Mock();prep.tap=Mock();frame=np.zeros((1048,1853,3),np.uint8)
+        prep.frame=Mock(return_value=frame);prep.learn_unlocks=Mock(side_effect=AssertionError('unneeded Info inspection'))
+        current=ArmyCard('0',(100,280,100,150),'dragon','troop',12,stable=True)
+        unlocked={'electro_dragon':{'level':4,'point':(300,600)}}
+        with patch('coc_bot.progression.preparation.picker_editor_visible',return_value=True),\
+             patch('coc_bot.progression.preparation.picker_unlocks',side_effect=[unlocked,unlocked]) as read:
+            self.assertEqual(prep.unlocked(frame,[current]),unlocked)
+        self.assertEqual(read.call_count,2);prep.learn_unlocks.assert_not_called()
+
+    def test_preferred_learning_skips_known_unrelated_troops(self):
+        from coc_bot.progression.preparation import ArmyPreparation
+        prep=ArmyPreparation.__new__(ArmyPreparation);prep.preferred_unit='electro_dragon';prep.stop=None
+        prep.catalog=Mock();prep.tap=Mock();frame=np.zeros((1048,1853,3),np.uint8)
+        prep.catalog.identify_reference.side_effect=[('pekka','troop',1.,1.),('electro_dragon','troop',1.,1.)]
+        with patch('coc_bot.progression.preparation.picker_boxes',return_value=[(0,0,184,180),(200,0,184,180)]),\
+             patch('coc_bot.progression.preparation.picker_level',return_value=1),\
+             patch('coc_bot.progression.preparation.read_info') as read:
+            prep.learn_unlocks(frame)
+        prep.tap.assert_not_called();read.assert_not_called()
+
+    def test_preferred_learning_stops_as_soon_as_electro_dragon_is_verified(self):
+        from coc_bot.progression.preparation import ArmyPreparation
+        prep=ArmyPreparation.__new__(ArmyPreparation);prep.preferred_unit='electro_dragon';prep.stop=None;prep.references=Path('unused')
+        prep.catalog=Mock();prep.catalog.identify_reference.return_value=None
+        prep.catalog.identify.return_value=(None,'unknown',.8,.01)
+        prep.tap=Mock();frame=np.zeros((1048,1853,3),np.uint8);prep.frame=Mock(return_value=frame)
+        info={'unit_id':'electro_dragon','level':1,'close':(1642,79)}
+        with patch('coc_bot.progression.preparation.picker_boxes',return_value=[(0,0,184,180),(200,0,184,180)]),\
+             patch('coc_bot.progression.preparation.picker_level',return_value=1),\
+             patch('coc_bot.progression.preparation.info_point',return_value=(153,29)),\
+             patch('coc_bot.progression.preparation.picker_editor_visible',return_value=True),\
+             patch('coc_bot.progression.preparation.read_info',return_value=info) as read,\
+             patch('coc_bot.progression.preparation.remember_reference') as remember:
+            prep.learn_unlocks(frame)
+        self.assertEqual(read.call_count,2);self.assertEqual(prep.tap.call_count,2)
+        self.assertEqual(prep.catalog.identify.call_count,1);remember.assert_called_once()
+
+    def test_verified_owned_electro_army_skips_hall_menu_and_all_unlock_inspection(self):
+        from coc_bot.progression.preparation import ArmyPreparation
+        from coc_bot.accounts.store import selected_account
+        import json
+        for matches in (True,False):
+            with self.subTest(matches=matches),tempfile.TemporaryDirectory() as folder:
+                prep=ArmyPreparation.__new__(ArmyPreparation)
+                prep.s=SimpleNamespace(config=SimpleNamespace(data_dir=Path(folder),account_tag='#PYLQG',account_town_hall=18))
+                prep.catalog=SimpleNamespace();prep.army_hall=Mock(return_value=17)
+                frame=np.zeros((1048,1853,3),np.uint8)
+                current=ArmyCard('0',(100,280,100,150),'electro_dragon','troop',11,stable=True)
+                prep.open=Mock();prep.close=Mock();prep.observe=Mock(return_value=(frame,[current],(330,340)))
+                prep.unlocked=Mock(side_effect=AssertionError('unneeded unlock inspection'));prep.adjust=Mock()
+                token=selected_account.set({'tag':'#PYLQG' if matches else '#YQGRJPC2L','town_hall':18})
+                try:prep._prepare()
+                finally:selected_account.reset(token)
+                if matches:prep.army_hall.assert_not_called()
+                else:prep.army_hall.assert_called_once()
+                prep.observe.assert_called_once();prep.unlocked.assert_not_called();prep.adjust.assert_not_called()
+                self.assertEqual(json.loads((Path(folder)/'progression/army.json').read_text())['troops'],{'electro_dragon':11})
+
     def test_wall_queue_confirmation_checks_two_frames_without_repaying(self):
         from coc_bot.progression.walls import WallUpgrade
         row={'name':'Wall','cost':1000,'currency':'gold','target_level':2,'quantity':24}

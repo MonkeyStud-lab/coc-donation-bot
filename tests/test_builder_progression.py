@@ -169,6 +169,7 @@ class BuilderProgressionTests(unittest.TestCase):
     def test_hall_proof_is_read_while_visible_not_after_scrolling_it_away(self):
         r=self.r;r.reader=Mock();r.wait=Mock(return_value=False)
         first=np.full((100,100,3),30,np.uint8);bottom=np.full_like(first,80)
+        first[20:40,78:90]=255;bottom[20:40,78:90]=255
         hall={'name':'Builder Hall','new':False,'level':None,'cost':30000,'currency':'gold',
               'target_level':3,'point':(80,20),'box':(73,12,27,10)}
         other={'name':'Cannon','new':False,'level':None,'cost':None,'currency':None,
@@ -177,10 +178,11 @@ class BuilderProgressionTests(unittest.TestCase):
         r.reader.menu_kind.return_value='buildings';r.reader.availability.return_value=(1,1)
         r.reader.balances.return_value={'gold':500,'elixir':500}
         r.reader.rows.side_effect=lambda frame:[hall] if frame[0,0,0]==30 else [other]
-        r.capture.screenshot.side_effect=[first,bottom,bottom]
+        r.capture.screenshot.side_effect=[first,bottom,bottom,bottom]
         result=r.scan(first)
         self.assertTrue(result['complete']);self.assertTrue(result['hall_verified'])
-        self.assertEqual(result['hall'],2);self.assertEqual(r.capture.screenshot.call_count,3)
+        # The fourth frame independently confirms the stationary short swipe.
+        self.assertEqual(result['hall'],2);self.assertEqual(r.capture.screenshot.call_count,4)
         r.input.tap.assert_not_called()
 
     def test_lab_priority_and_new_building_order_apply_to_the_actual_preview(self):

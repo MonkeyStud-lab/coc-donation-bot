@@ -61,6 +61,12 @@ needs more free builders than the number reserved. The normal building method
 skips excluded or unaffordable Suggested entries. Village progression and
 its farming-priority research also inspect **Other upgrades**.
 
+List searches stop when the visible list no longer moves, rather than spending
+the full swipe limit at the bottom. A complete progression inventory requires
+stationary list text after both a normal swipe and a short confirmation swipe,
+then reads the final settled rows. Animated thumbnails and timers are excluded
+from the motion check. Blank or changed menus cannot certify completion.
+
 An unpaid construction/confirmation failure gets a five-minute candidate retry
 delay, allowing other verified buildings to use free builders. The failed row
 still blocks Town Hall progression. A pending payment is never skipped this way.

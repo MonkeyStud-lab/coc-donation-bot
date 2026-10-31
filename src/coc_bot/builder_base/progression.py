@@ -12,6 +12,7 @@ from coc_bot.progression.reader import ProgressionReader,row_key
 from coc_bot.progression.runner import ProgressionRunner
 from coc_bot.upgrades.vision import Candidate,compact,crop,text,resource_amount
 from coc_bot.upgrades.runner import write_json
+from coc_bot.upgrades.scroll import menu_list_unchanged
 
 CONSTRUCTIBLE=BUILDINGS|{'armycamp','wall'}
 
@@ -225,10 +226,11 @@ class BuilderProgressionRunner(BuilderUpgradeRunner):
             if self.stopped() or self.reader.menu_kind(frame)!=kind:return None
             matches=[r for r in self.reader.rows(frame) if row_key(r)==row_key(wanted)]
             if matches:return matches[0],frame
-            h,w=frame.shape[:2]
+            previous=frame;h,w=frame.shape[:2]
             self.input.swipe(round(w*.87),round(h*.82),round(w*.87),round(h*.40),duration_ms=350)
             if self.wait():return None
             frame=self.capture.screenshot()
+            if menu_list_unchanged(previous,frame):return None
         return None
 
     def scan(self,frame,kind='buildings'):

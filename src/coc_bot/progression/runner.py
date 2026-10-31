@@ -3,10 +3,10 @@ import time
 import hashlib
 import json
 import cv2
-import numpy as np
 from coc_bot.upgrades.runner import UpgradeRunner, write_json
 from coc_bot.upgrades.vision import Candidate, compact
 from coc_bot.upgrades.policy import BUILDINGS, PROTECTED, reason
+from coc_bot.upgrades.scroll import menu_list_unchanged
 from coc_bot.progression.policy import EXTRA_BUILDINGS, HEROES, priority, town_hall_blockers
 from coc_bot.progression.reader import ProgressionReader, row_key, same_row_observation
 
@@ -71,6 +71,7 @@ class ProgressionRunner(UpgradeRunner):
         directory=getattr(self,'inventory_directory','progression')
         evidence = self.config.data_dir/directory/'screens'
         evidence.mkdir(parents=True,exist_ok=True)
+        end_confirmed=False
         for page in range(20):
             if self.stopped(): raise ValueError('Stopped')
             if self.reader.menu_kind(frame) != kind:
@@ -91,16 +92,29 @@ class ProgressionRunner(UpgradeRunner):
                     inventory['rows'].append(row); seen.add(key)
                 if row['currency'] not in ('gems','free') and (not row['name'] or not row['cost'] or not row['currency']):
                     inventory['unknown'] = True
-            before = cv2.resize(frame[round(frame.shape[0]*.11):round(frame.shape[0]*.89),
-                                     round(frame.shape[1]*.735):],(180,400))
+            if end_confirmed:
+                inventory['complete']=True
+                break
             h,w = frame.shape[:2]
             self.input.swipe(round(w*.87),round(h*.82),round(w*.87),round(h*.40),duration_ms=350)
             if self.wait(): raise ValueError('Stopped')
             after = self.capture.screenshot()
-            region = cv2.resize(after[round(h*.11):round(h*.89),round(w*.735):],(180,400))
-            if np.abs(before.astype(float)-region).mean() < 1.8:
-                inventory['complete'] = True
-                break
+            if self.reader.menu_kind(after)!=kind:raise ValueError('Building list changed during inventory')
+            if menu_list_unchanged(frame,after):
+                # A different, short swipe rules out repeated rows lining up
+                # after a full-page scroll. Only two stationary gestures may
+                # certify completeness for construction/Town Hall decisions.
+                self.input.swipe(round(w*.87),round(h*.78),round(w*.87),round(h*.643),duration_ms=180)
+                if self.wait():raise ValueError('Stopped')
+                confirmed=self.capture.screenshot()
+                if self.stopped():raise ValueError('Stopped')
+                if self.reader.menu_kind(confirmed)!=kind:raise ValueError('Building list changed during end verification')
+                if menu_list_unchanged(after,confirmed):
+                    # Read the final settled rows before certifying the full
+                    # inventory; a newly exposed bottom row cannot be omitted.
+                    frame=confirmed;end_confirmed=True
+                    continue
+                after=confirmed
             frame = after
         self.inventory = inventory
         write_json(self.config.data_dir/(directory+'/'+kind+'-inventory.json'), inventory | {'at':time.time()})
@@ -176,11 +190,12 @@ class ProgressionRunner(UpgradeRunner):
             if self.stopped(): return None
             matches = [r for r in self.reader.rows(frame) if row_key(r) == row_key(wanted)]
             if matches: return matches[0], frame
-            h,w=frame.shape[:2]
+            previous=frame;h,w=frame.shape[:2]
             self.input.swipe(round(w*.87),round(h*.82),round(w*.87),round(h*.40),duration_ms=350)
             if self.wait(): return None
             frame=self.capture.screenshot()
             if self.reader.menu_kind(frame)!=kind:return None
+            if menu_list_unchanged(previous,frame):return None
         return None
 
     def inspect(self, kind, frame):

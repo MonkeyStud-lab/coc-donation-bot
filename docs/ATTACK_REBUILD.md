@@ -17,6 +17,16 @@ routine, army review, or supervised-run approval are required. For scheduled use
 select **automatic** under **Settings → Attack method**, enable scheduled farming,
 and start the bot. **Farm now** uses that setting and does not overwrite a custom routine.
 
+With Village progression enabled, unlocked Electro Dragons take priority over
+mixed farming presets at every eligible Town Hall. The bot trains as many as the
+current camp capacity holds and leaves spare housing empty. Earlier Town Halls
+retain starter armies until Electro Dragons are actually unlocked. A freshly
+verified owned Electro Dragon army skips unrelated troop descriptions and unlock
+inspection. Picker unlock checks still require two agreeing current readings of
+cached artwork. A matching account's verified TH11+ record can establish
+eligibility for this army family without reopening Town Hall upgrade information;
+troop availability and camp capacity are still checked in the game.
+
 The built-in pattern deploys Electro Dragons along one mapped edge, spreads Rage
 spells inside that edge, then deploys the siege machine and heroes. Each hero's
 ability follows its own verified deployment. Quantities come from the current army. Before deployment, the bot reads

@@ -101,6 +101,8 @@ class HallTransitionTests(unittest.TestCase):
 
     def scan(self, badge):
         frame=np.zeros((1048,1853,3),np.uint8)
+        # A list-end proof needs actual stationary foreground, not a blank frame.
+        frame[220:236,1450:1480]=255
         r=ProgressionRunner(self.config,Mock(),Mock(),Mock()); r.clear_filters=lambda f:f
         r.reader=Mock(); r.reader.balances.return_value={}; r.reader.availability.return_value=(2,2)
         r.reader.menu_kind.return_value='buildings'

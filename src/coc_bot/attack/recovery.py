@@ -313,10 +313,12 @@ def _relaunch_after_results(session, checkpoint, frame):
             pass  # Capture can be unavailable briefly while Clash starts.
         else:
             check_stop(stop)
+            # An announcement can leave the village Build button visible.
+            if nav.donation_nav is not None and recover_home_overlay(nav.donation_nav, frame):
+                session._sleep(1.)
+                continue
             if home_build_control_visible(frame):
                 return True
-            if nav.donation_nav is not None:
-                recover_home_overlay(nav.donation_nav, frame)
         session._sleep(1.)
     raise RecoveryRequired('Clash relaunched but Home could not be verified. '
                            'Open your home village manually, then press Start. No deployment was replayed.')

@@ -148,6 +148,15 @@ def hammer_jam_close_button(frame):
                                       ('hammer_jam_close',(1520,50,1650,175))])
 
 
+def mass_mommas_close_button(frame):
+    """Recognize the event announcement and locate its close control."""
+    return _announcement_close(frame, [
+        ('mass_mommas_title', (550, 645, 1300, 765)),
+        ('mass_mommas_go', (720, 825, 1130, 980)),
+        ('mass_mommas_close', (1520, 50, 1670, 175)),
+    ])
+
+
 def gold_pass_offer_close_button(frame):
     """Dismiss the native pass advertisement, never its purchase action."""
     return (_announcement_close(frame, [('gold_pass_offer_heading',(730,610,1150,710)),

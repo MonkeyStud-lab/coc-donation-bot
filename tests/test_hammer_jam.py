@@ -3,7 +3,9 @@ from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import Mock
 import cv2
-from coc_bot.vision.notices import hammer_jam_close_button
+import numpy as np
+from coc_bot.vision import notices
+from coc_bot.vision.notices import hammer_jam_close_button, mass_mommas_close_button
 from coc_bot.progression.home import recover_home_announcement
 
 ROOT=Path(__file__).parent/'fixtures/accounts'
@@ -39,3 +41,22 @@ class HammerJamTests(TestCase):
         nav._stopping.return_value=False;nav.capture.screenshot.return_value=self.frame()*0
         self.assertFalse(recover_home_announcement(nav,self.frame()))
         self.assertEqual(nav.input.tap.call_count,2)
+
+
+class MassMommasTests(TestCase):
+    def test_announcement_recovery_rechecks_the_close_control(self):
+        assets = Path(notices.__file__).with_name('assets')
+        frame = np.zeros((1048, 1853, 3), dtype=np.uint8)
+        for name, x, y in (('title', 586, 670), ('go', 762, 860), ('close', 1557, 77)):
+            anchor = cv2.imread(str(assets / f'mass_mommas_{name}.png'))
+            height, width = anchor.shape[:2]
+            frame[y:y+height, x:x+width] = anchor
+        self.assertEqual(mass_mommas_close_button(frame), (1597, 116))
+        dimmed = (frame * .4).astype(np.uint8)
+        nav = SimpleNamespace(_stopping=Mock(return_value=False), capture=Mock(), input=Mock())
+        nav.capture.screenshot.return_value = dimmed
+        self.assertFalse(recover_home_announcement(nav, frame))
+        nav.input.tap.assert_not_called()
+        nav.capture.screenshot.return_value = frame.copy()
+        self.assertTrue(recover_home_announcement(nav, frame))
+        nav.input.tap.assert_called_once_with(1597, 116, jitter=0)

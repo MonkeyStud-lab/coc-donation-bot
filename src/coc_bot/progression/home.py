@@ -23,8 +23,12 @@ def recover_home_bonus(nav,frame):
 
 
 def recover_home_announcement(nav,frame):
-    from coc_bot.vision.notices import hammer_jam_close_button,gold_pass_offer_close_button
-    def close(image):return hammer_jam_close_button(image) or gold_pass_offer_close_button(image)
+    from coc_bot.vision.notices import (
+        hammer_jam_close_button, gold_pass_offer_close_button, mass_mommas_close_button,
+    )
+    def close(image):
+        return (hammer_jam_close_button(image) or gold_pass_offer_close_button(image)
+                or mass_mommas_close_button(image))
     point=close(frame)
     if point is None:
         nav.__dict__.pop('_hammer_jam_taps',None)

@@ -570,16 +570,19 @@ class Navigator:
             return None
         # A scrolled chat can show the native down arrow without an
         # exclamation badge. Older calibrations may lack this arrow.
-        key = 'native_chat_latest'
-        if key not in self._template_cache:
-            self._template_cache[key] = cv2.imread(str(Path(__file__).with_name('assets') / 'chat-latest-arrow.png'))
-        template = self._template_cache[key]
-        if template is None:
-            return None
         h, w = frame.shape[:2]
-        template = cv2.resize(template, (max(1, round(template.shape[1] * w / 1853)),
-                                         max(1, round(template.shape[0] * h / 1048))))
-        return self.matcher.find_in_roi(frame, template, [0.008, 0.80, 0.062, 0.11], threshold=0.93)
+        for filename in ('chat-latest-arrow.png', 'chat-latest-arrow-alt.png'):
+            if filename not in self._template_cache:
+                self._template_cache[filename] = cv2.imread(str(Path(__file__).with_name('assets') / filename))
+            template = self._template_cache[filename]
+            if template is None:
+                continue
+            template = cv2.resize(template, (max(1, round(template.shape[1] * w / 1853)),
+                                             max(1, round(template.shape[0] * h / 1048))))
+            match = self.matcher.find_in_roi(frame, template, [0.008, 0.80, 0.062, 0.11], threshold=0.93)
+            if match is not None:
+                return match
+        return None
 
     def _jump_icon_location(self, match: MatchResult, frame: np.ndarray) -> str:
         if "chat_panel" not in self.config.rois:

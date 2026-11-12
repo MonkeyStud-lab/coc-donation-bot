@@ -78,25 +78,52 @@ def page_for(frame, stop_check=None):
 
 
 def load_recent_references(data_dir, catalog, device, *, max_age=900):
+    """Optional review artifacts may add artwork, but cannot block preparation."""
     root=reports_root(data_dir)
-    if not root.exists():
+    if not root.is_dir():
+        return
+    try:
+        folders = list(root.iterdir())
+    except OSError:
         return
     candidates=[]
-    for folder in root.iterdir():
+    now = time.time()
+    for folder in folders:
         if not (folder/'report.json').is_file():
             continue
         try:
             report=json.loads((folder/'report.json').read_text(encoding='utf-8'))
-        except (OSError,ValueError):
+            if not isinstance(report, dict):
+                continue
+            captured = report.get('captured_at')
+            if (report.get('page') != 'army_confirmation' or report.get('device') != device or
+                    type(captured) not in (int, float) or not 0 <= now-captured <= max_age):
+                continue
+            if not isinstance(report.get('cards'), list):
+                continue
+            cards = [ArmyCard(**card) for card in report['cards']]
+            if any(not isinstance(c.box, (list, tuple)) or len(c.box) != 4 or
+                   any(type(n) is not int for n in c.box) or
+                   type(c.stable) is not bool or type(c.confirmed) is not bool or
+                   c.kind not in ('troop', 'spell', 'siege', 'hero', 'unknown') or
+                   (c.unit_id is not None and (not isinstance(c.unit_id, str) or
+                    not re.fullmatch(r'[a-z0-9_]{1,80}', c.unit_id))) for c in cards):
+                continue
+        except (OSError, ValueError, TypeError, OverflowError):
             continue
-        if (report.get('page')!='army_confirmation' or report.get('device')!=device or
-                not 0<=time.time()-report.get('captured_at',0)<=max_age):
+        candidates.append((captured,folder,cards))
+    for _,folder,cards in sorted(candidates,reverse=True):
+        try:
+            frame=cv2.imread(str(folder/'frame.png'))
+            if frame is None:
+                continue
+            h, w = frame.shape[:2]
+            if any(min(c.box[:2]) < 0 or min(c.box[2:]) <= 0 or
+                   c.box[0]+c.box[2] > w or c.box[1]+c.box[3] > h for c in cards):
+                continue
+            catalog.add_references(frame,cards)
+        except (OSError, ValueError, cv2.error):
             continue
-        candidates.append((report['captured_at'],folder,report))
-    for _,folder,report in sorted(candidates,reverse=True):
-        frame=cv2.imread(str(folder/'frame.png'))
-        if frame is not None:
-            catalog.add_references(frame,[ArmyCard(**card) for card in report['cards']])
         return
 
 

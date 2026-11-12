@@ -1,5 +1,6 @@
 """Read visible army cards without changing selection or authorizing deployment."""
 from dataclasses import asdict, dataclass, replace
+from contextlib import ExitStack
 from pathlib import Path
 from functools import lru_cache
 import re
@@ -43,6 +44,27 @@ def standard_troop_portraits():
         return tuple((name, archive[name]) for name in archive.files)
 
 
+@lru_cache(maxsize=128)
+def _portrait_features(shape, pixels, hero, picker):
+    """Cache artwork features only, never unit identities, counts or readiness."""
+    gray = np.frombuffer(pixels, dtype=np.uint8).reshape(shape)
+    h, w = shape
+    mask = np.zeros(shape, np.uint8)
+    if picker:
+        # Exclude the picker's level/housing badges and Info controls.
+        mask[round(h*.25):round(h*.78), round(w*.32):round(w*.78)] = 255
+    else:
+        top = .08 if hero else .24
+        mask[round(h*top):round(h*.78), round(w*.15):round(w*.85)] = 255
+        if hero:
+            # Keep face/crown landmarks; ignore account-specific pet badges.
+            mask[:round(h*.34), :round(w*.40)] = 0
+    keys, descriptors = cv2.SIFT_create(nfeatures=500).detectAndCompute(gray, mask)
+    if descriptors is not None:
+        descriptors.setflags(write=False)
+    return keys, descriptors
+
+
 class UnitCatalog:
     """Match alpha-masked artwork; confidence and runner-up margin must agree.
 
@@ -68,30 +90,25 @@ class UnitCatalog:
 
     def add_references(self, frame, cards, *, picker=False):
         """Carry artwork identity across pages, never slot positions or quantities."""
-        sift = cv2.SIFT_create(nfeatures=500)
         for card in cards:
             if not card.unit_id or not (card.stable or card.confirmed):
                 continue
             x,y,w,h = card.box
+            if (any(type(n) is not int for n in card.box) or min(x,y) < 0 or
+                    min(w,h) <= 0 or x+w > frame.shape[1] or y+h > frame.shape[0]):
+                continue
             image = frame[y:y+h,x:x+w]
-            mask = np.zeros((h,w),np.uint8)
-            # Deployed heroes gain an ability graphic over the lower portrait.
-            # Keep their crown/face landmarks too; counts and bottom levels are
-            # still excluded for stacked troops and spells.
-            top = .08 if card.kind == 'hero' else .24
-            if picker:
-                # Picker cards share level/housing badges and Info controls.
-                # Only central facial artwork may establish troop identity.
-                mask[round(h*.25):round(h*.78),round(w*.32):round(w*.78)] = 255
-            else:
-                mask[round(h*top):round(h*.78),round(w*.15):round(w*.85)] = 255
-                if card.kind == 'hero':
-                    # Pet/equipment badges differ by account and level. Learn
-                    # the face/crown, not the badge attached at upper left.
-                    mask[:round(h*.34),:round(w*.40)] = 0
-            keys,descriptors = sift.detectAndCompute(cv2.cvtColor(image,cv2.COLOR_BGR2GRAY),mask)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            # Bound retained pixel data to 128 portraits of at most 600x600.
+            features = _portrait_features if gray.size <= 600*600 else _portrait_features.__wrapped__
+            keys, descriptors = features(gray.shape, gray.tobytes(), card.kind == 'hero', picker)
             if descriptors is not None:
-                self.references.append((card.unit_id,card.kind,keys,descriptors,w,h))
+                # Exact repeated artwork must not add matching work each time
+                # we revisit a page. Different names still compete normally.
+                duplicate = any(r[0] == card.unit_id and r[1] == card.kind and r[2] is keys
+                                for r in self.references)
+                if not duplicate:
+                    self.references.append((card.unit_id,card.kind,keys,descriptors,w,h))
 
     def identify_reference(self, cell, *, kind=None, stop_check=None):
         if not self.references:
@@ -241,7 +258,8 @@ def badge_digit_variants():
 
 def read_badge(cell, *, stop_check=None):
     """Read xN at the TOP of a card. Never mistake a bottom level for quantity."""
-    if not shutil.which('tesseract') or not cell.size:
+    check_stop(stop_check)
+    if not cell.size:
         return None
     crop = cell[:max(1, round(cell.shape[0]*.27))]
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
@@ -265,8 +283,10 @@ def read_badge(cell, *, stop_check=None):
         if overlap>.65:
             prefixes.append((x,y,w,h))
     readings = []
-    with tempfile.TemporaryDirectory() as folder:
-        path = Path(folder)/'badge.png'
+    # Native glyphs do not need OCR or temporary files. Resolve the optional
+    # executable and create its input file only when a digit needs fallback.
+    with ExitStack() as stack:
+        path = None
         for px,py,pw,ph in prefixes:
             digits = sorted([b for b in components if b[0]>=px+pw and
                              abs((b[1]+b[3])-(py+ph))<=ph*.3 and .75<b[3]/ph<1.5 and b[2]/b[3]<1.2])
@@ -288,11 +308,17 @@ def read_badge(cell, *, stop_check=None):
                         # OCR. Prefer the strict, margin-checked game-font bank.
                         text+=matched;last=x+w
                         continue
+                    if path is None:
+                        executable = shutil.which('tesseract')
+                        if executable is None:
+                            text='';break
+                        folder = stack.enter_context(tempfile.TemporaryDirectory())
+                        path = Path(folder)/'badge.png'
                     image=cv2.resize(255-glyph,None,fx=5,fy=5,interpolation=cv2.INTER_NEAREST)
                     image=cv2.copyMakeBorder(image,20,20,20,20,cv2.BORDER_CONSTANT,value=255)
                     cv2.imwrite(str(path),image)
                     try:
-                        result=run_process(['tesseract',str(path),'stdout','--psm','13','-l','eng',
+                        result=run_process([executable,str(path),'stdout','--psm','13','-l','eng',
                                             '-c','tessedit_char_whitelist=0123456789'],
                                            text=True,timeout=1.5,stop_check=stop_check)
                     except ProcessStopped as exc:

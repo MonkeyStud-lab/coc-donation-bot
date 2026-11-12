@@ -290,7 +290,8 @@ class ProgressionRunner(UpgradeRunner):
                         'message':'No available builders' if kind=='buildings' else 'Laboratory is already busy'}
             inventory = self.scan(frame,kind)
             if not inventory['complete']:
-                return {'status':'blocked','message':'Complete building inventory could not be read; no progression spending'}
+                return {'status':'blocked','availability':availability,
+                        'message':'Complete building inventory could not be read; no progression spending'}
             ordinary = [r for r in inventory['rows'] if r['name'] and r['currency'] != 'gems'
                         and compact(r['name']) not in HEROES]
             new = [r for r in ordinary if r['new']] if kind=='buildings' else []
@@ -302,7 +303,8 @@ class ProgressionRunner(UpgradeRunner):
                 # or new construction still block priority selection. The
                 # inventory's unknown flag continues to block Town Hall.
                 if not unreadable or any(not r['name'] or r['new'] for r in unreadable):
-                    return {'status':'blocked','message':'Construction priorities are unreadable; no progression spending'}
+                    return {'status':'blocked','availability':availability,
+                            'message':'Construction priorities are unreadable; no progression spending'}
             if kind == 'research':
                 from coc_bot.progression.army import research_priority
                 units = {'electrodragon':'electro_dragon','wallbreaker':'wall_breaker',

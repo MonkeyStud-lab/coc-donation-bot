@@ -395,7 +395,11 @@ class DonationBot:
         order=getattr(self,'_fleet_work_order',lambda:visit.order() if visit else tuple(work))()
         if visit and self._state in ('open_donation','donate'):order=()
         paced_farm_due = getattr(self, '_fleet_farm_due', lambda: False)() is True
-        if paced_farm_due and self._state in ('scan_chat','scroll_chat'):
+        building_check_due = (getattr(self, '_fleet_building_check_due', lambda: False)() is True
+                              and self._state in ('scan_chat', 'scroll_chat') and not self._farm_requested)
+        if building_check_due:
+            order = ('upgrades',)
+        elif paced_farm_due and self._state in ('scan_chat','scroll_chat'):
             order = ('farm',) + tuple(name for name in order if name != 'farm')
         elif getattr(self, '_fleet_farm_due_soon', lambda: False)() is True:
             # Preserve the maintenance cursor and wait at a safe checkpoint.
@@ -442,9 +446,10 @@ class DonationBot:
         for name in order:
             if self.should_stop():return
             self._visit_repeat=False;self._visit_reason=None;self._visit_retry_at=None
+            building_check = name == 'upgrades' and building_check_due and not upgrade_pending
             urgent=(name=='upgrades' and upgrade_pending or name=='layouts' and
                     (layout.get('pending') or layout.get('last_survey',{}).get('payment')))
-            deferred=visit.deferred(name) if visit and not urgent and not (name=='farm' and paced_farm_due) else None
+            deferred=visit.deferred(name) if visit and not urgent and not building_check and not (name=='farm' and paced_farm_due) else None
             if deferred:
                 self._visit_reason=deferred.get('reason');self._visit_retry_at=deferred['retry_at']
                 attempted=False
@@ -452,12 +457,13 @@ class DonationBot:
                 if visit and name=='upgrades':self._next_upgrade_check=0
                 from coc_bot.runtime.task_timing import measure_task
                 with measure_task(getattr(self.config, 'account_tag', None), name) as timing:
-                    attempted=work[name]()
+                    attempted=self._maybe_run_upgrades(buildings_only=True) if building_check else work[name]()
                     timing['outcome'] = 'attempted' if attempted else 'no_action'
             pending_after=UpgradeRunner(self.config,self.capture,self.nav_input,self.navigator).state().get('pending') if visit else None
             unresolved=(pending_after or builder_pending(self.config) or pending(self.config)) if visit else None
             if visit and not unresolved and self._state in ('scan_chat','scroll_chat') and not self.should_stop():
-                visit.finish_step(name,repeat=self._visit_repeat,reason=self._visit_reason,retry_at=self._visit_retry_at)
+                if not building_check:
+                    visit.finish_step(name,repeat=self._visit_repeat,reason=self._visit_reason,retry_at=self._visit_retry_at)
                 self._visit_chat_pending=True
                 getattr(self,'_fleet_after_step',lambda:None)()
             if attempted:
@@ -602,14 +608,16 @@ class DonationBot:
         finally:
             self._state_entered=time.monotonic()
 
-    def _maybe_run_upgrades(self) -> bool:
+    def _maybe_run_upgrades(self, *, buildings_only=False) -> bool:
         if self._state not in ('scan_chat','scroll_chat') or self._stop_requested or self.config.dry_run:
             return False
         kinds=[kind for kind,enabled in (
             ('buildings',self.config.upgrade_buildings_enabled),
             ('research',self.config.upgrade_research_enabled),
             ('pets',getattr(self.config,'upgrade_pets_enabled',False))) if enabled]
-        if not kinds or time.monotonic()<self._next_upgrade_check:
+        if buildings_only:
+            kinds = [kind for kind in kinds if kind == 'buildings']
+        if not kinds or (not buildings_only and time.monotonic()<self._next_upgrade_check):
             return False
         frame=self.capture.screenshot()
         if not getattr(self,'_fleet_task_driven',False) and self._has_donate_request(frame):
@@ -635,12 +643,12 @@ class DonationBot:
             maintenance=read(maintenance_path,{})
             visit_id=visit.load()['started_at'] if visit else None
             saved=maintenance.get('remaining')
-            queue=(list(saved) if visit and maintenance.get('visit')==visit_id
+            queue=(list(saved) if not buildings_only and visit and maintenance.get('visit')==visit_id
                    and isinstance(saved,list) and saved and all(k in kinds for k in saved) else list(kinds))
             attempts=0
             # Each paid transaction is followed by the ordinary chat checkpoint.
             # Persist the remaining categories so a donor detour cannot starve lab/pets.
-            while queue and attempts<(1 if visit else 10):
+            while queue and attempts<(1 if visit or buildings_only else 10):
                 kind=queue.pop(0)
                 if self._stop_requested: break
                 from coc_bot.runtime.task_timing import measure_task
@@ -656,7 +664,8 @@ class DonationBot:
                     'at':time.time(),'status':result.get('status'),'message':result.get('message'),
                     'availability':result.get('availability')}
                 if result.get('status')=='needs_review' and runner.state().get('pending'):
-                    write(maintenance_path,maintenance|{'checked_at':time.time(),'remaining':queue})
+                    if not buildings_only:maintenance['remaining'] = queue
+                    write(maintenance_path,maintenance|{'checked_at':time.time()})
                     raise ActionNeedsReview('Unresolved upgrade payment: '+result.get('message','manual verification required'))
                 if result.get('status') in ('needs_review','stopped','blocked','changed','no_room'):
                     if not result.get('retry_other_candidates'):
@@ -670,8 +679,9 @@ class DonationBot:
                     # balance, builder count, price, or selected row.
                     queue.append(kind)
                     if self._has_donate_request(self.capture.screenshot()): break
-            maintenance.update(account=getattr(self.config,'account_tag',None),visit=visit_id,
-                               remaining=queue,checked_at=time.time(),next_check_at=time.time()+300)
+            maintenance.update(account=getattr(self.config,'account_tag',None),checked_at=time.time(),
+                               next_check_at=time.time()+300)
+            if not buildings_only:maintenance.update(visit=visit_id,remaining=queue)
             write(maintenance_path,maintenance)
             self._visit_repeat=bool(queue) and not getattr(self,'_visit_retry_at',None)
             if self._visit_repeat:self._next_upgrade_check=0

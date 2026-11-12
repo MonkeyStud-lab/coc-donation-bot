@@ -210,6 +210,18 @@ class AccountFleet:
             visit['last_attack_id']=self.current.tracker.state.last_completed_attack_id
         write(self.rotation.path,state)
 
+    def _building_check_due(self):
+        config = self.current.config
+        if not getattr(config, 'upgrade_buildings_enabled', False) or getattr(config, 'dry_run', False):
+            return False
+        maintenance = read(config.data_dir / 'upgrades/maintenance.json', {})
+        last = maintenance.get('categories', {}).get('buildings', {})
+        # Recheck promptly after a confirmed start so another free builder
+        # can take a job on the next rotation. Give quiet villages longer.
+        interval = 300 if last.get('status') in ('started', 'built', 'recovered') else 1200
+        checked_at = last.get('at')
+        return checked_at is None or self.clock() >= checked_at + interval
+
     def _checkpoint(self, account, started):
         if self.cancel.is_set() or self.finish_action:return True
         state=self.rotation.load();now=self.clock()
@@ -268,6 +280,8 @@ class AccountFleet:
             if ('donating' in account['roles'] and
                     getattr(self.current,'_visit_chat_pending',False) is True):return False
             if state['attack_target_per_hour']:
+                if self._building_check_due():
+                    return False
                 if self.rotation.farming_due(state, account, now):
                     return False
                 target = self.rotation.next_farming_account(state, now, account['id'])
@@ -411,7 +425,11 @@ class AccountFleet:
                         detour=self.rotation.load().get('donation_detour')
                         if detour and account['id']==detour['donor']:
                             self.current._fleet_work_order=lambda:()
-                        elif state['task_driven'] and state['attack_target_per_hour'] and 'farming' in account['roles']:
+                        elif state['task_driven'] and state['attack_target_per_hour']:
+                            self.current._fleet_building_check_due = self._building_check_due
+                        if (not (detour and account['id']==detour['donor'])
+                                and state['task_driven'] and state['attack_target_per_hour']
+                                and 'farming' in account['roles']):
                             self.current._fleet_farm_due_soon = lambda: self.rotation.farm_due_soon(self.clock())
                             if (self.current.config.farm_enabled and self.current.config.farm_calibrated
                                     and self.current.config.farm_engine == 'automatic' and not self.current.config.dry_run):

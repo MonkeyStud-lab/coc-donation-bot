@@ -139,6 +139,18 @@ class TaskRotationTests(TestCase):
              patch('coc_bot.bot.interrupted_sleep',return_value=False):bot._loop_tick()
         bot._chat_tick.assert_not_called()
 
+    def test_overdue_building_check_gets_a_turn_before_attack_handoff(self):
+        self.rotation.configure(enabled=True, primary_id=self.accounts[0]['id'],
+                                attack_target_per_hour=3)
+        account = self.accounts[1]
+        self.rotation.record_farming(account['id'], self.now, completed=True)
+        fleet = self.fleet(1)
+        fleet.current.config.upgrade_buildings_enabled = True
+        self.assertFalse(fleet._checkpoint(account, self.now - 200))
+        write(fleet.current.config.data_dir / 'upgrades/maintenance.json',
+              {'categories': {'buildings': {'at': self.now, 'status': 'started'}}})
+        self.assertTrue(fleet._checkpoint(account, self.now - 200))
+
     def test_finished_donation_pass_does_not_hold_work_for_repeated_requests(self):
         bot=DonationBot.__new__(DonationBot)
         bot._stop_requested=False;bot._farm_requested=False;bot._state='donate'

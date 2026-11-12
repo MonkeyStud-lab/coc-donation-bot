@@ -146,9 +146,14 @@ class TaskRotationTests(TestCase):
         self.rotation.record_farming(account['id'], self.now, completed=True)
         fleet = self.fleet(1)
         fleet.current.config.upgrade_buildings_enabled = True
+        fleet.current.config.upgrade_builders_reserved = 0
         self.assertFalse(fleet._checkpoint(account, self.now - 200))
         write(fleet.current.config.data_dir / 'upgrades/maintenance.json',
-              {'categories': {'buildings': {'at': self.now, 'status': 'started'}}})
+              {'categories': {'buildings': {'at': self.now, 'status': 'started', 'availability': [3, 4]}}})
+        self.assertTrue(fleet._checkpoint(account, self.now - 200))
+        fleet.current._fleet_building_checks = 1
+        self.assertFalse(fleet._checkpoint(account, self.now - 200))
+        fleet.current._fleet_building_checks = 3
         self.assertTrue(fleet._checkpoint(account, self.now - 200))
 
     def test_finished_donation_pass_does_not_hold_work_for_repeated_requests(self):

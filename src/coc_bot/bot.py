@@ -457,7 +457,12 @@ class DonationBot:
                 if visit and name=='upgrades':self._next_upgrade_check=0
                 from coc_bot.runtime.task_timing import measure_task
                 with measure_task(getattr(self.config, 'account_tag', None), name) as timing:
-                    attempted=self._maybe_run_upgrades(buildings_only=True) if building_check else work[name]()
+                    if building_check:
+                        attempted=self._maybe_run_upgrades(buildings_only=True)
+                        if attempted:
+                            self._fleet_building_checks = getattr(self, '_fleet_building_checks', 0) + 1
+                    else:
+                        attempted=work[name]()
                     timing['outcome'] = 'attempted' if attempted else 'no_action'
             pending_after=UpgradeRunner(self.config,self.capture,self.nav_input,self.navigator).state().get('pending') if visit else None
             unresolved=(pending_after or builder_pending(self.config) or pending(self.config)) if visit else None
@@ -662,7 +667,8 @@ class DonationBot:
                             result.get('message','No resource spending requested'))
                 maintenance.setdefault('categories',{})[kind]={
                     'at':time.time(),'status':result.get('status'),'message':result.get('message'),
-                    'availability':result.get('availability')}
+                    'availability':result.get('availability'),
+                    'retry_other_candidates':result.get('retry_other_candidates') is True}
                 if result.get('status')=='needs_review' and runner.state().get('pending'):
                     if not buildings_only:maintenance['remaining'] = queue
                     write(maintenance_path,maintenance|{'checked_at':time.time()})

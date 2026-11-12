@@ -216,6 +216,19 @@ class AccountFleet:
             return False
         maintenance = read(config.data_dir / 'upgrades/maintenance.json', {})
         last = maintenance.get('categories', {}).get('buildings', {})
+        checks = getattr(self.current, '_fleet_building_checks', 0)
+        if checks:
+            # Keep each visit bounded, even when several builders are free.
+            # An unpaid rejected preview can give another candidate a turn.
+            if checks >= 3:
+                return False
+            if last.get('retry_other_candidates') is True:
+                return True
+            available = last.get('availability')
+            if last.get('status') == 'started' and available:
+                free, total = available
+                if free > config.upgrade_builders_reserved and free * 2 >= total:
+                    return True
         # Recheck promptly after a confirmed start so another free builder
         # can take a job on the next rotation. Give quiet villages longer.
         interval = 300 if last.get('status') in ('started', 'built', 'recovered') else 1200

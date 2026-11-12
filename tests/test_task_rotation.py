@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime, timezone
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest import TestCase
@@ -6,7 +7,7 @@ from unittest.mock import Mock, patch
 from contextlib import nullcontext
 
 from coc_bot.accounts.store import AccountStore, write
-from coc_bot.accounts.rotation import AccountFleet, RotationStore
+from coc_bot.accounts.rotation import AccountFleet, RotationStore, daytime_donation_watch
 from coc_bot.control.lifecycle import RunOptions
 from coc_bot.bot import DonationBot
 
@@ -45,6 +46,32 @@ class TaskRotationTests(TestCase):
         self.rotation.complete(self.accounts[1]['id'],1001,200,suspended=True)
         self.rotation.complete(self.accounts[2]['id'],1002,200,suspended=True)
         self.assertEqual(self.rotation.next_account(1003,current_id=self.accounts[2]['id'])['id'],self.accounts[0]['id'])
+
+    def test_donation_watch_uses_chicago_boundaries_and_daylight_saving_time(self):
+        self.rotation.configure(enabled=True, primary_id=self.accounts[0]['id'],
+                                daytime_donation_watch=True)
+        state = self.rotation.load()
+        for utc_time, expected in (
+            ('2026-11-11T12:59:59', False), ('2026-11-11T13:00:00', True),
+            ('2026-11-12T03:59:59', True), ('2026-11-12T04:00:00', False),
+            ('2026-07-01T11:59:59', False), ('2026-07-01T12:00:00', True),
+        ):
+            now = datetime.fromisoformat(utc_time).replace(tzinfo=timezone.utc).timestamp()
+            self.assertEqual(daytime_donation_watch(state, now), expected)
+
+    def test_daytime_handoff_goes_to_donor_and_waits_for_pending_upgrade(self):
+        self.rotation.configure(enabled=True, primary_id=self.accounts[0]['id'],
+                                daytime_donation_watch=True)
+        self.now = datetime(2026, 11, 11, 18, tzinfo=timezone.utc).timestamp()
+        donor = self.fleet()
+        self.assertFalse(donor._checkpoint(self.accounts[0], self.now - 500))
+        visitor = self.fleet(1)
+        pending = visitor.current.config.data_dir / 'upgrades/state.json'
+        write(pending, {'pending': {'cost': 100}})
+        self.assertFalse(visitor._checkpoint(self.accounts[1], self.now - 500))
+        pending.unlink()
+        self.assertTrue(visitor._checkpoint(self.accounts[1], self.now - 500))
+        self.assertEqual(visitor._next, self.accounts[0]['id'])
 
     def test_owned_run_does_not_gate_donor_work_or_return_between_other_accounts(self):
         visited=[];fleet=None

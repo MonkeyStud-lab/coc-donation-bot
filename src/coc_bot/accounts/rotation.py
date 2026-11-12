@@ -5,9 +5,11 @@ battle. A persisted switch intent and the ordinary tag verification protect
 every handoff. Stop leaves the current village and any pending intent intact.
 """
 from dataclasses import asdict
+from datetime import datetime
 import threading
 import time
 import random
+from zoneinfo import ZoneInfo
 
 from loguru import logger
 
@@ -15,6 +17,13 @@ from coc_bot.accounts.store import read, write
 from coc_bot.accounts.watch import DonorWatch
 
 VISIT_WORK = ('requests', 'upgrades', 'farm', 'builder_base', 'layouts')
+
+
+def daytime_donation_watch(state, now):
+    if not state.get('daytime_donation_watch'):
+        return False
+    local = datetime.fromtimestamp(now, ZoneInfo('America/Chicago'))
+    return 7 <= local.hour < 22
 
 
 class RotationStore:
@@ -26,12 +35,19 @@ class RotationStore:
         value=read(self.path,{})
         return {'enabled':False,'primary_id':None,'task_driven':False,'watch_seconds':900,'visit_seconds':180,
                 'interval_seconds':1800,'visits':{},'paused_at':None,
-                'attack_target_per_hour':0,'finish_after_star':False}|value
+                'attack_target_per_hour':0,'finish_after_star':False,'daytime_donation_watch':False}|value
 
     def configure(self, *, enabled, primary_id, watch_seconds=900, visit_seconds=180, interval_seconds=1800,
-                  task_driven=None, attack_target_per_hour=None, finish_after_star=None):
+                  task_driven=None, attack_target_per_hour=None, finish_after_star=None,
+                  daytime_donation_watch=None):
         state=self.accounts.load()
         previous=self.load()
+        if daytime_donation_watch is None:
+            daytime_donation_watch = previous['daytime_donation_watch']
+        if type(daytime_donation_watch) is not bool:
+            raise ValueError('Daytime donation watch must be on or off')
+        if daytime_donation_watch:
+            ZoneInfo('America/Chicago')
         if task_driven is None:task_driven=previous['task_driven']
         if type(task_driven) is not bool:raise ValueError('Choose a valid account scheduling mode')
         if attack_target_per_hour is None:
@@ -54,7 +70,8 @@ class RotationStore:
             raise ValueError('Account check interval must be between five minutes and one day')
         value=previous|{'enabled':enabled,'primary_id':primary_id,'task_driven':task_driven,'watch_seconds':watch_seconds,
                           'visit_seconds':visit_seconds,'interval_seconds':interval_seconds,
-                          'attack_target_per_hour':attack_target_per_hour,'finish_after_star':finish_after_star}
+                          'attack_target_per_hour':attack_target_per_hour,'finish_after_star':finish_after_star,
+                          'daytime_donation_watch':daytime_donation_watch}
         if state.get('pending'):raise ValueError('Finish adding or verifying the loaded account first')
         if task_driven and not previous['task_driven']:
             # Remove old donor-policy scheduling delays, not action cooldowns
@@ -245,6 +262,13 @@ class AccountFleet:
                 or read(self.current.config.data_dir/'upgrades/state.json',{}).get('pending')
                 or read(self.current.config.data_dir/'layouts/state.json',{}).get('pending')
                 or read(self.current.config.data_dir/'layouts/state.json',{}).get('last_survey',{}).get('payment')):return False
+            if daytime_donation_watch(state, now):
+                if account['id'] == state['primary_id']:
+                    return False
+                self._next = state['primary_id']
+                self._visit_suspended = not self.current._visit.complete()
+                logger.info('Daytime donation watch: returning to the primary donor')
+                return True
             if not getattr(self,'_clan_checked',False):
                 from coc_bot.accounts.clan import ClanIdentity
                 self._current_clan=ClanIdentity(self.store,self.current,self.cancel.is_set).learn(account)
@@ -427,6 +451,8 @@ class AccountFleet:
                         visit=getattr(self.current,'_visit',None)
                         self._watch.begin_visit()
                         primary=account['id']==main['id']
+                        if primary and state['daytime_donation_watch']:
+                            self.current._fleet_donation_watch = lambda: daytime_donation_watch(state, self.clock())
                         # Maintenance and account travel incur chat time debt.
                         # Repay it at idle checkpoints; never interrupt actions.
                         self.current._fleet_task_driven=state['task_driven']
@@ -470,7 +496,9 @@ class AccountFleet:
                                           self.current.navigator).state().get('pending')):
                             raise ValueError('Account has an unresolved action; automatic switching paused')
                         from coc_bot.donation.chat_check import ChatCheckUnverified
-                        try:self._check_chat_before_switch(account)
+                        try:
+                            if not (self._next == main['id'] and daytime_donation_watch(state, self.clock())):
+                                self._check_chat_before_switch(account)
                         except ChatCheckUnverified:
                             # This check runs after the visit's bot loop exits.
                             # Retry this account through normal verified startup;

@@ -100,10 +100,16 @@ class ChatMonitor:
             ox, oy, _, _ = denormalize_roi(ROI(*self.config.rois["chat_requests"]), w, h)
             offset_x, offset_y = ox, oy
 
-        for match in sorted(matches, key=lambda m: m.y, reverse=True):
+        # Chat is chronological from top to bottom. Serve the oldest visible
+        # request before a newer card can take the donor away from it.
+        for match in sorted(matches, key=lambda m: m.y):
             abs_y = match.y + offset_y
             abs_x = match.x + offset_x
-            sig = hashlib.md5(f"{abs_x}:{abs_y}".encode()).hexdigest()[:12]
+            # Different request cards can reuse the same position. Use card
+            # artwork and capacity context above the button, away from its age.
+            card = frame[max(0, abs_y-match.height):abs_y,
+                         max(0, abs_x-3*match.width):abs_x+match.width]
+            sig = hashlib.blake2s(card.tobytes(), digest_size=8).hexdigest()
             if sig in self._handled:
                 continue
             adjusted = MatchResult(
@@ -233,4 +239,3 @@ class ChatMonitor:
         cx, cy = request.button_match.center
         logger.info("Opening donation panel at ({}, {}), conf={:.2f}", cx, cy, request.button_match.confidence)
         self.input.tap(cx, cy)
-        self.mark_handled(request)

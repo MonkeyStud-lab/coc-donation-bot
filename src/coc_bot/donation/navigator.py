@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -563,9 +564,22 @@ class Navigator:
         legacy = self._find_in_chat_region(frame, "chat_scroll_down", "bottom")
         if legacy is not None:
             candidates.append(legacy)
-        if not candidates:
+        if candidates:
+            return max(candidates, key=lambda m: m.confidence)
+        if not self.classifier._clan_chat_anchor_visible(frame):
             return None
-        return max(candidates, key=lambda m: m.confidence)
+        # A scrolled chat can show the native down arrow without an
+        # exclamation badge. Older calibrations may lack this arrow.
+        key = 'native_chat_latest'
+        if key not in self._template_cache:
+            self._template_cache[key] = cv2.imread(str(Path(__file__).with_name('assets') / 'chat-latest-arrow.png'))
+        template = self._template_cache[key]
+        if template is None:
+            return None
+        h, w = frame.shape[:2]
+        template = cv2.resize(template, (max(1, round(template.shape[1] * w / 1853)),
+                                         max(1, round(template.shape[0] * h / 1048))))
+        return self.matcher.find_in_roi(frame, template, [0.008, 0.80, 0.062, 0.11], threshold=0.93)
 
     def _jump_icon_location(self, match: MatchResult, frame: np.ndarray) -> str:
         if "chat_panel" not in self.config.rois:

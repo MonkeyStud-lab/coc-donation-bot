@@ -377,6 +377,13 @@ class DonationBot:
               'builder_base':self._maybe_run_builder_base}
         visit=getattr(self,'_visit',None)
         from coc_bot.accounts.store import read
+        if getattr(self, '_fleet_donation_watch', lambda: False)() is True:
+            layout = read(self.config.data_dir / 'layouts/state.json', {})
+            if not (layout.get('pending') or layout.get('last_survey', {}).get('payment')
+                    or read(self.config.data_dir / 'upgrades/state.json', {}).get('pending')):
+                self._visit_chat_pending = False
+                self._chat_tick()
+                return
         if (visit and getattr(self,'_visit_chat_pending',False)
             and getattr(self.config,'donation_enabled',True)
             and not read(self.config.data_dir/'upgrades/state.json',{}).get('pending')
@@ -1087,6 +1094,7 @@ class DonationBot:
         from coc_bot.vision import recorder
 
         recorder.note_event("action_confirmed", action="donation_open", source="existing_rules")
+        self.chat_monitor.mark_handled(self._pending_request)
         self._set_state("donate")
 
     def _do_donate(self) -> None:

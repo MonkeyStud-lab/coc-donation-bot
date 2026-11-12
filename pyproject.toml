@@ -15,6 +15,7 @@ dependencies = [
     "pillow>=10.0",
     "pyyaml>=6.0",
     "loguru>=0.7",
+    "tzdata; platform_system == 'Windows'",
 ]
 
 [project.scripts]
@@ -37,6 +38,7 @@ where = ["src"]
 "coc_bot.upgrades" = ["assets/*.npz"]
 "coc_bot.builder_base" = ["assets/*.png", "assets/*.npz"]
 "coc_bot.accounts" = ["assets/*.png", "assets/*.npz"]
+"coc_bot.donation" = ["assets/*.png"]
 "coc_bot.progression" = ["assets/*.png", "assets/*.npz"]
 "coc_bot.layouts" = ["*.json", "assets/*.png", "assets/*.npz"]
 "coc_bot.web" = ["static/*", "static/assets/*"]

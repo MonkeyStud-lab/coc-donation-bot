@@ -24,6 +24,10 @@ def write_json(path, value):
         Path(temporary).unlink(missing_ok=True)
 
 
+class UpgradeReturnUnverified(ValueError):
+    """The upgrade menu closed without a verified return to the village."""
+
+
 class UpgradeRunner:
     def __init__(self, config, capture, input_ctrl, navigator, stop=None):
         self.config,self.capture,self.input,self.nav=config,capture,input_ctrl,navigator
@@ -69,7 +73,7 @@ class UpgradeRunner:
                 self.input.tap(*point,jitter=0)
                 if self.wait():return
         if not self.nav.ensure_clan_chat() and not self.stopped():
-            raise ValueError('Home navigation was not verified after closing upgrades')
+            raise UpgradeReturnUnverified('Home navigation was not verified after closing upgrades')
 
     def open_menu(self, kind):
         frame=self.capture.screenshot()

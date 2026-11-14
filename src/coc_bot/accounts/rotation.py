@@ -232,6 +232,8 @@ class AccountFleet:
         if not getattr(config, 'upgrade_buildings_enabled', False) or getattr(config, 'dry_run', False):
             return False
         maintenance = read(config.data_dir / 'upgrades/maintenance.json', {})
+        if self.clock() < maintenance.get('navigation_retry_at', 0):
+            return False
         last = maintenance.get('categories', {}).get('buildings', {})
         checks = getattr(self.current, '_fleet_building_checks', 0)
         if checks:
@@ -251,6 +253,16 @@ class AccountFleet:
         interval = 300 if last.get('status') in ('started', 'built', 'recovered') else 1200
         checked_at = last.get('at')
         return checked_at is None or self.clock() >= checked_at + interval
+
+    def _research_check_due(self):
+        config = self.current.config
+        if not getattr(config, 'upgrade_research_enabled', False) or getattr(config, 'dry_run', False):
+            return False
+        maintenance = read(config.data_dir / 'upgrades/maintenance.json', {})
+        if self.clock() < maintenance.get('navigation_retry_at', 0):
+            return False
+        last = maintenance.get('categories', {}).get('research', {}).get('at')
+        return last is None or self.clock() >= last + 1800
 
     def _checkpoint(self, account, started):
         if self.cancel.is_set() or self.finish_action:return True
@@ -317,7 +329,7 @@ class AccountFleet:
             if ('donating' in account['roles'] and
                     getattr(self.current,'_visit_chat_pending',False) is True):return False
             if state['attack_target_per_hour']:
-                if self._building_check_due():
+                if self._research_check_due() or self._building_check_due():
                     return False
                 if self.rotation.farming_due(state, account, now):
                     return False
@@ -466,6 +478,7 @@ class AccountFleet:
                             self.current._fleet_work_order=lambda:()
                         elif state['task_driven'] and state['attack_target_per_hour']:
                             self.current._fleet_building_check_due = self._building_check_due
+                            self.current._fleet_research_check_due = self._research_check_due
                         if (not (detour and account['id']==detour['donor'])
                                 and state['task_driven'] and state['attack_target_per_hour']
                                 and 'farming' in account['roles']):

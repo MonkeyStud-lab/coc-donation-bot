@@ -157,6 +157,15 @@ def mass_mommas_close_button(frame):
     ])
 
 
+def town_hall_19_close_button(frame):
+    """Dismiss the Town Hall 19 announcement using its own close control."""
+    return _announcement_close(frame, [
+        ('th19_title', (480, 650, 1390, 770)),
+        ('th19_watch', (750, 840, 1080, 960)),
+        ('th19_close', (1530, 55, 1650, 170)),
+    ])
+
+
 def gold_pass_offer_close_button(frame):
     """Dismiss the native pass advertisement, never its purchase action."""
     return (_announcement_close(frame, [('gold_pass_offer_heading',(730,610,1150,710)),

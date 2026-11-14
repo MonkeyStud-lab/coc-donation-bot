@@ -59,6 +59,18 @@ class TaskRotationTests(TestCase):
             now = datetime.fromisoformat(utc_time).replace(tzinfo=timezone.utc).timestamp()
             self.assertEqual(daytime_donation_watch(state, now), expected)
 
+    def test_overdue_lab_check_runs_before_attack_handoff_and_respects_navigation_backoff(self):
+        self.rotation.configure(enabled=True, primary_id=self.accounts[0]['id'],
+                                attack_target_per_hour=3)
+        account = self.accounts[1]
+        self.rotation.record_farming(account['id'], self.now, completed=True)
+        fleet = self.fleet(1)
+        fleet.current.config.upgrade_research_enabled = True
+        self.assertFalse(fleet._checkpoint(account, self.now - 200))
+        write(fleet.current.config.data_dir / 'upgrades/maintenance.json',
+              {'navigation_retry_at': self.now + 900})
+        self.assertTrue(fleet._checkpoint(account, self.now - 200))
+
     def test_daytime_handoff_goes_to_donor_and_waits_for_pending_upgrade(self):
         self.rotation.configure(enabled=True, primary_id=self.accounts[0]['id'],
                                 daytime_donation_watch=True)

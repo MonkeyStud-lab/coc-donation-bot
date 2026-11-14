@@ -25,10 +25,11 @@ def recover_home_bonus(nav,frame):
 def recover_home_announcement(nav,frame):
     from coc_bot.vision.notices import (
         hammer_jam_close_button, gold_pass_offer_close_button, mass_mommas_close_button,
+        town_hall_19_close_button,
     )
     def close(image):
         return (hammer_jam_close_button(image) or gold_pass_offer_close_button(image)
-                or mass_mommas_close_button(image))
+                or mass_mommas_close_button(image) or town_hall_19_close_button(image))
     point=close(frame)
     if point is None:
         nav.__dict__.pop('_hammer_jam_taps',None)
@@ -73,6 +74,9 @@ def recover_home_overlay(nav, frame):
     if not isinstance(frame,np.ndarray):return False
     from coc_bot.vision.connection_dialog import recover_connection_error
     if recover_connection_error(nav,frame):return True
+    reload = nav.classifier.find_reload_game_button(frame)
+    if isinstance(reload, tuple) and len(reload)==2:
+        return nav._dismiss_popup(frame) is not False
     if recover_home_announcement(nav,frame):return True
     if recover_reward_summary(nav,frame):return True
     if recover_free_chest(nav,frame):return True
@@ -139,9 +143,6 @@ def recover_home_overlay(nav, frame):
         counts[key]=counts.get(key,0)+1
         nav.input.tap(*story['point'],jitter=0)
         return True
-    reload = nav.classifier.find_reload_game_button(frame)
-    if isinstance(reload, tuple) and len(reload)==2:
-        return nav._dismiss_popup(frame) is not False
     title=_white_label(frame,(.30,.075,.70,.155),nav._stopping)
     okay=_white_label(frame,(.45,.80,.57,.88),nav._stopping)
     if title=='welcomebackchief' and okay=='okay' and not nav._stopping():

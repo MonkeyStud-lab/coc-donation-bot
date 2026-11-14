@@ -1,6 +1,9 @@
 """Instant wall upgrades confirm level and payment, rather than a builder timer."""
 import re
 import time
+from functools import lru_cache
+from pathlib import Path
+import cv2
 from loguru import logger
 from coc_bot.upgrades.vision import crop, text, compact, resource_amount, currency, Candidate
 from coc_bot.upgrades.runner import write_json
@@ -8,18 +11,29 @@ from coc_bot.progression.reader import selected_title, balance_amount
 from coc_bot.progression import wall_evidence
 
 # Retry bulk after a reader update instead of carrying over an old OCR failure.
-BULK_READER_REVISION = 2
+BULK_READER_REVISION = 3
+
+
+@lru_cache(maxsize=1)
+def _single_level_one_heading():
+    path = Path(__file__).with_name('assets') / 'wall_single_level_one.png'
+    return cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
 
 
 def wall_panel(frame, stop=None):
     title=selected_title(frame,(.24,.640,.50,.697),stop)
-    if not title:
-        # A "Full!" indicator can clip the left edge of the broad crop.
-        # The centered single-wall heading fits within this narrower crop.
-        title=selected_title(frame,(.273,.640,.50,.697),stop)
     match=re.fullmatch(r'walllevel(\d{1,2})',re.sub(r'[^a-z0-9]','',title.lower()))
-    if not match:return None
-    level=int(match[1])
+    if match:
+        level=int(match[1])
+    else:
+        # Bright collector and terrain artwork can invalidate the broad OCR
+        # crop. Require the complete centered native level-one title.
+        image = cv2.resize(frame, (1853, 1048))[675:721,510:839]
+        mask = cv2.inRange(cv2.cvtColor(image,cv2.COLOR_BGR2HSV),(15,35,220),(65,200,255))
+        reference = _single_level_one_heading()
+        if reference is None or cv2.countNonZero(mask & reference) < .93 * cv2.countNonZero(mask | reference):
+            return None
+        level=1
     if not 1<=level<=30:return None
     from coc_bot.progression.bulk_walls import payments
     candidates=payments(frame,stop)
@@ -27,7 +41,6 @@ def wall_panel(frame, stop=None):
     if candidate:
         return {'level':level,'cost':candidate['price'],'currency':candidate['currency'],
                 'upgrade':True,'point':candidate['pay'],'red':candidate['red']}
-    import cv2
     button_label=crop(frame,(.489,.808,.572,.857))
     mask=cv2.inRange(cv2.cvtColor(button_label,cv2.COLOR_BGR2HSV),(0,0,205),(180,70,255))
     label=compact(text(255-mask,stop=stop))

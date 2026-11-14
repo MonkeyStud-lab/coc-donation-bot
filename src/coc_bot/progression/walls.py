@@ -180,25 +180,28 @@ class WallUpgrade:
         wall_evidence.observe(r,pending,'after_panel',frame,level=after and after['level'],balance=balance)
         # The village can paint the old balance while an instant upgrade
         # settles. Re-read the screen only; never repeat either payment tap.
+        expected_balance=before-row['cost']
         for _ in range(2):
-            if balance not in (None,before):break
+            if balance is not None and (balance<=expected_balance or balance>before):break
             if r.stopped() or r.wait(.5):return {'status':'stopped'}
             frame=r.capture.screenshot()
             after=wall_panel(frame,r.stop)
             balance=wall_balance(frame,r.reader,row['currency'],r.stop)
             wall_evidence.observe(r,pending,'after_panel',frame,level=after and after['level'],balance=balance)
-        confirmed=after is not None and after['level']==target and balance==before-row['cost']
-        if not confirmed and type(remaining) is int and remaining>=1 and balance==before-row['cost']:
+        confirmed=after is not None and after['level']==target and balance==expected_balance
+        method='selected_wall_level'
+        if not confirmed and balance==expected_balance:
             # Instant upgrades deselect the wall. In that layout, independently
             # verify that exactly one wall left this target-level/price queue.
-            confirmed=self.confirm_queue(row,target,remaining,frame,before-row['cost'],pending)
-        if not confirmed and balance==before-row['cost'] and type(remaining) is int:
+            confirmed=self.confirm_queue(row,target,remaining,frame,expected_balance,pending)
+            method='two_wall_queue_frames'
+        if not confirmed and balance==expected_balance:
             # Instant upgrades can close the sidebar and deselect the wall.
             # Reopen only the verified Build menu and read complete inventories.
             return self.recover(state)
         if not confirmed:
             return {'status':'needs_review','message':'Instant wall upgrade was not independently confirmed; repeat spending blocked'}
-        self.finish(state,level_after=target)
+        self.finish(state,level_after=target,receipt_method=method)
         return {'status':'started','message':'Wall level '+str(target)+' confirmed','spent':row['cost']}
 
     def scan_after(self,opening_frame,pending,unit_cost,target):

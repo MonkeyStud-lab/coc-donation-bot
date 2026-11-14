@@ -48,8 +48,8 @@ class WallEvidenceTests(unittest.TestCase):
     def single(self, balance=10739):
         with patch('coc_bot.progression.bulk_walls.control', return_value=None), \
              patch('coc_bot.progression.walls.wall_panel', side_effect=[
-                 self.panel, self.panel, self.panel | {'level': 4}]), \
-             patch('coc_bot.progression.walls.wall_balance', side_effect=[15739, balance]):
+                 self.panel, self.panel] + [self.panel | {'level': 4}] * 3), \
+             patch('coc_bot.progression.walls.wall_balance', side_effect=[15739] + [balance] * 3):
             return WallUpgrade(self.r).run(self.row)
 
     def bulk(self):
@@ -101,7 +101,7 @@ class WallEvidenceTests(unittest.TestCase):
         with patch('coc_bot.progression.bulk_walls.control', return_value=None), \
              patch('coc_bot.progression.walls.wall_panel', side_effect=[
                  self.panel, self.panel, self.panel, None, self.panel | {'level': 4}]), \
-             patch('coc_bot.progression.walls.wall_balance', side_effect=[15739,15739,None,10739]):
+             patch('coc_bot.progression.walls.wall_balance', side_effect=[15739,15739,11012,10739]):
             self.assertEqual(WallUpgrade(self.r).run(self.row)['status'],'started')
         self.assertEqual(self.taps(), [(1,1),(2,2)])
         self.assertEqual(self.state()['last_completed']['level_after'],4)

@@ -7,6 +7,9 @@ from coc_bot.upgrades.runner import write_json
 from coc_bot.progression.reader import selected_title, balance_amount
 from coc_bot.progression import wall_evidence
 
+# Retry bulk after a reader update instead of carrying over an old OCR failure.
+BULK_READER_REVISION = 1
+
 
 def wall_panel(frame, stop=None):
     title=selected_title(frame,(.24,.640,.50,.697),stop)
@@ -145,6 +148,7 @@ class WallUpgrade:
         from coc_bot.progression.bulk_walls import control,BulkWalls
         last=state.get('last_completed',{})
         recent_single=(last.get('single_wall_fallback') is True and last.get('phase')=='confirmed'
+                       and last.get('bulk_reader_revision')==BULK_READER_REVISION
                        and last.get('level_before')==first['level'] and last.get('currency')==row['currency']
                        and 0<=time.time()-last.get('at',0)<3600)
         if allow_bulk and not recent_single and control(second_frame,'upgrade_more') is not None:
@@ -160,6 +164,7 @@ class WallUpgrade:
                           'remaining_before':remaining,'target_level':target}
         if not allow_bulk or recent_single:
             receipt['single_wall_fallback']=True
+            receipt['bulk_reader_revision']=BULK_READER_REVISION
         failure=wall_evidence.begin(r,state,receipt,(first_frame,second_frame))
         if failure:return failure
         pending=state['pending']

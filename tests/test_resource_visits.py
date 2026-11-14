@@ -303,6 +303,20 @@ class BulkWallTests(unittest.TestCase):
              patch('coc_bot.upgrades.digits.read_digits',side_effect=['5000','5000','6000']):
             self.assertIsNone(payment(frame,(976,870)))
 
+    def test_bulk_level_one_ocr_correction_requires_matching_heading(self):
+        import cv2
+        from coc_bot.progression.bulk_walls import selection
+        path = Path(__file__).parent/'fixtures/resource_visits/wall-starter-three.png'
+        frame = cv2.imread(str(path))
+        with patch('coc_bot.progression.reader.selected_title', return_value='Wall (Level 1l)x 3'):
+            result = selection(frame, 'gold')
+            self.assertEqual((result['level'], result['count'], result['price']), (1, 3, 3000))
+            frame[675:720, 764:800] = 0
+            self.assertIsNone(selection(frame, 'gold'))
+        frame = cv2.imread(str(path))
+        with patch('coc_bot.progression.reader.selected_title', return_value='Wall (Level 11)x 3'):
+            self.assertEqual(selection(frame, 'gold')['level'], 11)
+
     @unittest.skipUnless(shutil.which('tesseract'),'Native wall heading OCR is required')
     def test_starter_bulk_price_is_not_contaminated_by_the_tiles_bright_border(self):
         import cv2

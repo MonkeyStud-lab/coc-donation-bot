@@ -1,5 +1,6 @@
 """Native multi-wall selection; only gold/elixir payments are supported."""
 from pathlib import Path
+from functools import lru_cache
 import re
 import time
 import cv2
@@ -51,10 +52,26 @@ def confirmation(frame, cost, resource, stop=None):
     return okay
 
 
+@lru_cache(maxsize=1)
+def _level_one_heading():
+    return cv2.imread(str(Path(__file__).with_name('assets') / 'wall_bulk_level_one.png'),
+                      cv2.IMREAD_GRAYSCALE)
+
+
 def selection(frame, resource, stop=None):
     from coc_bot.progression.reader import selected_title
     from coc_bot.upgrades.vision import crop,currency,resource_amount
-    title=selected_title(frame,(.24,.64,.50,.697),stop)
+    bounds = (.24,.64,.50,.697)
+    title=selected_title(frame,bounds,stop)
+    # OCR can fold the closing parenthesis into "1l". Confirm the entire
+    # level-one heading through the selection marker before correcting it.
+    if re.fullmatch(r'(?i)\s*wall\s*\(level\s+1l\)\s*x\s*[0-9il]{1,3}\s*', title):
+        reference = _level_one_heading()
+        heading = crop(cv2.resize(frame, (1853, 1048)), bounds)
+        mask = cv2.inRange(cv2.cvtColor(heading, cv2.COLOR_BGR2HSV), (15,35,220), (65,200,255))
+        if reference is None or cv2.matchTemplate(mask, reference, cv2.TM_CCOEFF_NORMED).max() < .97:
+            return None
+        title = re.sub(r'(?i)1l\)', '1)', title)
     match=re.fullmatch(r'walllevel([0-9il]{1,2})x([0-9il]{1,3})',re.sub(r'[^a-z0-9]','',title.lower()))
     if not match:return None
     # The outlined numeric 1 is read as I in this exact heading. Count changes

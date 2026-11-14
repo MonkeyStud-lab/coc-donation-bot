@@ -314,6 +314,7 @@ class BulkWallTests(unittest.TestCase):
             frame[675:720, 764:800] = 0
             self.assertIsNone(selection(frame, 'gold'))
         frame = cv2.imread(str(path))
+        frame[675:720, 764:800] = 0
         with patch('coc_bot.progression.reader.selected_title', return_value='Wall (Level 11)x 3'):
             self.assertEqual(selection(frame, 'gold')['level'], 11)
 

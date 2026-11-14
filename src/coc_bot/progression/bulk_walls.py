@@ -59,24 +59,28 @@ def _level_one_heading():
 
 
 def selection(frame, resource, stop=None):
-    from coc_bot.progression.reader import selected_title
-    from coc_bot.upgrades.vision import crop,currency,resource_amount
+    from coc_bot.progression.reader import counter_digit_variants, selected_title
+    from coc_bot.upgrades.digits import read_digits
+    from coc_bot.upgrades.vision import crop
     bounds = (.24,.64,.50,.697)
-    title=selected_title(frame,bounds,stop)
-    # OCR can fold the closing parenthesis into "1l". Confirm the entire
-    # level-one heading through the selection marker before correcting it.
-    if re.fullmatch(r'(?i)\s*wall\s*\(level\s+1l\)\s*x\s*[0-9il]{1,3}\s*', title):
-        reference = _level_one_heading()
-        heading = crop(cv2.resize(frame, (1853, 1048)), bounds)
-        mask = cv2.inRange(cv2.cvtColor(heading, cv2.COLOR_BGR2HSV), (15,35,220), (65,200,255))
-        if reference is None or cv2.matchTemplate(mask, reference, cv2.TM_CCOEFF_NORMED).max() < .97:
+    heading = crop(cv2.resize(frame, (1853, 1048)), bounds)
+    mask = cv2.inRange(cv2.cvtColor(heading, cv2.COLOR_BGR2HSV), (15,35,220), (65,200,255))
+    reference = _level_one_heading()
+    _, score, _, (x, y) = cv2.minMaxLoc(cv2.matchTemplate(mask, reference, cv2.TM_CCOEFF_NORMED)) if reference is not None else (0, 0, None, (0, 0))
+    if score >= .96:
+        # Match through the closing parenthesis and x. Read only the digits
+        # after x so a closing parenthesis can never become a level digit.
+        suffix = mask[y:y+reference.shape[0], x+reference.shape[1]:]
+        digits = read_digits(cv2.cvtColor(suffix, cv2.COLOR_GRAY2BGR),
+                             extra_templates=counter_digit_variants()) if suffix.size else None
+        if not digits or not digits.isdecimal():
             return None
-        title = re.sub(r'(?i)1l\)', '1)', title)
-    match=re.fullmatch(r'walllevel([0-9il]{1,2})x([0-9il]{1,3})',re.sub(r'[^a-z0-9]','',title.lower()))
-    if not match:return None
-    # The outlined numeric 1 is read as I in this exact heading. Count changes
-    # and the independently read unit-price multiplication must also agree.
-    level,count=(int(v.replace('i','1').replace('l','1')) for v in match.groups())
+        level, count = 1, int(digits)
+    else:
+        title=selected_title(frame,bounds,stop)
+        match=re.fullmatch(r'walllevel(\d{1,2}|[il])x([0-9il]{1,3})',re.sub(r'[^a-z0-9]','',title.lower()))
+        if not match:return None
+        level,count=(int(v.replace('i','1').replace('l','1')) for v in match.groups())
     if not 1<=level<=30 or not 1<=count<=500:return None
     choices=[p for p in payments(frame,stop) if p['currency']==resource]
     if len(choices)!=1:return None

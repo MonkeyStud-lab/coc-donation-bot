@@ -8,7 +8,7 @@ from coc_bot.progression.reader import selected_title, balance_amount
 from coc_bot.progression import wall_evidence
 
 # Retry bulk after a reader update instead of carrying over an old OCR failure.
-BULK_READER_REVISION = 1
+BULK_READER_REVISION = 2
 
 
 def wall_panel(frame, stop=None):

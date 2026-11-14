@@ -106,6 +106,40 @@ class WallEvidenceTests(unittest.TestCase):
         self.assertEqual(self.taps(), [(1,1),(2,2)])
         self.assertEqual(self.state()['last_completed']['level_after'],4)
 
+    def test_unpaid_bulk_failure_reopens_and_pays_for_one_wall(self):
+        with patch('coc_bot.progression.bulk_walls.control', return_value=(3, 3)), \
+             patch('coc_bot.progression.bulk_walls.BulkWalls.run',
+                   return_value={'status': 'blocked', 'message': 'Bulk preview unreadable'}), \
+             patch('coc_bot.progression.walls.wall_panel',
+                   side_effect=[self.panel] * 4 + [self.panel | {'level': 4}]), \
+             patch('coc_bot.progression.walls.wall_balance', side_effect=[15739, 15739, 10739]):
+            self.assertEqual(WallUpgrade(self.r).run(self.row)['status'], 'started')
+        self.r.close.assert_called_once()
+        self.assertEqual(self.taps(), [(1, 1), (1, 1), (2, 2)])
+        receipt = self.state()['last_completed']
+        self.assertTrue(receipt['single_wall_fallback'])
+        self.assertEqual(receipt['level_after'], 4)
+
+    def test_red_wall_price_is_skipped_before_payment(self):
+        with patch('coc_bot.progression.walls.wall_panel', return_value=self.panel | {'red': True}), \
+             patch('coc_bot.progression.bulk_walls.BulkWalls.run') as bulk:
+            self.assertEqual(WallUpgrade(self.r).run(self.row)['status'], 'waiting')
+        bulk.assert_not_called()
+        self.assertEqual(self.taps(), [(1, 1)])
+        self.assertEqual(self.state(), {})
+
+    def test_bulk_with_pending_payment_cannot_fall_back(self):
+        def uncertain(*args):
+            self.r.path.write_text('{"pending":{"kind":"wall"}}')
+            return {'status': 'needs_review'}
+        with patch('coc_bot.progression.bulk_walls.control', return_value=(3, 3)), \
+             patch('coc_bot.progression.bulk_walls.BulkWalls.run', side_effect=uncertain), \
+             patch('coc_bot.progression.walls.wall_panel', return_value=self.panel), \
+             patch('coc_bot.progression.walls.wall_balance', return_value=15739):
+            self.assertEqual(WallUpgrade(self.r).run(self.row)['status'], 'needs_review')
+        self.r.close.assert_not_called()
+        self.assertEqual(self.taps(), [(1, 1)])
+
     def test_partial_before_failure_rolls_back_and_never_pays(self):
         original = evidence.insert_observation
         def fail_second(db, ident, stage, frame, readings):

@@ -1,6 +1,7 @@
 """Instant wall upgrades confirm level and payment, rather than a builder timer."""
 import re
 import time
+from loguru import logger
 from coc_bot.upgrades.vision import crop, text, compact, resource_amount, currency, Candidate
 from coc_bot.upgrades.runner import write_json
 from coc_bot.progression.reader import selected_title, balance_amount
@@ -18,14 +19,18 @@ def wall_panel(frame, stop=None):
     candidate=next((v for v in candidates if v['currency']=='gold'),next(iter(candidates),None))
     if candidate:
         return {'level':level,'cost':candidate['price'],'currency':candidate['currency'],
-                'upgrade':True,'point':candidate['pay']}
+                'upgrade':True,'point':candidate['pay'],'red':candidate['red']}
     import cv2
     button_label=crop(frame,(.489,.808,.572,.857))
     mask=cv2.inRange(cv2.cvtColor(button_label,cv2.COLOR_BGR2HSV),(0,0,205),(180,70,255))
     label=compact(text(255-mask,stop=stop))
-    price=resource_amount(crop(frame,(.515,.715,.555,.751)),stop)
+    price_image=crop(frame,(.515,.715,.555,.751))
+    price=resource_amount(price_image,stop)
+    hsv=cv2.cvtColor(price_image,cv2.COLOR_BGR2HSV)
+    red=cv2.inRange(hsv,(0,110,140),(12,255,255)) | cv2.inRange(hsv,(170,110,140),(180,255,255))
     resource=currency(crop(frame,(.555,.715,.573,.75)))
     return {'level':level,'cost':price,'currency':resource,'upgrade':label=='upgrade',
+            'red':cv2.countNonZero(red)>red.size*.02,
             'point':(round(frame.shape[1]*.528),round(frame.shape[0]*.79))}
 
 
@@ -97,7 +102,7 @@ class WallUpgrade:
         except wall_evidence.EvidenceError as exc:
             return {'status':'needs_review','message':f'Wall after evidence unavailable: {exc}'}
 
-    def _run(self,row):
+    def _run(self,row, *, allow_bulk=True):
         if row.get('currency') not in ('gold','elixir'):
             return {'status':'blocked','message':'Walls require a verified gold or elixir price'}
         r=self.r;found=r.find_row(row)
@@ -114,6 +119,8 @@ class WallUpgrade:
         first_frame=r.capture.screenshot();second_frame=r.capture.screenshot()
         first=wall_panel(first_frame,r.stop)
         second=wall_panel(second_frame,r.stop)
+        if first and second and (first.get('red') or second.get('red')):
+            return {'status':'waiting','message':'Wall price is red; nothing spent'}
         if (first is None or first!=second or not first['upgrade'] or
                 (first['cost'],first['currency'])!=(row['cost'],row['currency'])):
             from coc_bot.runtime.verification import save_frame
@@ -122,7 +129,6 @@ class WallUpgrade:
             return {'status':'blocked','message':'Wall level, price or upgrade control is uncertain'}
         if before is None or wall_balance(second_frame,r.reader,row['currency'],r.stop)!=before:
             return {'status':'blocked','message':'Wall resources changed or could not be read before payment'}
-        state=r.state()
         target=first['level']+1
         counts=[queue_count(r.reader.rows(f),row,target) if r.reader.menu_kind(f)=='buildings' else None
                 for f in (first_frame,second_frame)]
@@ -133,12 +139,27 @@ class WallUpgrade:
             from coc_bot.runtime.verification import save_frame
             save_frame(r.config,'wall-queue-before',second_frame)
             return {'status':'blocked','message':'Wall queue count/target level is unverified; nothing spent'}
+        state=r.state()
+        if state.get('pending'):
+            return {'status':'needs_review','message':'Resolve the saved upgrade payment before upgrading walls'}
         from coc_bot.progression.bulk_walls import control,BulkWalls
-        if type(remaining) is int and control(second_frame,'upgrade_more') is not None:
-            return BulkWalls(r).run(row,first,remaining,before,(first_frame,second_frame))
+        last=state.get('last_completed',{})
+        recent_single=(last.get('single_wall_fallback') is True and last.get('phase')=='confirmed'
+                       and last.get('level_before')==first['level'] and last.get('currency')==row['currency']
+                       and 0<=time.time()-last.get('at',0)<3600)
+        if allow_bulk and not recent_single and control(second_frame,'upgrade_more') is not None:
+            result=BulkWalls(r).run(row,first,remaining,before,(first_frame,second_frame))
+            if result['status'] not in ('blocked','changed') or r.state().get('pending') or r.stopped():
+                return result
+            logger.info('Bulk wall preview failed before payment: {}. Reopening for one wall.', result['message'])
+            r.close()
+            if r.stopped():return {'status':'stopped'}
+            return self._run(row,allow_bulk=False)
         receipt={'kind':'wall','name':'Wall','cost':row['cost'],'currency':row['currency'],
                           'level_before':first['level'],'balance_before':before,'phase':'confirming','at':time.time(),
                           'remaining_before':remaining,'target_level':target}
+        if not allow_bulk or recent_single:
+            receipt['single_wall_fallback']=True
         failure=wall_evidence.begin(r,state,receipt,(first_frame,second_frame))
         if failure:return failure
         pending=state['pending']

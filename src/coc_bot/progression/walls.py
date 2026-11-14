@@ -11,7 +11,7 @@ from coc_bot.progression.reader import selected_title, balance_amount
 from coc_bot.progression import wall_evidence
 
 # Retry bulk after a reader update instead of carrying over an old OCR failure.
-BULK_READER_REVISION = 3
+BULK_READER_REVISION = 4
 
 
 @lru_cache(maxsize=1)

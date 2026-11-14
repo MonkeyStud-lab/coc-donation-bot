@@ -67,7 +67,14 @@ def selection(frame, resource, stop=None):
     mask = cv2.inRange(cv2.cvtColor(heading, cv2.COLOR_BGR2HSV), (15,35,220), (65,200,255))
     reference = _level_one_heading()
     _, score, _, (x, y) = cv2.minMaxLoc(cv2.matchTemplate(mask, reference, cv2.TM_CCOEFF_NORMED)) if reference is not None else (0, 0, None, (0, 0))
-    if score >= .96:
+    native_level_one = False
+    if score >= .94:
+        # Require a tighter match on the level, closing parenthesis and x.
+        # Animation behind the word "Wall" can affect the wider score.
+        width, height = reference.shape[1], reference.shape[0]
+        observed = mask[y:y+height, x+width-68:x+width]
+        native_level_one = cv2.matchTemplate(observed, reference[:,-68:], cv2.TM_CCOEFF_NORMED).item() >= .97
+    if native_level_one:
         # Match through the closing parenthesis and x. Read only the digits
         # after x so a closing parenthesis can never become a level digit.
         suffix = mask[y:y+reference.shape[0], x+reference.shape[1]:]
@@ -174,6 +181,8 @@ class BulkWalls:
         if r.wait(.4):return {'status':'stopped'}
         value=self.settled(resource)
         if value is None or (value['level'],value['count'],value['price'])!=(first['level'],1,unit_cost):
+            from coc_bot.runtime.verification import save_frame
+            save_frame(r.config,'bulk-wall-entry',getattr(self,'last_frame',None))
             return {'status':'blocked','message':'Bulk wall starting count/price could not be verified'}
         # The unaffordable/red selection is only a preview. At zero reserve,
         # allow exactly one overrun then -1, as in the native workflow. A

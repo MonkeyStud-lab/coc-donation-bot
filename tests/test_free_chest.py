@@ -53,6 +53,7 @@ class FreeChestTests(TestCase):
         from coc_bot.progression.home import recover_home_overlay
         frame=cv2.imread(str(ROOT/'free-chest-skip.png'));nav=SimpleNamespace(capture=Mock(),input=Mock(),_stopping=lambda:False)
         nav.capture.screenshot.return_value=frame
+        nav.classifier=SimpleNamespace(find_reload_game_button=Mock(return_value=None))
         with patch('coc_bot.progression.home.recover_free_chest') as strike:
             self.assertTrue(recover_home_overlay(nav,frame))
         strike.assert_not_called();nav.input.tap.assert_called_once()

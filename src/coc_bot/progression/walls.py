@@ -13,6 +13,10 @@ BULK_READER_REVISION = 1
 
 def wall_panel(frame, stop=None):
     title=selected_title(frame,(.24,.640,.50,.697),stop)
+    if not title:
+        # A "Full!" indicator can clip the left edge of the broad crop.
+        # The centered single-wall heading fits within this narrower crop.
+        title=selected_title(frame,(.273,.640,.50,.697),stop)
     match=re.fullmatch(r'walllevel(\d{1,2})',re.sub(r'[^a-z0-9]','',title.lower()))
     if not match:return None
     level=int(match[1])

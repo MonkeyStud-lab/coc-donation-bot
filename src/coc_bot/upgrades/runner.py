@@ -33,6 +33,7 @@ class UpgradeRunner:
         self.config,self.capture,self.input,self.nav=config,capture,input_ctrl,navigator
         self.stop=stop
         self.reader=UpgradeReader(stop)
+        self._building_selection_start = None
         self.path=config.data_dir/'upgrades/state.json'
 
     def stopped(self):
@@ -147,6 +148,19 @@ class UpgradeRunner:
             return True
         return False
 
+    def _reopen_buildings(self, frame):
+        """Reset the scroll position so the active timers are visible."""
+        if self.stopped() or self.reader.menu_kind(frame) != 'buildings':
+            return None
+        self.input.tap(round(frame.shape[1]*.984), round(frame.shape[0]*.032), jitter=0)
+        if self.wait():
+            return None
+        try:
+            return self.open_menu('buildings')
+        except ValueError as exc:
+            logger.warning('Could not reopen Buildings to verify upgrade: {}', exc)
+            return None
+
     def run(self, kind, *, execute=False, expected=None):
         if kind not in ('buildings','research','pets'): raise ValueError('Unknown upgrade category')
         if self.stopped(): return {'status':'stopped'}
@@ -184,6 +198,9 @@ class UpgradeRunner:
                 if self.stopped(): return {'status':'stopped'}
                 frame=self.open_menu(kind)
                 if frame is None: return {'status':'stopped'}
+            building_top = self._building_selection_start
+            if building_top is None:
+                building_top = frame
             report=self.inspect(kind,frame)
             # Bounded list exploration. Only a verified Suggested section qualifies.
             from coc_bot.upgrades.scroll import menu_list_unchanged
@@ -233,7 +250,10 @@ class UpgradeRunner:
             if self.stopped(): return {'status':'stopped'}
             from coc_bot.upgrades.vision import Candidate
             candidate=Candidate(eligible['name'],eligible['cost'],eligible['currency'],tuple(stable['point']),stable.get('assigned'))
-            active=self.reader.active_names(fresh,kind='pets') if kind=='pets' else self.reader.active_names(fresh)
+            if kind == 'pets':
+                active = self.reader.active_names(fresh, kind='pets')
+            else:
+                active = self.reader.active_names(building_top if kind == 'buildings' else fresh)
             active_before=sum(name==compact(candidate.name) for name in active)
             self.input.tap(*candidate.point,jitter=0)
             detail_open=True
@@ -286,12 +306,17 @@ class UpgradeRunner:
                 pending['phase']='uncertain';write_json(self.path,state)
                 return report|{'status':'needs_review','message':'Upgrade tap sent; result is unverified. Automatic retries blocked'}
             detail_open=False
-            for _ in range(3):
+            for attempt in range(3):
                 if self._verify_pending(state,kind,frame):
                     return report|{'status':'started','message':f'{candidate.name} upgrade is running',
                                    'availability':self.reader.availability(frame,kind)}
                 if self.wait(1.0): break
-                frame=self.capture.screenshot()
+                if kind == 'buildings' and attempt == 0:
+                    frame = self._reopen_buildings(frame)
+                    if frame is None:
+                        break
+                else:
+                    frame=self.capture.screenshot()
             return report|{'status':'needs_review','message':'Could not confirm the upgrade timer; no retry will be sent'}
         finally:
             if not self.stopped():

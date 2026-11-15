@@ -181,6 +181,8 @@ class ProgressionRunner(UpgradeRunner):
             if self.wait(): return None
         frame = self.open_menu(kind)
         if frame is None: return None
+        if kind == 'buildings':
+            self._building_selection_start = frame
         if wanted.get('new'):
             # Remove gem-only purchases from the list before selecting any
             # new-building row, including if recommendations reorder.
@@ -237,6 +239,7 @@ class ProgressionRunner(UpgradeRunner):
 
     def _run_once(self, kind, *, execute=False, expected=None):
         self.target = None
+        self._building_selection_start = None
         if kind not in ('buildings','research'):
             return super().run(kind,execute=execute,expected=expected)
         state = self.state()

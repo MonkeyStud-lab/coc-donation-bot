@@ -365,6 +365,29 @@ class UpgradeRunnerTests(unittest.TestCase):
         self.assertNotIn('pending',self.runner.state())
         self.assertEqual(self.runner.state()['last_completed']['name'],'Bowler')
 
+    def test_building_timer_is_verified_after_reopening_a_scrolled_list(self):
+        self.item.update(name='Army Camp', cost=750_000, currency='elixir')
+        self.report.update(kind='buildings', availability=(2, 3), balances={'elixir': 3_000_000})
+        self.runner.reader.confirmation.return_value = {
+            'point': (50, 50), 'name': 'Army Camp', 'cost': 750_000, 'currency': 'elixir',
+        }
+        scrolled_after = np.zeros((100, 100, 3), dtype=np.uint8)
+        self.runner.open_menu.side_effect = ['selected page', 'reopened top']
+        self.runner._building_selection_start = 'top before selection'
+        self.runner.capture.screenshot.side_effect = ['selected page', 'detail', 'detail', scrolled_after]
+        self.runner.reader.menu_kind.return_value = 'buildings'
+        self.runner.reader.active_names.side_effect = [['armycamp'], [], ['armycamp', 'armycamp']]
+        self.runner.reader.availability.return_value = (1, 3)
+
+        self.assertEqual(self.runner.run('buildings', execute=True)['status'], 'started')
+        self.assertEqual(self.runner.reader.active_names.call_args_list[0], call('top before selection'))
+        self.assertEqual(self.runner.reader.active_names.call_args_list[-1], call('reopened top'))
+        self.assertEqual(self.runner.input.tap.call_args_list, [
+            call(10, 10, jitter=0), call(50, 50, jitter=0), call(98, 3, jitter=0),
+        ])
+        self.assertEqual(self.runner.state()['last_completed']['active_before'], 1)
+        self.assertNotIn('pending', self.runner.state())
+
     def test_mismatched_confirmation_never_spends(self):
         self.runner.reader.confirmation.return_value=None
         result=self.runner.run('research',execute=True)

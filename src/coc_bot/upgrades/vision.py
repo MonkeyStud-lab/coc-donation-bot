@@ -132,7 +132,7 @@ def confirmation_price(cell, stop=None):
         # Only an observed narrow horizontal strike enables the separate line.
         if strike.sum()>max(3,round(h*.08)):return None
         prices=[]
-        for saturation in (180,190,195,200,210):
+        for saturation in (180,190,195,200,210,220):
             mask=cv2.inRange(hsv,(35,saturation,100),(90,255,255))
             line=mask[round(h*.32):round(h*.64),round(w*.03):round(w*.80)]
             value=resource_amount(cv2.cvtColor(line,cv2.COLOR_GRAY2BGR),stop)

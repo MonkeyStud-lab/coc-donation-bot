@@ -94,9 +94,17 @@ class UpgradeImageTests(unittest.TestCase):
         from coc_bot.upgrades.vision import confirmation_price
         frame=cv2.imread(str(self.fixtures/'discounted-army-camp-confirmation.png'))
         cell=frame[838:978,1155:1451]
-        for readings in ([None,125_000,None,None,None],[250_000,125_000,125_000,None,None],[None]*5):
+        for readings in ([None,125_000,None,None,None,None],
+                         [250_000,125_000,125_000,None,None,None], [None]*6):
             with patch('coc_bot.upgrades.vision.resource_amount',side_effect=readings):
                 self.assertIsNone(confirmation_price(cell))
+
+    def test_discounted_gold_mine_reads_only_the_payable_elixir_price(self):
+        frame = cv2.imread(str(self.fixtures / 'discounted-gold-mine-confirmation.png'))
+        reader = UpgradeReader()
+        self.assertIsNotNone(reader.confirmation(frame, Candidate('Gold Mine', 600_000, 'elixir', (1, 1))))
+        self.assertIsNone(reader.confirmation(frame, Candidate('Gold Mine', 1_200_000, 'elixir', (1, 1))))
+        self.assertIsNone(reader.confirmation(frame, Candidate('Gold Mine', 600_000, 'gold', (1, 1))))
 
     def test_discounted_spring_trap_requires_matching_payable_price(self):
         frame=cv2.imread(str(self.fixtures/'discounted-spring-trap-confirmation.png'))

@@ -45,6 +45,7 @@ def eligibility(config, candidate, balances, availability):
 
 
 class BuilderUpgradeRunner(UpgradeRunner):
+    home_research = False
     def __init__(self, config, capture, input_ctrl, navigator, stop=None):
         # The common transaction only uses this setting to stop list exploration.
         super().__init__(replace(config, upgrade_builders_reserved=config.builder_base_builders_reserved),

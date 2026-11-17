@@ -21,7 +21,7 @@ from coc_bot.donation.navigator import Navigator
 from coc_bot.donation.request_parser import RequestKind
 from coc_bot.runtime.game_state import GameState, GameStateMachine
 from coc_bot.runtime.tracker import RuntimeTracker
-from coc_bot.runtime.verification import ActionNeedsReview
+from coc_bot.runtime.verification import ActionNeedsReview, UpgradeNeedsReview
 from coc_bot.stop import interrupted_sleep
 from coc_bot.vision.matcher import TemplateMatcher
 from coc_bot.vision.screens import BotMode, ScreenClassifier, ScreenType, MODE_LABELS
@@ -679,8 +679,8 @@ class DonationBot:
                     except UpgradeReturnUnverified:
                         maintenance['navigation_retry_at'] = time.time() + 900
                         write(maintenance_path, maintenance)
-                        if runner.state().get('pending'):
-                            raise ActionNeedsReview('Unresolved upgrade payment after navigation failure')
+                        if receipt := runner.state().get('pending'):
+                            raise UpgradeNeedsReview(receipt, 'Home navigation failed')
                         raise
                     timing['outcome'] = result.get('status', 'unknown')
                 from coc_bot.runtime.verification import log_result
@@ -695,7 +695,7 @@ class DonationBot:
                 if result.get('status')=='needs_review' and runner.state().get('pending'):
                     if not only_kind:maintenance['remaining'] = queue
                     write(maintenance_path,maintenance|{'checked_at':time.time()})
-                    raise ActionNeedsReview('Unresolved upgrade payment: '+result.get('message','manual verification required'))
+                    raise UpgradeNeedsReview(runner.state()['pending'], result.get('message','manual verification required'))
                 if result.get('status') in ('needs_review','stopped','blocked','changed','no_room'):
                     if not result.get('retry_other_candidates'):
                         self._visit_retry_at=time.time()+300
@@ -1097,11 +1097,12 @@ class DonationBot:
 
         if not opened:
             logger.warning(
-                "Donation panel still not detected — leaving request unmarked so it can retry. "
+                "Donation panel still not detected — retrying after a short delay. "
                 "If this keeps happening, recalibrate donation_troop_bar (and donation_spell_bar "
                 "when present) or capture a donation_panel template. Troop-only clan castles "
                 "have no spell/siege strip — that is supported."
             )
+            self.chat_monitor.retry_later(self._pending_request)
             self._pending_request = None
             self._set_state("scroll_chat")
             return
@@ -1110,7 +1111,6 @@ class DonationBot:
         from coc_bot.vision import recorder
 
         recorder.note_event("action_confirmed", action="donation_open", source="existing_rules")
-        self.chat_monitor.mark_handled(self._pending_request)
         self._set_state("donate")
 
     def _do_donate(self) -> None:
@@ -1127,6 +1127,7 @@ class DonationBot:
                 "[DRY-RUN] Would execute donation kind={} (open fill=colored slots)",
                 request.kind.value,
             )
+            self.chat_monitor.mark_handled(request)
             self._pending_request = None
             self._set_state("scan_chat")
             return
@@ -1138,17 +1139,19 @@ class DonationBot:
                 kind=request.kind,
                 capacity=request.capacity,
             )
-            timing['outcome'] = 'reported_donation' if donated else 'no_donation'
+            filled = bool(donated and not self.should_stop() and self.chat_monitor.verified_fill(request))
+            timing['outcome'] = 'verified_fill' if filled else 'reported_donation' if donated else 'no_donation'
         logger.info("Donation round complete (donated={})", donated)
         from coc_bot.vision import recorder
 
         recorder.note_event("action_confirmed", action="donation_round", donated=donated)
-        if not donated:
-            logger.info(
-                "No donation made — marking request handled to avoid reopening "
-                "(likely open/generic misclassified or already filled)"
-            )
+        if filled:
+            if request.first_seen is not None:
+                logger.info('Donation fill verified: request={} seconds_from_first_seen={:.1f}',
+                            request.signature, time.time()-request.first_seen)
             self.chat_monitor.mark_handled(request)
+        else:
+            self.chat_monitor.retry_later(request)
         self._pending_request = None
         self._set_state("scan_chat")
 

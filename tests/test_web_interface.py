@@ -19,6 +19,19 @@ from coc_bot.web.server import create_app
 
 
 class WebTests(TestCase):
+    def test_worker_probe_reports_failed_worker_without_disclosing_error(self):
+        self.client.cookies.clear()
+        self.assertEqual(self.client.get('/health/worker').status_code, 200)
+        self.service.operation = 'bot'
+        def fail(_):
+            raise RuntimeError('sensitive account details')
+        self.service.controller.start(factory=fail)
+        self.assertTrue(self.service.controller.wait(3))
+        response = self.client.get('/health/worker')
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.content, b'')
+        self.assertIsNotNone(self.service.controller.snapshot().failed_at)
+
     def setUp(self):
         root = project_root()
         self.temp = tempfile.TemporaryDirectory()

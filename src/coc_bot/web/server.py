@@ -229,6 +229,11 @@ def create_app(service=None, auth_path=None, origins=None, secure_cookie=False,
     def account_edit(ident: str, body: AccountEdit):
         return accounts.update(ident, body.nickname, body.roles)
 
+    @app.get("/health/worker")
+    def worker_health():
+        failed = service.operation == 'bot' and service.controller.snapshot().state == 'failed'
+        return Response(status_code=503 if failed else 200)
+
     @app.get("/api/session")
     def session(request: Request):
         csrf = auth.session(request.cookies.get("coc_session"))

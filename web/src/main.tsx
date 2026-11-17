@@ -9,7 +9,7 @@ import {createRoot} from 'react-dom/client';
 import './style.css';
 import './harbor.css';
 
-type Status = {active:boolean; state:string; operation:string|null; activity:string|null; result:any; error:string|null;
+type Status = {active:boolean; state:string; operation:string|null; activity:string|null; result:any; error:string|null; failed_at?:number|null; failed_account?:string|null;
   account?:{id:string;nickname:string;tag:string};account_pending?:boolean;
   manual_control:boolean;settings_update:string|null;
   resource_farming?:ResourceStatus;
@@ -273,7 +273,7 @@ function App(){
         <button disabled={!online||busy||status?.manual_control||!!(status?.platform&&!status.platform.ready)||
           (status?.active&&(status.operation!=='bot'||status.state!=='running'))}
           onClick={()=>attempt(()=>api('farm','POST'))}><Icon name="swords" size={17}/>Farm now</button></div>
-      {status?.error&&<div className="run-error" role="alert"><Icon name="info" size={17}/>{status.error}</div>}</section>
+      {status?.error&&<div className="run-error" role="alert"><Icon name="info" size={17}/><span>{status.operation==='bot'&&status.failed_at&&<strong>{(status.failed_account && status.failed_account===status.account?.tag ? status.account.nickname : status.failed_account)||'Bot'} stopped {new Date(status.failed_at*1000).toLocaleString()}. </strong>}{status.error}</span></div>}</section>
       <div className="dashboard-grid">{[resourcePanel,activityPanel]}</div>
     </>}
     {page==='Accounts'&&<Accounts api={api} locked={locked} result={status?.result} operation={status?.operation||null}

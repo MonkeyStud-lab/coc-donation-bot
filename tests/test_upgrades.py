@@ -274,6 +274,21 @@ class UpgradeRunnerTests(unittest.TestCase):
         self.assertEqual(self.runner.state()['last_completed']['name'],'Bowler')
         self.runner.input.tap.assert_not_called()
 
+    def test_finished_research_requires_before_level_and_two_agreeing_reads(self):
+        for previous, reads, expected in [(5, [6, 6], 'recovered'), (6, [7, 7], 'recovered'),
+                                          (5, [6, 5], 'needs_review'),
+                                          (None, [], 'needs_review')]:
+            with self.subTest(previous=previous, reads=reads):
+                pending = self.save_pending('research', 'Bowler', 1)
+                pending.update(target_level=6, row_badge_before=previous)
+                self.runner.path.write_text(json.dumps({'pending': pending}))
+                self.runner.reader.active_names.return_value = []
+                self.runner.reader.availability.return_value = (1, 1)
+                self.runner._research_level = MagicMock(side_effect=reads)
+                self.assertEqual(self.runner.run('research', execute=True)['status'], expected)
+                self.assertEqual('pending' in self.runner.state(), expected != 'recovered')
+                self.runner.input.tap.assert_not_called()
+
     def test_pending_pet_is_reconciled_on_pet_tab_before_buildings(self):
         self.save_pending('pets','L.A.S.S.I',1)
         self.runner.reader.active_names.return_value=['lassi']

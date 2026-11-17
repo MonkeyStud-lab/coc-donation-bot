@@ -12,6 +12,7 @@ from enum import Enum
 import threading
 from contextvars import copy_context
 import traceback
+import time
 from typing import Callable, Protocol
 
 
@@ -46,6 +47,8 @@ class LifecycleSnapshot:
     closing: bool
     error: str | None
     error_traceback: str | None
+    failed_at: float | None = None
+    failed_account: str | None = None
 
 
 def _default_factory(options: RunOptions) -> BotRunner:
@@ -82,6 +85,8 @@ class BotController:
         self._closing = False
         self._error: str | None = None
         self._error_traceback: str | None = None
+        self._failed_at = None
+        self._failed_account = None
 
     @property
     def bot(self) -> BotRunner | None:
@@ -105,6 +110,8 @@ class BotController:
                 closing=self._closing,
                 error=self._error,
                 error_traceback=self._error_traceback,
+                failed_at=self._failed_at,
+                failed_account=self._failed_account,
             )
 
     def start(self, options: RunOptions = RunOptions(), *, factory=None) -> bool:
@@ -128,6 +135,8 @@ class BotController:
             self.options = options
             self._bot = None
             self._error = self._error_traceback = None
+            self._failed_at = None
+            self._failed_account = None
             self._state = RunState.STARTING
             self._thread = threading.Thread(
                 target=copy_context().run, args=(self._work, options, factory),
@@ -139,6 +148,7 @@ class BotController:
                 self._error = str(exc)
                 self._error_traceback = traceback.format_exc()
                 self._state = RunState.FAILED
+                self._failed_at = time.time()
                 self._thread = None
                 raise
             return True
@@ -204,6 +214,8 @@ class BotController:
             with self._lock:
                 if not (self._cancel.is_set() and isinstance(exc, AdbStopped)):
                     self._error = str(exc)
+                    self._failed_at = time.time()
+                    self._failed_account = getattr(getattr(self._bot, 'config', None), 'account_tag', None)
                     self._error_traceback = traceback.format_exc()
                     report=True
             if report:

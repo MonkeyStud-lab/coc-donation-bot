@@ -264,7 +264,7 @@ class ProgressionRunner(UpgradeRunner):
             try:
                 frame=self.open_menu(recovery)
                 if frame is None:return {'status':'stopped'}
-                if not self._verify_pending(state,recovery,frame):
+                if not self._verify_pending(state,recovery,frame) and not self._completed_research(state,frame):
                     return {'status':'needs_review','message':'Previous upgrade outcome is uncertain; no retry will be sent'}
                 return {'status':'recovered','message':'Previous upgrade confirmed; the next check will rescan progression priorities'}
             finally:

@@ -97,6 +97,14 @@ class RotationStore:
     def pause(self, now):
         state=self.load();state['paused_at']=now;write(self.path,state)
 
+    def upgrade_held(self, state, account):
+        held = state['visits'].get(account['id'], {}).get('held_upgrade_at')
+        if not held:
+            return False
+        ledger = read(self.accounts.profile(account)/'data/upgrades/state.json', {})
+        pending = ledger.get('pending')
+        return isinstance(pending, dict) and pending.get('at') == held
+
     def next_account(self, now, *, current_id=None):
         state=self.load()
         excluded=(current_id or self.accounts.load()['active']) if state['task_driven'] else state['primary_id']
@@ -104,6 +112,7 @@ class RotationStore:
         if due is not None:
             return due
         eligible=[a for a in self.accounts.load()['accounts'] if a['id']!=excluded and
+                  not self.upgrade_held(state, a) and
                   set(a['roles']) & {'farming','upgrading','builder_base'} and
                   state['visits'].get(a['id'],{}).get('next_visit_at',0)<=now]
         return min(eligible,key=lambda a:state['visits'].get(a['id'],{}).get('last_checked_at',
@@ -118,12 +127,14 @@ class RotationStore:
         if not state['attack_target_per_hour']:
             return None
         due = (account for account in self.accounts.load()['accounts'] if account['id'] != excluded
+               and not self.upgrade_held(state, account)
                and self.farming_due(state, account, now))
         return min(due, key=lambda a:state['visits'].get(a['id'], {}).get('last_farm_attempt_at', 0), default=None)
 
     def farm_due_soon(self, now):
         state = self.load()
-        return any(self.farming_due(state, a, now+180) for a in self.accounts.load()['accounts'])
+        return any(self.farming_due(state, a, now+180) and not self.upgrade_held(state, a)
+                   for a in self.accounts.load()['accounts'])
 
     def record_farming(self, account_id, now, *, started=None, completed=False, delay=300):
         state = self.load()
@@ -390,7 +401,8 @@ class AccountFleet:
         state=self.rotation.load()
         if state.get('donation_detour'):return False
         from coc_bot.accounts.clan import donors_for,membership
-        donors=donors_for(self.store,account,self.clock())
+        donors=[donor for donor in donors_for(self.store,account,self.clock())
+                if not self.rotation.upgrade_held(state, donor)]
         if not donors:
             logger.info('Clan chat check skipped: no verified same-clan donor is available')
             return True
@@ -427,6 +439,45 @@ class AccountFleet:
         self._next=donor['id']
         logger.info('Clan chat request found: detouring to a verified same-clan donor; this visit will resume afterward')
         return True
+
+    def _hold_upgrade(self, account, main, failed_receipt):
+        from coc_bot.attack.recovery import pending as battle_pending
+        from coc_bot.builder_base.runner import pending as builder_pending
+        from coc_bot.accounts.navigation import verify_session
+        from coc_bot.vision.battle_menu import home_build_control_visible
+        from coc_bot.vision.screens import ScreenType
+        bot = self.current
+        cfg = bot.config
+        data = cfg.data_dir
+        receipt = read(data/'upgrades/state.json', {}).get('pending') or {}
+        if (not isinstance(receipt, dict) or account['id'] == main['id'] or 'donating' in account['roles']
+                or cfg.account_tag != account['tag'] or receipt != failed_receipt
+                or receipt.get('kind') not in ('research','buildings','pets')
+                or receipt.get('phase') not in ('confirming','uncertain') or not receipt.get('at')):
+            return None
+        layout = read(data/'layouts/state.json', {})
+        if (battle_pending(cfg) or builder_pending(cfg) or layout.get('pending')
+                or layout.get('last_survey', {}).get('payment')
+                or read(data/'builder_base/upgrades.json', {}).get('pending')
+                or read(data/'reinforcements/state.json', {}).get('status') in ('send_pending','send_unconfirmed')):
+            return None
+        for _ in range(2):
+            if bot.should_stop():
+                return None
+            frame = bot.capture.screenshot()
+            classifier = bot.navigator.classifier
+            if (classifier.classify(frame) not in (ScreenType.HOME, ScreenType.CLAN_CHAT)
+                    or not home_build_control_visible(frame)
+                    or not (classifier._open_chat_icon_visible(frame) or classifier._clan_chat_anchor_visible(frame))):
+                return None
+        bot.__dict__.pop('_verified_handoff', None)
+        verify_session(bot, bot.should_stop)
+        state = self.rotation.load()
+        state['visits'].setdefault(account['id'], {})['held_upgrade_at'] = receipt['at']
+        state.pop('donation_detour', None)
+        write(self.rotation.path, state)
+        logger.warning('Upgrade held for {}: {}. Returning to {}', account['nickname'], receipt['name'], main['nickname'])
+        return receipt
 
     def run(self):
         from coc_bot.accounts.navigation import AccountNavigator
@@ -495,7 +546,16 @@ class AccountFleet:
                         self.activity=('Watching '+account['nickname'] if account['id']==main['id'] and not state['task_driven']
                                        else 'Visiting '+account['nickname'])
                         logger.info('Activity: {}',self.activity)
-                        self.current.run_owned()
+                        from coc_bot.runtime.verification import UpgradeNeedsReview
+                        held = None
+                        try:
+                            self.current.run_owned()
+                        except UpgradeNeedsReview as exc:
+                            held = self._hold_upgrade(account, main, exc.receipt)
+                            if not held:
+                                raise
+                            self._next = main['id']
+                            self._visit_suspended = True
                         self.rotation.complete(account['id'],self.clock(),self.clock()-started,
                                                suspended=getattr(self,'_visit_suspended',False))
                         if self.cancel.is_set() or self.finish_action or self._next is None:break
@@ -504,13 +564,14 @@ class AccountFleet:
                         from coc_bot.attack.recovery import pending
                         from coc_bot.builder_base.runner import pending as builder_pending
                         from coc_bot.upgrades.runner import UpgradeRunner
+                        outstanding = UpgradeRunner(self.current.config,self.current.capture,self.current.nav_input,
+                                                    self.current.navigator).state().get('pending')
                         if (pending(self.current.config) or builder_pending(self.current.config) or
-                            UpgradeRunner(self.current.config,self.current.capture,self.current.nav_input,
-                                          self.current.navigator).state().get('pending')):
+                                outstanding and outstanding != held):
                             raise ValueError('Account has an unresolved action; automatic switching paused')
                         from coc_bot.donation.chat_check import ChatCheckUnverified
                         try:
-                            if not (self._next == main['id'] and daytime_donation_watch(state, self.clock())):
+                            if not held and not (self._next == main['id'] and daytime_donation_watch(state, self.clock())):
                                 self._check_chat_before_switch(account)
                         except ChatCheckUnverified:
                             # This check runs after the visit's bot loop exits.

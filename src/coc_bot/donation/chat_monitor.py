@@ -24,6 +24,9 @@ class DonateRequest:
     is_specific: bool = False  # True = pure specific (Phase 1 colored-slot path)
     kind: RequestKind = RequestKind.OPEN
     capacity: RequestCapacity | None = None
+    first_seen: float | None = None
+    card_header: str | None = None
+    full_capacity_read: bool = False
 
 
 class ChatMonitor:
@@ -45,6 +48,7 @@ class ChatMonitor:
         self.request_parser = RequestParser(config, debug=debug)
         self.capacity_parser = RequestCapacityParser(config)
         self._handled: dict[str, float] = {}
+        self._seen: dict[str, tuple[float, float]] = {}
         self._donate_template: np.ndarray | None = None
 
     def _load_donate_button(self) -> np.ndarray | None:
@@ -62,13 +66,26 @@ class ChatMonitor:
 
     def _prune_handled(self) -> None:
         now = time.time()
-        ttl = self.config.handled_request_ttl_seconds
-        expired = [k for k, ts in self._handled.items() if now - ts > ttl]
+        expired = [k for k, until in self._handled.items() if now >= until]
         for k in expired:
             del self._handled[k]
+        self._seen = {key: times for key, times in self._seen.items() if now-times[1] < 3600}
+
+    @staticmethod
+    def _card_header(frame, button):
+        from coc_bot.donation.capacity_parser import find_message_bubble
+        box = find_message_bubble(frame, button)
+        if box is None:
+            return None
+        x, y, right, bottom = box
+        header = frame[y:y+(bottom-y)//3, x:x+(right-x)*2//3]
+        if not header.size or header.std() < 10:
+            return None
+        return hashlib.blake2s(header.tobytes(), digest_size=12).hexdigest()
 
     def find_donate_request(self, frame: np.ndarray | None = None) -> DonateRequest | None:
         self._prune_handled()
+        observed_at = time.time()
         if frame is None:
             frame = self.capture.screenshot()
         template = self._load_donate_button()
@@ -123,8 +140,12 @@ class ChatMonitor:
             if not self._match_is_donate_button(frame, adjusted):
                 continue
             capacity = None
+            full_capacity_read = False
             if self.config.parse_request_capacity:
-                capacity = self.capacity_parser.parse(frame, adjusted, fast=True)
+                capacity = self.capacity_parser.parse(frame, adjusted)
+                full_capacity_read = capacity is not None
+                if capacity is None:
+                    capacity = self.capacity_parser.parse(frame, adjusted, fast=True)
             kind = self.request_parser.classify(frame, adjusted, capacity)
             is_specific = kind == RequestKind.SPECIFIC
             if kind == RequestKind.SPECIFIC:
@@ -143,7 +164,13 @@ class ChatMonitor:
                     capacity.siege_remaining,
                     capacity.siege_total,
                 )
+            header = self._card_header(frame, adjusted)
+            now = time.time()
+            key = header or sig
+            first = self._seen.get(key, (observed_at, now))[0]
+            self._seen[key] = (first, now)
             return DonateRequest(
+                first_seen=first, card_header=header, full_capacity_read=full_capacity_read,
                 button_match=adjusted,
                 signature=sig,
                 is_specific=is_specific,
@@ -233,7 +260,26 @@ class ChatMonitor:
         return "tradeoffer" in text or ("trade" in text and "offer" in text)
 
     def mark_handled(self, request: DonateRequest) -> None:
-        self._handled[request.signature] = time.time()
+        self._handled[request.signature] = time.time() + self.config.handled_request_ttl_seconds
+        self._seen.pop(request.card_header or request.signature, None)
+
+    def retry_later(self, request):
+        self._handled[request.signature] = time.time() + min(10, self.config.handled_request_ttl_seconds)
+
+    def verified_fill(self, request):
+        if not request.full_capacity_read or not request.card_header or not request.capacity or not request.capacity.has_remaining:
+            return False
+        for _ in range(2):
+            frame = self.capture.screenshot()
+            if self._card_header(frame, request.button_match) != request.card_header:
+                return False
+            after = self.capacity_parser.parse(frame, request.button_match)
+            if (after is None or after.has_remaining or not after.troop_total
+                    or after.troop_total != request.capacity.troop_total
+                    or after.spell_total != request.capacity.spell_total
+                    or after.siege_total != request.capacity.siege_total):
+                return False
+        return True
 
     def open_donation(self, request: DonateRequest) -> None:
         cx, cy = request.button_match.center

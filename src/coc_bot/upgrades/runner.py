@@ -4,6 +4,7 @@ from pathlib import Path
 import hashlib
 import json
 import os
+import re
 import tempfile
 
 from loguru import logger
@@ -29,6 +30,7 @@ class UpgradeReturnUnverified(ValueError):
 
 
 class UpgradeRunner:
+    home_research = True
     def __init__(self, config, capture, input_ctrl, navigator, stop=None):
         self.config,self.capture,self.input,self.nav=config,capture,input_ctrl,navigator
         self.stop=stop
@@ -43,7 +45,58 @@ class UpgradeRunner:
         return reason(self.config, kind, candidate, balances, availability)
 
     def payment_receipt(self,kind,candidate,confirmation,report,frame):
+        if kind == 'research':
+            title = confirmation.get('level_text', '')
+            match = re.search(r'\blevel\s+(\d{1,2})\s*\??\s*$', title, re.I)
+            if match and 2 <= int(match[1]) <= 30:
+                return {'level_before': int(match[1])-1, 'target_level': int(match[1])}
         return {}
+
+    def _research_level(self, frame, name):
+        from coc_bot.progression.reader import ProgressionReader
+        reader = ProgressionReader(self.stop)
+        if reader.menu_kind(frame) != 'research':
+            return None
+        rows = [row for row in reader.rows(frame) if compact(row['name']) == compact(name)]
+        return reader.target_level(frame, rows[0]) if len(rows) == 1 else None
+
+    def _completed_research(self, state, frame):
+        p = state.get('pending') or {}
+        level = p.get('target_level')
+        badge = p.get('row_badge_before')
+        if (not self.home_research or p.get('kind') != 'research' or not p.get('name')
+                or type(level) is not int or not 2 <= level <= 30 or type(badge) is not int
+                or badge not in (level-1, level)):
+            return False
+        from coc_bot.upgrades.scroll import menu_list_unchanged
+        for page in range(5):
+            if (self.stopped() or self.reader.menu_kind(frame) != 'research'
+                    or self.reader.availability(frame, 'research') != (1, 1)):
+                return False
+            visible = self._research_level(frame, p['name'])
+            if visible is not None:
+                if visible != badge + 1 or self.wait():
+                    return False
+                fresh = self.capture.screenshot()
+                if (self.stopped() or self.reader.menu_kind(fresh) != 'research'
+                        or self.reader.availability(fresh, 'research') != (1, 1)
+                        or self._research_level(fresh, p['name']) != visible):
+                    return False
+                state['last_completed'] = state.pop('pending') | {
+                    'phase': 'confirmed', 'verified_by': 'research_level', 'level_after': level,
+                    'row_badge_after': visible}
+                write_json(self.path, state)
+                return True
+            if page == 4 or self.stopped():
+                break
+            h, w = frame.shape[:2]
+            self.input.swipe(round(w*.87), round(h*.82), round(w*.87), round(h*.34), duration_ms=300)
+            if self.wait():
+                break
+            previous, frame = frame, self.capture.screenshot()
+            if menu_list_unchanged(previous, frame):
+                break
+        return False
 
     def wait(self, seconds=.6):
         return interrupted_sleep(seconds,self.stop)
@@ -192,6 +245,8 @@ class UpgradeRunner:
             frame=self.open_menu(recovery_kind)
             if frame is None: return {'status':'stopped'}
             if not self._verify_pending(state,recovery_kind,frame):
+                if self._completed_research(state, frame):
+                    return {'status':'recovered','message':'Research level increase verified'}
                 return {'status':'needs_review','message':'Previous upgrade outcome is uncertain; no retry will be sent',
                         'pending':state.get('pending')}
             if recovery_kind != kind:
@@ -281,6 +336,10 @@ class UpgradeRunner:
                      'active_before':active_before,
                      'at':datetime.now(timezone.utc).isoformat()}
             pending.update(self.payment_receipt(kind,candidate,confirmation,report,frame))
+            if self.home_research and 'level_before' in pending:
+                before = self._research_level(fresh, candidate.name)
+                if before in (pending['level_before'], pending['target_level']):
+                    pending['row_badge_before'] = before
             state['pending']=pending
             write_json(self.path,state) # durable intent BEFORE the spending tap
             if self.stopped():
@@ -301,6 +360,29 @@ class UpgradeRunner:
                 self.input.tap(*self.reader.detail_close(frame),jitter=0)
                 if self.wait(): return {'status':'needs_review','pending':pending}
                 frame=self.capture.screenshot()
+            if self.home_research and kind == 'research' and self.reader.menu_kind(frame) != kind:
+                from coc_bot.runtime.verification import save_frame
+                from coc_bot.vision.battle_menu import home_build_control_visible
+                save_frame(self.config, 'research-after-payment', frame)
+                for _ in range(3):
+                    if self.wait(1):
+                        break
+                    frame = self.capture.screenshot()
+                    if self.reader.menu_kind(frame) == kind:
+                        break
+                    if self.reader.running_detail(frame, candidate):
+                        point = self.reader.detail_close(frame)
+                        if point and not self.stopped():
+                            self.input.tap(*point, jitter=0)
+                        continue
+                    if home_build_control_visible(frame) and self.nav.classifier._open_chat_icon_visible(frame):
+                        try:
+                            reopened = self.open_menu(kind)
+                        except ValueError:
+                            break
+                        if reopened is not None:
+                            frame = reopened
+                        break
             if self.reader.menu_kind(frame) != kind:
                 # Do not confirm another popup, spend gems or consume a magic item.
                 pending['phase']='uncertain';write_json(self.path,state)

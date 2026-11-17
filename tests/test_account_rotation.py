@@ -31,6 +31,34 @@ class RotationTests(unittest.TestCase):
             with self.subTest(values=values),self.assertRaises(ValueError):self.configure(**values)
         self.assertTrue(self.configure()['enabled'])
 
+    def test_only_verified_home_can_hold_one_accounts_upgrade(self):
+        from coc_bot.vision.screens import ScreenType
+        self.configure()
+        fleet = AccountFleet(self.store, RunOptions())
+        data = self.store.profile(self.other)/'data'
+        cfg = SimpleNamespace(data_dir=data, account_tag=self.other['tag'])
+        receipt = {'at':'start', 'kind':'research', 'phase':'uncertain', 'name':'Barbarian'}
+        ledger = data/'upgrades/state.json'
+        write(ledger, {'pending':receipt})
+        fleet.current = Mock(config=cfg)
+        fleet.current.should_stop.return_value = False
+        classifier = fleet.current.navigator.classifier
+        with patch('coc_bot.vision.battle_menu.home_build_control_visible', return_value=True), \
+             patch('coc_bot.accounts.navigation.verify_session') as identity:
+            classifier.classify.return_value = ScreenType.POPUP
+            self.assertIsNone(fleet._hold_upgrade(self.other, self.main, receipt))
+            classifier.classify.return_value = ScreenType.HOME
+            write(data/'builder_base/upgrades.json', {'pending':{'phase':'confirming'}})
+            self.assertIsNone(fleet._hold_upgrade(self.other, self.main, receipt))
+            identity.assert_not_called()
+            write(data/'builder_base/upgrades.json', {})
+            self.assertEqual(fleet._hold_upgrade(self.other, self.main, receipt), receipt)
+            identity.assert_called_once()
+        self.assertIsNone(self.rotation.next_account(100))
+        self.assertEqual(self.rotation.load()['visits'][self.other['id']]['held_upgrade_at'], 'start')
+        write(ledger, {'last_completed':receipt})
+        self.assertEqual(self.rotation.next_account(100), self.other)
+
     def test_round_robin_never_selects_roleless_accounts_or_primary(self):
         self.configure();self.assertEqual(self.rotation.next_account(100)['id'],self.other['id'])
         self.rotation.complete(self.other['id'],100,99)

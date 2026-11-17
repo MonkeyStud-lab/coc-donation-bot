@@ -14,6 +14,17 @@ class ActionNeedsReview(RuntimeError):
     """Stop the device owner when an unresolved payment cannot be reconciled."""
 
 
+class UpgradeNeedsReview(ActionNeedsReview):
+    def __init__(self, receipt, reason):
+        self.receipt = receipt
+        if not isinstance(receipt, dict):
+            super().__init__(f'Unresolved upgrade payment: unreadable receipt. {reason}')
+            return
+        super().__init__(f"Unresolved upgrade payment: {receipt.get('kind', 'unknown')} "
+                         f"{receipt.get('name', 'unknown')} ({receipt.get('cost', '?')} "
+                         f"{receipt.get('currency', 'resources')}). {reason}")
+
+
 def save_frame(config, name, frame):
     """Overwrite one diagnostic frame before navigation hides a failed check."""
     import cv2

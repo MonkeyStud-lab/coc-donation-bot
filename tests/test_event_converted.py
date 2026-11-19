@@ -25,3 +25,12 @@ class ConvertedEventTests(unittest.TestCase):
     def test_original_trading_notice_still_works(self):
         frame=cv2.imread(str(Path(__file__).parent/'fixtures/accounts/event-ended.png'))
         self.assertIsNotNone(event_ended_button(frame))
+
+    def test_mini_spotlight_requires_its_title_message_and_confirm_button(self):
+        frame=cv2.imread(str(Path(__file__).parent/'fixtures/accounts/mini-spotlight.png'))
+        self.assertEqual(event_ended_button(frame),(926,854))
+        for rows in (slice(390,465),slice(565,690),slice(790,925)):
+            changed=frame.copy()
+            changed[rows]=0
+            self.assertIsNone(event_ended_button(changed))
+        self.assertIsNone(event_ended_button((frame*.5).astype('uint8')))

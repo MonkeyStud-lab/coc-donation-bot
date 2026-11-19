@@ -186,16 +186,17 @@ def event_ended_button(frame):
         _,score,_,(x,y)=cv2.minMaxLoc(cv2.matchTemplate(region,ref,cv2.TM_CCOEFF_NORMED))
         observed=region[y:y+ref.shape[0],x:x+ref.shape[1]]
         return score>=.96 and observed.mean()>=ref.mean()*.82
-    if not (matches('event_ended_title',(680,400,1170,510))
-            and matches('event_ended_confirm',(770,800,1090,970))):return None
+    if not matches('event_ended_confirm',(770,800,1090,970)):return None
+    spotlight = matches('event_mini_spotlight_title',(680,380,1170,480))
+    if not spotlight and not matches('event_ended_title',(680,400,1170,510)):return None
     # After the trading period, this free notice reports medals already
     # converted into resources. Match its fixed wording, never the variable
     # amount, and retain the same title/button/brightness checks.
     if not (matches('event_ended_message',(400,560,1440,750)) or
-            (matches('event_converted_message',(400,560,1440,750)) and
+            (not spotlight and matches('event_converted_message',(400,560,1440,750)) and
              matches('event_converted_prefix',(400,650,1200,725)))):return None
     green=cv2.inRange(cv2.cvtColor(image[830:940,800:1060],cv2.COLOR_BGR2HSV),(30,80,140),(90,255,255)).mean()/255
-    return (round(frame.shape[1]*.50),round(frame.shape[0]*.847)) if green>.50 else None
+    return (round(frame.shape[1]*.50),round(frame.shape[0]*(.815 if spotlight else .847))) if green>.50 else None
 
 
 def welcome_back_button(frame):
